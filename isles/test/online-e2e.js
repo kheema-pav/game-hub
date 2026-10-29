@@ -276,7 +276,8 @@ const toastLog = p => p.page.evaluate(() => {
       await runScript(players, script, { to: iOff + 1, real: () => false });
       await waitK(players, script[iOff].k + 1);
       const offerer = players.find(p => p.uid === script[iOff].uid), resp = players.find(p => p !== offerer);
-      const before = await offerer.page.evaluate(() => JSON.stringify({ o: G.offer, h: G.players.map(p => p.hand) }));
+      const cnt = pg => pg.page.evaluate(() => ({ acc: G.log.filter(l => /accepts/.test(l.t)).length, wd: G.log.filter(l => /withdraws/.test(l.t)).length }));
+      const before = await cnt(offerer);
       await toastLog(offerer); await toastLog(resp);
       await offerer.ctx.setOffline(true); await resp.ctx.setOffline(true);
       await sleep(400);
@@ -292,14 +293,16 @@ const toastLog = p => p.page.evaluate(() => {
       }
       await second.ctx.setOffline(false);
       await Promise.all(players.map(p => p.page.waitForFunction(() => !ON.pending, null, { timeout: 15000 })));
-      await waitK(players, script[iOff].k + 1);
+      await waitK(players, script[iOff].k + 2);   // the offer (k) and then the one record that won the race (k + 1)
       await sleep(600);
       await assertSameHash(players, 'after race');
-      const st = await offerer.page.evaluate(() => ({ phase: G.phase, acc: G.log.some(l => /accepts/.test(l.t)), wd: G.log.some(l => /withdraws/.test(l.t)), h: JSON.stringify(G.players.map(p => p.hand)) }));
-      assert.strictEqual(st.phase, 'main'); assert.ok(st.acc, 'the trade went through'); assert.ok(!st.wd, 'the withdraw was dropped');
+      const after = await cnt(offerer);
+      assert.strictEqual(await offerer.page.evaluate(() => G.phase), 'main');
+      assert.strictEqual(after.acc, before.acc + 1, 'the trade went through'); assert.strictEqual(after.wd, before.wd, 'the withdraw was dropped');
       const t1 = await offerer.page.evaluate(() => window.__toasts), t2 = await resp.page.evaluate(() => window.__toasts);
       assert.ok(t1.some(t => /Too late: .+ accepted your trade\./.test(t)), 'offerer toast: ' + JSON.stringify(t1));
       assert.ok(!t2.some(t => /Too late/.test(t)), 'responder gets no such toast');
+      players.forEach(p => { p.errors = p.errors.filter(e => !/ERR_INTERNET_DISCONNECTED/.test(e)); });   // the browser logs those while the test takes it offline on purpose
       collect(players, 'race'); await closeAll(players);
     });
   }
@@ -351,6 +354,33 @@ const toastLog = p => p.page.evaluate(() => {
     await p.page.waitForFunction(() => /not available/.test(document.body.innerText));
     assert.deepStrictEqual(errs, []);
     await p.ctx.close();
+  });
+
+  /* ------------------------------------------------------------------ local play while Online is available */
+  await test('with Online available: local pass-and-play, bots, save and #continue work as before', async () => {
+    const p = await mkPlayer(browser, 'Loc', { cfg: { mode: 'base', target: { base: 10, seafarers: 13 }, friendly: false, hideHands: true, speed: 'fast', level: 'normal', confirm: false,
+      players: [{ name: 'Pat', color: 'red', bot: false }, { name: 'Sam', color: 'blue', bot: false }, { name: 'Ada', color: 'orange', bot: true }] } });
+    await p.page.goto(L.URL);
+    await p.page.waitForSelector('#online-card');
+    await p.page.click('[data-act="start"]');
+    await p.page.waitForFunction(() => G && G.phase === 'setup');
+    assert.strictEqual(await p.page.evaluate(() => ON.active), false);
+    for (let i = 0; i < 2; i++) {   // two human placements with the pass-the-device curtain between players
+      if (await p.page.locator('#curtain:not([hidden]) [data-act="reveal"]').count()) await p.page.click('[data-act="reveal"]');
+      await p.page.waitForSelector('.spot[data-v]', { state: 'attached' });
+      await p.page.evaluate(() => document.querySelector('.spot[data-v]').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await p.page.waitForSelector('.spot[data-e]', { state: 'attached' });
+      await p.page.evaluate(() => document.querySelector('.spot[data-e]').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await p.page.waitForFunction(n => G.setup.idx > n, i);
+    }
+    const saved = await p.page.evaluate(() => localStorage.getItem('sti.save.v1'));
+    assert.ok(saved && JSON.parse(saved).G.v === 1, 'local save is written');
+    assert.ok(!('rng' in JSON.parse(saved).G), 'local play stays unseeded');
+    await p.page.goto('about:blank');
+    await p.page.goto(L.URL + '#continue');
+    await p.page.waitForFunction(() => typeof G !== 'undefined' && G && !document.querySelector('#game').hidden);
+    assert.strictEqual(await p.page.evaluate(() => ON.active + '|' + location.hash), 'false|');
+    collect([p], 'local'); await p.ctx.close();
   });
 
   await browser.close();

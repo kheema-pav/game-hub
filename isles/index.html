@@ -2808,7 +2808,7 @@ document.addEventListener('click', ev => {
   const back = ev.target.classList && ev.target.classList.contains('modal-back');
   if (back) {
     // tapping outside a closable sheet closes it
-    if (ev.target.dataset.act === 'close-modal-bg') { closeModal(); if (G) render(); }
+    if (ev.target.dataset.act === 'close-modal-bg') { closeModal(); if (G) render(); if (ON.active) flushDeferred(); }
     return;
   }
   const el = ev.target.closest('[data-act]');
@@ -3101,6 +3101,7 @@ function enterOnlineGame() {
 /* ---------- entering and leaving ---------- */
 function stopWatch() {
   ON.token++;
+  clearInterval(ON.tick); ON.tick = null;
   if (ON.unsub) { try { ON.unsub(); } catch (e) { /* already stopped */ } ON.unsub = null; }
 }
 function openOnlineLobby() {
@@ -3130,6 +3131,7 @@ function beginOnline(code, uid) {
   renderConnecting();
   const tok = ON.token;
   ON.unsub = HubOnline.rooms.watch(code, snap => { if (tok === ON.token) onSnap(snap); });
+  ON.tick = setInterval(flushDeferred, 1500);   // safety net: a held-back room update is applied soon after any draft ends
 }
 function retryOnline() { if (ON.active) beginOnline(ON.code, ON.uid); }
 function leaveClick() { if (G && G.phase !== 'gameover') openModal('leave'); else leaveOnline(); }

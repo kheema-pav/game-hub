@@ -1,11 +1,11 @@
 'use strict';
 /* Local (offline) Catan regression in Chromium: all-bot games to a winner in both modes, pass-and-play,
-   undo, #continue resume, no console errors.  Needs a static server on http://127.0.0.1:8785/ (see below):
+   undo, #continue resume, no console errors.  Needs a static server on http://127.0.0.1:8785/ (or ISLES_PORT) (see below):
      cd <repo root> && python3 -m http.server 8785 --bind 127.0.0.1
    Run: node isles/test/browser-regression.js */
 const assert = require('assert');
 const { chromium } = require('playwright');
-const URL = 'http://127.0.0.1:8785/isles/index.html';
+const URL = `http://127.0.0.1:${process.env.ISLES_PORT || 8785}/isles/index.html`;
 const CFG_KEY = 'sti.cfg.v1', SAVE_KEY = 'sti.save.v1';
 
 let pass = 0, fail = 0;
