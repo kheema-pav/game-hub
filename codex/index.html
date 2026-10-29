@@ -1024,8 +1024,8 @@ function resultsHTML(){
 function syncNg(){
   const ng=ui.ng;
   ng.players.slice(0,ng.n).forEach((p,i)=>{const el=document.getElementById('ng-name-'+i);if(el) p.name=el.value.trim()||`Player ${i+1}`;});
-  const nm=document.getElementById('ng-myname'), cd=document.getElementById('ng-code');
-  if(nm) ng.myName=nm.value;
+  const mn=document.getElementById('ng-myname'), cd=document.getElementById('ng-code');
+  if(mn) ng.myName=mn.value;
   if(cd) ng.code=cd.value;
 }
 function openNewGame(){
@@ -1041,6 +1041,7 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');
   if(!t||t.disabled) return;
   const d=t.dataset, act=d.act;
+  if(!S&&!NO_GAME_ACTS.has(act)) return;
   switch(act){
     case 'view': if(S.phase!=='setup'){ui.view=+d.i;render();} break;
     case 'sel':
@@ -1058,7 +1059,7 @@ document.addEventListener('click',e=>{
     case 'place-aim': if(ui.aim&&canAct()&&S.phase==='place'&&ui.sel){const [x,y]=ui.aim.split(',').map(Number);placeHuman(x,y);} break;
     case 'hlobj': sfx('tap'); ui.hlObj=ui.hlObj===d.o?null:d.o; ui.view=+d.p; renderTop(); renderBoard(); renderSide(); break;
     case 'undo': undoPlace(); break;
-    case 'draw': if(canAct()&&S.phase==='draw') doDraw(d.src); break;
+    case 'draw': if(canAct()&&S.phase==='draw'){if(S.online){if(ui.pending) commitOnline(d.src);} else doDraw(d.src);} break;
     case 'zin': zoomTo(ui.zoom*1.25); break;
     case 'zout': zoomTo(ui.zoom/1.25); break;
     case 'center': ui.origin=null; renderBoard(); break;
@@ -1071,6 +1072,7 @@ document.addEventListener('click',e=>{
     case 'su-face': ui.setup.face=d.face; render(); break;
     case 'su-obj': ui.setup.obj=d.o; render(); break;
     case 'su-ok': {
+      if(S.online){saveSetupOnline();break;}
       const p=S.players[S.setupIdx];
       if(!ui.setup.face||!ui.setup.obj) return;
       placeStarter(p,ui.setup.face); p.secret=ui.setup.obj; p.ready=true; setupNext(); break;
@@ -1079,11 +1081,28 @@ document.addEventListener('click',e=>{
     case 'ng-n': syncNg(); ui.ng.n=+d.n; render(); break;
     case 'ng-ai': syncNg(); ui.ng.players[+d.i].ai=d.v==='1'; render(); break;
     case 'ng-lvl': syncNg(); ui.ng.players[+d.i].level=d.v; render(); break;
-    case 'ng-go': syncNg(); newGame(ui.ng.players.slice(0,ui.ng.n)); break;
+    case 'ng-go': {
+      syncNg();
+      if(ON.active) leaveOnlineView();
+      newGame(ui.ng.players.slice(0,ui.ng.n)); break;
+    }
+    case 'ng-tab': syncNg(); ui.ng.tab=d.tab; ui.ng.err=''; render(); break;
+    case 'ng-seats': syncNg(); ui.ng.seats=+d.n; render(); break;
+    case 'on-create': dialogCreate(); break;
+    case 'on-join': dialogJoin(); break;
+    case 'on-copy': copyLink(); break;
+    case 'on-start': onStart(); break;
+    case 'on-leave': onLeave(); break;
+    case 'on-local': exitOnline(); break;
+    case 'on-retry': goOnline(ON.code); break;
+    case 'name-ok': nameOk(); break;
   }
 });
+const NO_GAME_ACTS=new Set(['rules','new','close','ng-n','ng-ai','ng-lvl','ng-go','ng-tab','ng-seats','on-create','on-join','on-copy','on-start','on-leave','on-local','on-retry','name-ok','zin','zout']);
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&ui.modal&&S){ui.modal=null;render();}
+  if(e.key==='Escape'&&ui.modal&&(S||ON.active)){ui.modal=null;render();}
+  if(e.key==='Enter'&&e.target&&e.target.id==='ng-code'){e.preventDefault();dialogJoin();}
+  if(e.key==='Enter'&&e.target&&e.target.id==='on-name'){e.preventDefault();nameOk();}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&ui.undo){e.preventDefault();undoPlace();}
   if((e.key==='f'||e.key==='F')&&ui.sel&&!ui.modal&&!/INPUT/.test(document.activeElement.tagName)){sfx('flip');ui.aim=null;ui.faces[ui.sel]=(ui.faces[ui.sel]||'front')==='front'?'back':'front';render();}
 });
@@ -1165,8 +1184,437 @@ function launchFlight(f){
   KING.forEach(k=>document.documentElement.style.setProperty('--tex-'+k,T[k]));
 })();
 
+// ---------- Online play ----------
+// The room (seats, seed) and every player's own move list come from HubOnline.rooms.watch. Each screen rebuilds the whole
+// game from the seed, the seats (sorted by uid) and those move lists, checking every move; illegal moves are ignored.
+// Local play never touches any of this: no save(), no bots, no pass-and-play in online mode.
+const ON={active:false,code:null,stage:'',uid:null,unsub:null,room:null,players:{},pending:false,sending:0,mine:{setup:null,moves:[]},
+  built:false,wasMine:false,remoteN:0,flagged:false,badge:false,rec:false,token:0,err:null,saveErr:null,msg:'',copied:false,fallback:false,busy:false,joined:false,viewTimer:0};
+const hubOK=()=>{try{return !!(window.HubOnline&&HubOnline.available());}catch(e){return false;}};
+const normCode=c=>String(c==null?'':c).replace(/\D/g,'');
+const fmtCode=c=>c&&c.length===6?c.slice(0,3)+' '+c.slice(3):(c||'');
+const roomLink=code=>location.origin+location.pathname+'?room='+code;
+const safeColor=c=>typeof c==='string'&&/^#[0-9a-fA-F]{6}$/.test(c)?c:'';
+const errText=e=>{
+  const c=e&&e.code;
+  return c==='offline'?"You're offline. Check your connection and try again.":c==='timeout'?"Couldn't reach the game server.":c==='missing'?'No game with that code.'
+    :c==='full'?'That game is full.':c==='started'?'That game has already started.':c==='unavailable'?'Online play is unavailable.'
+    :c==='auth'?"Couldn't sign in to the game server.":c==='denied'?'The game server refused that.':"Couldn't reach the game server.";
+};
+const needName=()=>{try{return !!(HubKit.profile&&HubKit.setProfile&&!HubKit.profile().name);}catch(e){return false;}};
+// chip colour: the player's profile colour when it is unique at the table, else the seat colour
+function pcol(i){
+  if(S&&S.online){
+    const c=safeColor(S.players[i].color);
+    if(c&&S.players.filter(q=>(safeColor(q.color)||'').toLowerCase()===c.toLowerCase()).length===1) return c;
+  }
+  return `var(--p${i})`;
+}
+
+function rng(seed){let a=seed>>>0;return()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function sshuffle(arr,r){const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+// Rebuild the game for 2-4 seats. `mine` is this device's own (possibly not yet confirmed) setup and moves.
+function buildOnline(room,players,mine,myUid){
+  const ids=Object.keys(room.seats||{}).sort(), n=ids.length;
+  if(n<2||n>4||typeof room.seed!=='number') return null;
+  const r=rng(room.seed);
+  const res=sshuffle(RES_IDS,r), gold=sshuffle(GOLD_IDS,r), st=sshuffle(START_IDS,r), objs=sshuffle(OBJECTIVES.map(o=>o.id),r);
+  const first=Math.floor(r()*n);
+  const base=ids.map((u,i)=>String((room.seats[u]&&room.seats[u].name)||'').replace(/\s+/g,' ').trim().slice(0,16)||`Player ${i+1}`);
+  const nameAt=i=>{const k=base.slice(0,i).filter(x=>x.toLowerCase()===base[i].toLowerCase()).length;return k?`${base[i]} ${k+1}`:base[i];};
+  const s={online:true,v:1,phase:'setup',turn:first,first,round:1,endTriggered:false,turnsLeft:0,passStreak:0,log:[],resDeck:res,goldDeck:gold,
+    market:{R:[],G:[]},common:[objs.pop(),objs.pop()],results:null,lastMove:null,moveCount:ids.map(()=>0),
+    players:ids.map((uid,i)=>({uid,name:nameAt(i),color:room.seats[uid]&&room.seats[uid].color,ai:false,level:'normal',board:{},placedN:0,hand:[],score:0,starter:st[i],secretChoices:[objs.pop(),objs.pop()],secret:null,ready:false}))};
+  s.market.R=[res.pop(),res.pop()];s.market.G=[gold.pop(),gold.pop()];
+  s.players.forEach(p=>{p.hand=[res.pop(),res.pop(),gold.pop()];});
+  s.me=ids.indexOf(myUid);
+  const docOf=uid=>{
+    const d=(players&&players[uid])||{};
+    if(uid!==myUid||!mine) return d;
+    const sm=Array.isArray(d.moves)?d.moves:[];
+    return {setup:d.setup||mine.setup,moves:mine.moves.length>sm.length?mine.moves:sm};
+  };
+  s.players.forEach(p=>{
+    const su=docOf(p.uid).setup;
+    if(su&&(su.face==='front'||su.face==='back')&&p.secretChoices.includes(su.secret)){placeStarter(p,su.face);p.secret=su.secret;p.ready=true;}
+  });
+  if(!s.players.every(p=>p.ready)) return s;
+  s.phase='place';
+  slog(s,`Round 1. ${nm(s.players[first])} plays first.`);
+  const moves=ids.map(u=>{const m=docOf(u).moves;return Array.isArray(m)?m:[];});
+  const ptr=ids.map(()=>0);
+  for(let guard=0;guard<2000;guard++){
+    const i=s.turn, p=s.players[i];
+    if(!p.hand.length||!validSpots(p.board).length){
+      passOn(s,p);
+      if(advance(s)) break;
+      continue;
+    }
+    let applied=false;
+    while(ptr[i]<moves[i].length){
+      if(applyMove(s,i,moves[i][ptr[i]++])){applied=true;break;}
+      slog(s,`A move from ${nm(p)} broke the rules and was ignored.`);
+    }
+    if(!applied) break; // waiting for seat i
+    s.passStreak=0;
+    if(advance(s)) break;
+  }
+  return s;
+}
+function applyMove(s,i,mv){
+  if(!mv||typeof mv!=='object') return false;
+  const p=s.players[i], {id,face,x,y}=mv, src=mv.src??null;
+  if(typeof id!=='string'||!p.hand.includes(id)||(face!=='front'&&face!=='back')||!Number.isInteger(x)||!Number.isInteger(y)) return false;
+  if(!validSpots(p.board).some(([a,b])=>a===x&&b===y)) return false;
+  if(face==='front'&&!meetsReq(counts(p.board),CARDS[id])) return false;
+  const opts=drawOptionsOf(s); // placing never changes the decks or the market
+  if(opts.length?!opts.some(o=>o.src===src):src!==null) return false;
+  const pts=placeOn(s,i,id,face,x,y);
+  if(src) drawOn(s,i,src);
+  s.moveCount[i]++;
+  s.lastMove={seat:i,key:kxy(x,y),pts,src};
+  return true;
+}
+function applyPending(){
+  const pd=ui.pending;
+  if(!pd||!S||!S.online) return;
+  const me=S.me, p=S.players[me];
+  const ok=me>=0&&S.phase==='place'&&S.turn===me&&p.hand.includes(pd.id)&&validSpots(p.board).some(([a,b])=>a===pd.x&&b===pd.y)
+    &&(pd.face==='back'||meetsReq(counts(p.board),CARDS[pd.id]));
+  if(ok){placeOn(S,me,pd.id,pd.face,pd.x,pd.y);S.phase='draw';}
+  else{ui.pending=null;ui.undo=null;}
+}
+function mineDoc(){
+  const d=ON.players[ON.uid]||{}, sm=Array.isArray(d.moves)?d.moves:[];
+  return {setup:d.setup||ON.mine.setup||null,moves:ON.mine.moves.length>sm.length?ON.mine.moves:sm};
+}
+const remoteCount=()=>Object.keys(ON.players).filter(u=>u!==ON.uid).reduce((a,u)=>a+(ON.players[u].moves||[]).length+(ON.players[u].setup?1:0),0);
+
+// Rebuild the game from the room and render. `ui.pending` (placed, not yet drawn) is laid over the top.
+function refreshGame(){
+  const s=buildOnline(ON.room,ON.players,ON.mine,ON.uid);
+  if(!s){S=null;ON.stage='error';ON.msg="This game can't be shown.";render();return;}
+  const mineNow=s.me>=0&&s.phase==='place'&&s.turn===s.me;
+  const rc=remoteCount(), remoteMoved=ON.built&&rc>ON.remoteN;
+  S=s;applyPending();
+  ON.stage='play';
+  if(!ON.built){ui.view=Math.max(0,S.me);ui.setup={face:null,obj:null};}
+  if(ui.view>=S.players.length) ui.view=0;
+  // your-turn signals: only when another player's update hands you the turn (never on first load)
+  if(remoteMoved&&mineNow&&!ON.wasMine){sfx('chime');ON.flagged=true;}
+  if(!mineNow) ON.flagged=false;
+  ON.wasMine=mineNow;ON.remoteN=rc;ON.built=true;
+  signals();
+  // an opponent's move: show their codex with the drop animation
+  if(remoteMoved&&S.lastMove&&S.lastMove.seat!==S.me&&!ui.pending&&!ui.sel&&!ui.modal){
+    const lm=S.lastMove;
+    ui.view=lm.seat;ui.fresh={view:lm.seat,key:lm.key,pts:lm.pts};ui.origin=null;
+    sfx('place',true);if(lm.pts>0) setTimeout(()=>sfx('score',true),120);
+    clearTimeout(ON.viewTimer);
+    ON.viewTimer=setTimeout(()=>{if(S&&S.online&&ON.active&&!ui.sel&&!ui.modal&&S.me>=0&&ui.view===lm.seat&&ui.fresh==null){ui.view=S.me;ui.origin=null;render();}},2800);
+  }
+  if(S.phase==='over'&&S.me>=0&&!ON.rec){
+    ON.rec=true;
+    const top=S.results[0], mr=S.results.find(r=>r.i===S.me);
+    try{if(mr&&HubKit.recordResult) HubKit.recordResult('codex',ON.uid+':'+ON.code,{won:mr.total===top.total&&mr.done===top.done,score:mr.total});}catch(e){}
+  }
+  render();
+}
+function signals(){
+  const t=ON.active&&ON.flagged?'Your turn · Codex Naturalis':'Codex Naturalis';
+  if(document.title!==t) document.title=t;
+  const b=ON.active&&ON.flagged;
+  if(b!==ON.badge){ON.badge=b;try{if(HubKit.setBadge) HubKit.setBadge(b);}catch(e){}}
+}
+
+// ---- sending your own moves ----
+function turnSummary(s){
+  return {phase:s.phase==='setup'?'setup':s.phase==='over'?'over':'play',next:s.phase==='place'?s.players[s.turn].uid:null,...(s.phase==='over'?{over:true}:{})};
+}
+function flush(onDenied){
+  const code=ON.code, tok=ON.token, doc=mineDoc(), turn=turnSummary(S);
+  const o={moves:doc.moves,turn};
+  if(doc.setup) o.setup=doc.setup;
+  ON.sending++;
+  HubOnline.rooms.writeMine(code,o).then(()=>{
+    ON.sending--;
+    if(tok===ON.token&&S) renderPrompt();
+  },e=>{
+    ON.sending--;
+    if(tok!==ON.token) return;
+    if(e&&e.code==='denied'){ // the server refused the write: roll back to what it holds
+      ON.mine={setup:null,moves:[]};ON.saveErr='denied';
+      if(onDenied) onDenied();
+      refreshGame();
+    } else if(S) renderPrompt();
+  });
+  if(S) renderPrompt();
+}
+function placeOnline(x,y){
+  const p=S.players[S.me], id=ui.sel, face=ui.faces[id]||'front';
+  const b=Object.assign({},p.board);b[kxy(x,y)]={id,face,x,y,order:p.placedN};
+  const pts=pointsFor(b,id,face,x,y);
+  ui.pending={id,face,x,y};ui.undo=true;ON.saveErr=null;
+  delete ui.faces[id];
+  ui.sel=null;ui.aim=null;ui.hover=null;ui.view=S.me;
+  ui.fresh={view:S.me,key:kxy(x,y),pts};
+  sfx('place');if(pts>0) setTimeout(()=>sfx('score'),120);
+  refreshGame();
+  if(S&&S.phase==='draw'&&!drawOptions().length) return commitOnline(null);
+  if(window.innerWidth<=860) $('#marketSec').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function undoOnline(){
+  const pd=ui.pending;
+  if(!pd) return;
+  ui.pending=null;ui.undo=null;ui.sel=pd.id;ui.faces[pd.id]=pd.face;ui.view=S.me;
+  sfx('swish');
+  refreshGame();
+}
+// the draw sends the whole move (card, face, spot and where it was drawn from)
+function commitOnline(src){
+  const pd=ui.pending;
+  if(!pd||!S||!S.online) return;
+  const el=src&&document.querySelector(`[data-src="${src}"]`), from=el&&el.getBoundingClientRect();
+  let drawn=null;
+  if(src==='RD') drawn=S.resDeck[S.resDeck.length-1];
+  else if(src==='GD') drawn=S.goldDeck[S.goldDeck.length-1];
+  else if(src) drawn=S.market[src[0]][+src[1]];
+  ON.mine={setup:mineDoc().setup,moves:[...mineDoc().moves,{id:pd.id,face:pd.face,x:pd.x,y:pd.y,src:src||null}]};
+  ui.pending=null;ui.undo=null;
+  if(drawn){ui.flight={id:drawn,face:src[1]==='D'?'back':'front',from,drawer:S.me};sfx('draw');}
+  if(src&&src[1]!=='D') ui.refill=src;
+  refreshGame();
+  flush(()=>{ui.pending=pd;ui.undo=true;ui.flight=null;});
+}
+function saveSetupOnline(){
+  const su=ui.setup;
+  if(!S||!S.online||S.me<0||!su.face||!su.obj) return;
+  ON.mine={setup:{face:su.face,secret:su.obj},moves:mineDoc().moves};
+  ON.saveErr=null;
+  refreshGame();
+  flush(()=>{});
+}
+
+// ---- entering, watching and leaving a room ----
+function stopOnline(){
+  ON.token++;
+  if(ON.unsub){try{ON.unsub();}catch(e){}ON.unsub=null;}
+  clearTimeout(ON.viewTimer);
+}
+function resetOnline(code){
+  Object.assign(ON,{active:true,code,stage:'joining',uid:null,room:null,players:{},pending:false,sending:0,mine:{setup:null,moves:[]},built:false,wasMine:false,
+    remoteN:0,flagged:false,rec:false,err:null,saveErr:null,msg:'',copied:false,fallback:false,busy:false,joined:false});
+}
+// switch the page from local play to a room; the local save is left alone
+function goOnline(code,opts){
+  stopOnline();
+  ui.aiToken++;ui.pending=null;ui.undo=null;ui.sel=null;ui.aim=null;ui.hover=null;ui.hlObj=null;ui.fresh=null;ui.flight=null;ui.preview=null;
+  ui.dismissOver=false;ui.modal=null;ui.setup={face:null,obj:null};ui.faces={};ui.origin=null;
+  S=null;
+  resetOnline(code);
+  ON.joined=!!(opts&&opts.joined);
+  const tok=ON.token;
+  try{history.replaceState(null,'',location.pathname+'?room='+code);}catch(e){}
+  signals();
+  if(!hubOK()){ON.stage='unavailable';render();return;}
+  connect(tok);
+}
+// name check, sign-in, a look at the room, then the live watch
+async function connect(tok){
+  if(needName()){ON.stage='name';render();return;}
+  ON.stage='joining';render();
+  try{
+    const me=await HubOnline.ready();
+    if(tok!==ON.token) return;
+    ON.uid=me.uid;
+    if(!ON.joined){
+      const r=await probe(ON.code);
+      if(tok!==ON.token) return;
+      if(r.state!=='ok'){
+        if(r.state==='started'){ON.stage='nogame';}
+        else if(r.state==='missing'){ON.stage='missing';}
+        else{ON.stage='error';ON.msg=probeText(r);}
+        render();return;
+      }
+    }
+    ON.unsub=HubOnline.rooms.watch(ON.code,snap=>{if(tok===ON.token) onSnap(snap);});
+  }catch(e){
+    if(tok===ON.token) failWith(e);
+  }
+}
+// look the room up and take a free seat (an existing seat is kept, even after the start)
+async function probe(code){
+  const info=await HubOnline.rooms.lookup(code);
+  if(!info.exists) return {state:'missing'};
+  if(info.game&&info.game!=='codex') return {state:'wrong'};
+  if(!info.seated){
+    if(info.status!=='open') return {state:'started'};
+    try{await HubOnline.rooms.join(code);}
+    catch(e){if(e&&(e.code==='full'||e.code==='started'||e.code==='missing')) return {state:e.code};throw e;}
+  }
+  return {state:'ok'};
+}
+const probeText=r=>r.state==='wrong'?'That code belongs to a different game. Open it from the hub.':r.state==='full'?'That game is full.':r.state==='started'?'That game has already started.':'No game with that code.';
+function failWith(e){
+  const c=e&&e.code;
+  S=null;
+  if(c==='unavailable') ON.stage='unavailable';
+  else if(c==='missing') ON.stage='missing';
+  else if(c==='started') ON.stage='nogame';
+  else{ON.stage='error';ON.msg=errText(e);}
+  render();
+}
+function onSnap(snap){
+  if(snap.error){
+    ON.err=snap.error;
+    if(!ON.room) failWith(snap.error); else if(S) renderPrompt();
+    return;
+  }
+  ON.err=null;
+  if(!snap.room){ON.room=null;S=null;ON.stage='missing';render();return;}
+  ON.room=snap.room;ON.players=snap.players||{};ON.pending=!!snap.pending;
+  const seated=!!(snap.room.seats&&snap.room.seats[ON.uid]);
+  if(!seated){
+    if(snap.room.status!=='open'){S=null;ON.stage='nogame';render();}
+    return;
+  }
+  if(snap.room.status==='open'){ON.stage='waiting';S=null;render();return;}
+  refreshGame();
+}
+function leaveOnlineView(){ // drop the room view without touching the page (used before a local game starts)
+  stopOnline();ON.active=false;ON.flagged=false;ON.code=null;ON.stage='';
+  try{history.replaceState(null,'',location.pathname);}catch(e){}
+  signals();
+}
+function exitOnline(){
+  leaveOnlineView();
+  S=null;ui.pending=null;ui.undo=null;ui.modal=null;ui.view=0;
+  startLocal();
+}
+function renderShell(){ // before there is a game to show: only the room screens
+  $('#players').innerHTML='';$('#roundInfo').textContent='Online game';
+  $('#board').innerHTML='';$('#resStrip').innerHTML='';$('#boardTitle').textContent='';
+  $('#prompt').innerHTML='';$('#hand').innerHTML='';$('#market').innerHTML='';$('#objectives').innerHTML='';$('#log').innerHTML='';$('#deckInfo').textContent='';
+  renderModal();
+}
+async function copyLink(){
+  if(!ON.code) return;
+  let ok=false;
+  try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(roomLink(ON.code));ok=true;}}catch(e){}
+  if(ok){ON.copied=true;ON.fallback=false;render();setTimeout(()=>{ON.copied=false;render();},1800);return;}
+  ON.fallback=true;render();
+  const f=document.getElementById('on-link');
+  if(f){f.focus();f.select();try{if(document.execCommand('copy')){ON.copied=true;ON.fallback=false;render();setTimeout(()=>{ON.copied=false;render();},1800);}}catch(e){}}
+}
+async function onStart(){
+  if(ON.busy) return;
+  const tok=ON.token;
+  ON.busy=true;ON.msg='';render();
+  try{await HubOnline.rooms.start(ON.code);}catch(e){if(tok===ON.token) ON.msg=errText(e);}
+  if(tok===ON.token){ON.busy=false;render();}
+}
+async function onLeave(){
+  if(ON.busy) return;
+  const tok=ON.token;
+  ON.busy=true;ON.msg='';render();
+  try{await HubOnline.rooms.leave(ON.code);}
+  catch(e){if(tok===ON.token){ON.busy=false;ON.msg=errText(e);render();}return;}
+  if(tok===ON.token) exitOnline();
+}
+function nameOk(){
+  const el=document.getElementById('on-name'), v=el?el.value.replace(/\s+/g,' ').trim():'';
+  if(!v){ON.msg='Enter a name to continue.';render();return;}
+  try{HubKit.setProfile({name:v});}catch(e){}
+  ON.msg='';
+  connect(ON.token);
+}
+// ---- the New game dialog's Online tab ----
+function commitName(){
+  try{
+    if(!(HubKit.profile&&HubKit.setProfile)) return true;
+    const v=String(ui.ng.myName||'').replace(/\s+/g,' ').trim().slice(0,16);
+    if(!v){ui.ng.err='Enter your name first.';render();return false;}
+    if(v!==HubKit.profile().name) HubKit.setProfile({name:v});
+  }catch(e){}
+  return true;
+}
+async function dialogCreate(){
+  const ng=ui.ng;
+  if(ng.busy) return;
+  syncNg();
+  if(!commitName()) return;
+  ng.busy='create';ng.err='';render();
+  try{
+    const r=await HubOnline.rooms.create({game:'codex',maxSeats:ng.seats});
+    ui.modal=null;ng.busy=false;
+    goOnline(r.code,{joined:true});
+  }catch(e){ng.busy=false;ng.err=errText(e);render();}
+}
+async function dialogJoin(){
+  const ng=ui.ng;
+  if(!ng||ng.busy||ui.modal!=='new') return;
+  syncNg();
+  const code=normCode(ng.code);
+  if(!/^[1-9][0-9]{5}$/.test(code)){ng.err='Enter the six-digit game code.';render();return;}
+  if(!commitName()) return;
+  ng.busy='join';ng.err='';render();
+  try{
+    await HubOnline.ready();
+    const r=await probe(code);
+    if(r.state!=='ok'){ng.busy=false;ng.err=probeText(r);render();return;}
+    ui.modal=null;ng.busy=false;
+    goOnline(code,{joined:true});
+  }catch(e){ng.busy=false;ng.err=errText(e);render();}
+}
+function onlineHTML(){
+  const code=fmtCode(ON.code), local='<button class="btn" data-act="on-local">Play on this device</button>';
+  const hub='<a class="btn" href="../">Back to the hub</a>';
+  switch(ON.stage){
+    case 'unavailable': return `<h2>Online play is unavailable</h2><p class="lede">Online games need the game server, and it can't be reached from here right now. Playing on this device still works.</p><div class="mfoot">${local}</div>`;
+    case 'name': return `<h2>What should we call you?</h2><p class="lede">Other players see this name. You can change it later in the menu under You.</p>
+      <div class="onrow" style="margin-top:12px"><label class="sr" for="on-name">Your name</label><input id="on-name" maxlength="16" autocomplete="nickname" placeholder="Name"></div>
+      ${ON.msg?`<p class="errline" role="alert">${esc(ON.msg)}</p>`:''}
+      <div class="mfoot">${local}<button class="btn primary" data-act="name-ok">Continue</button></div>`;
+    case 'joining': return `<h2>Joining game ${esc(code)}</h2><p class="lede">Connecting to the game server…</p><div class="mfoot">${local}</div>`;
+    case 'nogame': return `<h2>This game started without you</h2><p class="lede">Game ${esc(code)} is already under way and every seat is taken. Ask your friends for a new code, or start a game of your own.</p><div class="mfoot">${hub}<button class="btn primary" data-act="new">New game</button></div>`;
+    case 'missing': return `<h2>No game with that code</h2><p class="lede">There is no game ${esc(code)}. Check the code with whoever invited you.</p><div class="mfoot">${hub}<button class="btn primary" data-act="new">New game</button></div>`;
+    case 'error': return `<h2>Couldn't open the game</h2><p class="lede">${esc(ON.msg||"Something went wrong.")}</p><div class="mfoot">${local}${ON.code?'<button class="btn primary" data-act="on-retry">Try again</button>':''}</div>`;
+    case 'waiting': return waitingHTML();
+  }
+  return '';
+}
+function waitingHTML(){
+  const room=ON.room, seats=room.seats||{}, max=room.maxSeats||2, host=room.host===ON.uid;
+  const ids=Object.keys(seats).sort((a,b)=>(seats[a].joinedAt||0)-(seats[b].joinedAt||0)||(a<b?-1:1));
+  const rows=ids.map(u=>{
+    const tags=[u===room.host?'host':'',u===ON.uid?'you':''].filter(Boolean).join(' · ');
+    return `<li style="--pc:${safeColor(seats[u].color)||'var(--muted)'}"><span class="dotc"></span><span class="who">${esc(seats[u].name||'Player')}</span><span class="tag">${tags}</span></li>`;
+  }).join('')+Array.from({length:Math.max(0,max-ids.length)},()=>'<li class="empty"><span class="dotc"></span><span class="who">Waiting for a player…</span></li>').join('');
+  const status=host?(ids.length<2?'Share the code. You need at least one more player to start.':ids.length<max?'Start now, or wait for more players. The game starts by itself when every seat is full.':'Everyone is here.')
+    :'Waiting for the host to start the game.';
+  return `<h2>Waiting for players</h2><p class="lede">Share this code, or the link, with your friends.</p>
+  <div class="bigcode" aria-label="Game code ${esc(ON.code)}">${esc(fmtCode(ON.code))}</div>
+  <div class="onrow" style="margin-top:10px"><button class="btn primary" data-act="on-copy">${ON.copied?'Link copied':'Copy link'}</button></div>
+  ${ON.fallback?`<label class="sr" for="on-link">Game link</label><input id="on-link" class="copyfld" readonly value="${esc(roomLink(ON.code))}"><p class="lede">Select the link above and copy it.</p>`:''}
+  <h3>Players · ${ids.length} of ${max}</h3><ul class="plist" aria-label="Players">${rows}</ul>
+  <p class="statusline" role="status">${status}</p>
+  ${ON.msg?`<p class="errline" role="alert">${esc(ON.msg)}</p>`:''}
+  <div class="mfoot"><a class="btn" href="../">Back to the hub</a>${host?`<button class="btn primary" data-act="on-start" ${ids.length<2||ON.busy?'disabled':''}>Start</button>`:`<button class="btn" data-act="on-leave" ${ON.busy?'disabled':''}>Leave</button>`}</div>`;
+}
+
 // ---------- Boot ----------
 function start(data){
+  // ?room=CODE opens straight into that room, before any local save is read
+  const rc=new URLSearchParams(location.search).get('room');
+  if(rc!=null&&rc!==''){
+    const c=normCode(rc);
+    if(/^[1-9][0-9]{5}$/.test(c)) return goOnline(c);
+    ON.active=true;ON.stage='error';ON.msg="That link doesn't hold a valid six-digit game code.";render();return;
+  }
+  startLocal(data);
+}
+function startLocal(data){
   let s=data&&data.S;
   if(!s){try{s=JSON.parse(localStorage.getItem(KEY)||'null');}catch(e){s=null;}}
   if(s&&s.v===1&&Array.isArray(s.players)){
@@ -1183,7 +1631,8 @@ HubKit.init({
   items:()=>[
     {label:'Rules',onSelect:()=>{ui.modal='rules';render();}},
     {label:'New game',onSelect:()=>openNewGame()},
-    {label:'Bot speed',value:pace[0].toUpperCase()+pace.slice(1),onSelect:cyclePace}
+    ...(ON.active&&ON.code?[{label:'Game code',value:fmtCode(ON.code),onSelect:copyLink}]:[]),
+    ...(ON.active?[]:[{label:'Bot speed',value:pace[0].toUpperCase()+pace.slice(1),onSelect:cyclePace}])
   ]
 });
 {const a=document.querySelector('.top .actions');if(a&&!a.querySelector('[data-hubkit="menu"]')) a.insertAdjacentHTML('beforeend',HubKit.buttonHTML());}
