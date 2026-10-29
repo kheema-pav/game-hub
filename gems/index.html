@@ -1,6 +1,8 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Splendor</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap">
@@ -376,6 +378,9 @@ button.card:hover { transform: translateY(-2px); }
 
 <div id="app"></div>
 <div id="fx" aria-hidden="true"></div>
+
+<script src="../shared/hubkit.js"></script>
+<script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
 
 <script>
 // ===== Splendor rules engine =====
@@ -987,6 +992,32 @@ function previewText(m) {
   }
 }
 
+// ---------- sound ----------
+// Human moves sound at once; bot moves (volume 0.6) are timed to land with the flight animations.
+const snd = (name, o) => { try { HubKit.sfx(name, o); } catch (e) { /* sound is optional */ } };
+let sndEnd = 0; // when the sounds scheduled for the current move are done (ms from now); the your-turn chime waits for it
+const later = (ms, fn) => { sndEnd = Math.max(sndEnd, ms); if (ms <= 0) { fn(); return; } const g = G; setTimeout(() => { if (G === g) fn(); }, ms); };
+const botLag = () => (reducedMotion() ? 0 : Math.round(pace().fly * 0.85));
+const botVol = pi => (isHuman(G.players[pi]) ? undefined : { volume: 0.6 });
+const soundLag = pi => (isHuman(G.players[pi]) ? 0 : botLag());
+
+function moveSounds(pi, m, res) {
+  const human = isHuman(G.players[pi]);
+  const o = botVol(pi), at = soundLag(pi);
+  const gap = human || reducedMotion() ? 60 : 110;
+  const clink = k => later(at + k * gap, () => snd('clink', o));
+  const second = human ? 80 : (reducedMotion() ? 80 : 220);
+  if (m.t === 'take') m.gems.forEach((c, k) => clink(k));
+  else if (m.t === 'take2') { clink(0); clink(1); }
+  else if (m.t === 'buy' || m.t === 'buyR') { later(at, () => snd('place', o)); later(at + second, () => snd('coin', o)); }
+  else if (m.t === 'reserve' || m.t === 'reserveDeck') {
+    later(at, () => snd('flip', o));
+    if (res && res.gold) later(at + second, () => snd('clink', o));
+  }
+}
+
+function returnSound(pi) { later(soundLag(pi) + (isHuman(G.players[pi]) ? 0 : 110 * 3), () => snd('swish', botVol(pi))); }
+
 // ---------- flight animations ----------
 const rectOf = sel => { const el = document.querySelector(sel); return el ? el.getBoundingClientRect() : null; };
 const panelSel = pi => `.pl[data-pi="${pi}"]`;
@@ -1091,6 +1122,8 @@ function perform(m) {
   ui.lastMove = { pi, text };
   ui.fresh = (m.t === 'buy' || m.t === 'reserve') ? `${m.lv}-${m.i}` : null;
   ui.sel = []; ui.hint = null; ui.modal = null;
+  sndEnd = 0;
+  moveSounds(pi, m, res);
   return pi;
 }
 
@@ -1113,6 +1146,9 @@ function resolveNobles(pi) {
 function visit(pi, nid) {
   claimNoble(G, pi, nid);
   addLog(pi, `was visited by ${NOBLES[nid].name} (+3 prestige)`, { noble: nid });
+  const nd = isHuman(G.players[pi]) ? 250 : botLag() + 400;
+  later(nd, () => snd('chime', botVol(pi)));
+  later(nd + 100, () => snd('score', botVol(pi)));
   ui.lastMove = { pi, text: `${ui.lastMove ? ui.lastMove.text + ', then was' : 'was'} visited by ${NOBLES[nid].name}` };
 }
 
@@ -1122,11 +1158,20 @@ function finishTurn() {
   endTurn(G);
   if (!before && G.finalRound) addLog(pi, `reached ${G.players[pi].pts} prestige. Final round: everyone gets an equal number of turns.`);
   ui.nobleChoice = null; ui.discard = null;
-  if (G.over) { ui.showOver = true; }
-  else if (isHuman(curP()) && humanCount() > 1) ui.handoff = true;
+  if (G.over) { ui.showOver = true; overSound(pi); }
+  else {
+    if (isHuman(curP()) && humanCount() > 1) ui.handoff = true;
+    // Your turn: control passed from a different player to a human (in pass-and-play, as the hand-off screen appears).
+    if (isHuman(curP()) && G.cur !== pi) later(isHuman(G.players[pi]) ? 0 : sndEnd + 200, () => snd('chime'));
+  }
   saveGame();
   render();
   scheduleBot();
+}
+
+function overSound(pi) {
+  const won = standings(G).some(r => r.winner && isHuman(G.players[r.i]));
+  later(sndEnd + 250, () => snd(won ? 'win' : 'end'));
 }
 
 function scheduleBot() {
@@ -1151,6 +1196,7 @@ function botTurn() {
       if (returned.length) {
         addLog(pi, `returned ${returned.length} token${returned.length > 1 ? 's' : ''} (${gemList(returned)})`, { lose: returned });
         ui.lastMove.text += ` and returned ${gemList(returned)}`;
+        returnSound(pi);
       }
       const el = eligibleNobles(G, G.players[pi]);
       if (el.length) visit(pi, el[0]);
@@ -1180,7 +1226,8 @@ function seatsFromSetup() {
 
 // ---------- gem selection ----------
 function clickBank(c) {
-  if (!canInteract() || c === 'o') return;
+  if (!canInteract()) return;
+  if (c === 'o') { snd('error'); return; }
   const sel = ui.sel;
   ui.hint = null;
   if (!G.bank[c]) { ui.hint = `The ${GEM_NAME[c]} pile is empty.`; }
@@ -1192,6 +1239,7 @@ function clickBank(c) {
   else if (sel.includes(c)) ui.hint = 'Three gems must all be different colors.';
   else if (sel.length < 3) sel.push(c);
   else ui.hint = 'You can take at most 3 gems.';
+  if (ui.hint) snd('error');
   render();
 }
 
@@ -1406,9 +1454,7 @@ function renderGame() {
       ${G.over ? '<span class="pill">Game over</span>' : ''}
       <span class="spacer"></span>
       ${G.over && !ui.showOver ? '<button class="btn small" data-act="show-over">Results</button>' : ''}
-      ${G.players.some(p => !isHuman(p)) ? `<button class="btn small ghost" data-act="pace" aria-label="Bot speed: ${pace().label}. Tap to change">Bot speed: ${pace().label}</button>` : ''}
-      <button class="btn small ghost" data-act="rules">Rules</button>
-      <button class="btn small" data-act="newgame">New game</button>
+      ${HubKit.buttonHTML()}
     </header>
     <main class="table">
       <section class="board" aria-label="Market">
@@ -1549,7 +1595,45 @@ function overlays() {
 function render() {
   app.innerHTML = ui.screen === 'setup' ? renderSetup() : renderGame();
   ui.fresh = null;
+  HubKit.setFloating(ui.screen === 'setup');
 }
+
+// ---------- menu actions (shared by the hub menu and the click handler) ----------
+function cyclePace() {
+  const keys = Object.keys(PACES);
+  setup.pace = keys[(keys.indexOf(setup.pace) + 1) % keys.length];
+  store(SETUP_KEY, setup); render();
+}
+
+function newGameClick() {
+  if (!G) return;
+  if (G.over) { ui.screen = 'setup'; G = null; render(); } else { ui.confirmNew = true; render(); }
+}
+
+function resumeSaved() {
+  const saved = load(SAVE_KEY);
+  if (!saved || !Array.isArray(saved.players)) { render(); return; }
+  G = saved;
+  Object.assign(ui, { screen: 'game', sel: [], modal: null, discard: null, nobleChoice: null, lastMove: null, rules: false });
+  ui.handoff = isHuman(curP()) && humanCount() > 1;
+  // A save made mid-discard or mid-noble choice resumes at that step.
+  if (isHuman(curP()) && tokenCount(curP()) > TOKEN_LIMIT) ui.discard = emptyTokens();
+  render(); scheduleBot();
+}
+
+HubKit.init({
+  id: 'gems', name: 'Splendor', accent: { light: '#94680f', dark: '#d9ae52' }, scheme: 'auto', floating: true,
+  items: () => {
+    const openRules = () => { ui.rules = true; render(); };
+    if (ui.screen === 'setup' || !G) return [{ label: 'How to play', onSelect: openRules }];
+    const items = [
+      { label: 'Rules', onSelect: openRules },
+      { label: 'New game', onSelect: newGameClick },
+    ];
+    if (G.players.some(p => !isHuman(p))) items.push({ label: 'Bot speed', value: pace().label, onSelect: cyclePace });
+    return items;
+  },
+});
 
 // ---------- events ----------
 app.addEventListener('click', e => {
@@ -1558,11 +1642,7 @@ app.addEventListener('click', e => {
   const d = el.dataset;
   switch (d.act) {
     case 'noop': case 'none': return;
-    case 'pace': {
-      const keys = Object.keys(PACES);
-      setup.pace = keys[(keys.indexOf(setup.pace) + 1) % keys.length];
-      store(SETUP_KEY, setup); render(); return;
-    }
+    case 'pace': cyclePace(); return;
     case 'count': setup.count = +d.n; store(SETUP_KEY, setup); render(); return;
     case 'kind': {
       const s = setup.seats[+d.i];
@@ -1573,16 +1653,7 @@ app.addEventListener('click', e => {
       store(SETUP_KEY, setup); render(); return;
     }
     case 'start': store(SETUP_KEY, setup); startGame(seatsFromSetup()); return;
-    case 'resume': {
-      const saved = load(SAVE_KEY);
-      if (!saved) { render(); return; }
-      G = saved;
-      Object.assign(ui, { screen: 'game', sel: [], modal: null, discard: null, nobleChoice: null, lastMove: null, rules: false });
-      ui.handoff = isHuman(curP()) && humanCount() > 1;
-      // A save made mid-discard or mid-noble choice resumes at that step.
-      if (isHuman(curP()) && tokenCount(curP()) > TOKEN_LIMIT) ui.discard = emptyTokens();
-      render(); scheduleBot(); return;
-    }
+    case 'resume': resumeSaved(); return;
     case 'rules': ui.rules = true; render(); return;
     case 'close': ui.rules = false; ui.modal = null; ui.confirmNew = false; render(); return;
     case 'bank': clickBank(d.c); return;
@@ -1609,6 +1680,7 @@ app.addEventListener('click', e => {
       const p = curP();
       const chosen = TOKENS.reduce((n, c) => n + ui.discard[c], 0);
       if (chosen < tokenCount(p) - TOKEN_LIMIT && p.tokens[d.c] - ui.discard[d.c] > 0) ui.discard[d.c]++;
+      else snd('error');
       render(); return;
     }
     case 'undisc': if (ui.discard[d.c] > 0) ui.discard[d.c]--; render(); return;
@@ -1621,15 +1693,14 @@ app.addEventListener('click', e => {
       withFx(pi, () => {
         for (const c of back) { p.tokens[c]--; G.bank[c]++; }
         addLog(pi, `returned ${back.length} token${back.length > 1 ? 's' : ''} (${gemList(back)})`, { lose: back });
+        returnSound(pi);
         resolveNobles(pi);
       });
       return;
     }
     case 'noble': { ui.nobleChoice = null; const pi = G.cur; render(); withFx(pi, () => { visit(pi, +d.n); finishTurn(); }); return; }
     case 'handoff': ui.handoff = false; render(); return;
-    case 'newgame':
-      if (G.over) { ui.screen = 'setup'; G = null; render(); } else { ui.confirmNew = true; render(); }
-      return;
+    case 'newgame': newGameClick(); return;
     case 'setup': clearTimeout(ui.botTimer); forget(SAVE_KEY); G = null; ui.screen = 'setup'; ui.confirmNew = false; render(); return;
     case 'rematch': {
       // Same players; the seat order rotates so a different player starts.
@@ -1665,6 +1736,9 @@ function start(data) {
     G = data.G; ui.screen = data.screen || 'game'; ui.lastMove = data.lastMove || null; ui.handoff = !!data.handoff;
     ui.discard = data.discard || null; ui.nobleChoice = data.nobleChoice || null;
   }
+  const wantContinue = location.hash === '#continue';
+  if (wantContinue) { try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ } }
+  if (wantContinue && !G && load(SAVE_KEY)) { resumeSaved(); return; }
   render();
   scheduleBot();
 }

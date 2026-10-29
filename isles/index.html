@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><link rel="manifest" href="../manifest.webmanifest"><link rel="apple-touch-icon" href="../icons/icon-180.png"></head><body>
 <title>Catan</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -99,8 +99,7 @@ details.rules ul { padding-left: 18px; margin: 6px 0; }
 .pchip .badges { position: absolute; top: -6px; right: 4px; display: flex; gap: 3px; }
 .badge { background: var(--gold); color: var(--gold-ink); font-size: .58rem; font-weight: 800; border-radius: 6px; padding: 1px 4px; letter-spacing: .03em; }
 .gain { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); background: var(--ok); color: #0c2b14; font-weight: 800; font-size: .72rem; border-radius: 999px; padding: 1px 7px; animation: rise 1.8s ease-out forwards; pointer-events: none; z-index: 2; }
-.menu-btn { flex: none; width: 40px; border-radius: 12px; background: var(--panel); border: 0; display: grid; place-items: center; }
-.menu-btn svg { width: 20px; height: 20px; }
+button.hk-menu-btn.isl-menu { align-self: flex-start; color: var(--ink); }
 
 .board-wrap { grid-area: board; position: relative; overflow: hidden; background: radial-gradient(90% 80% at 50% 45%, var(--ocean-1) 0%, var(--ocean-2) 100%); }
 #board { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -189,8 +188,6 @@ details.rules ul { padding-left: 18px; margin: 6px 0; }
 .costs { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; font-weight: 700; font-size: .9rem; }
 .costs .pips { display: flex; gap: 3px; }
 .costs .pips i { width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
-.menu-list { display: flex; flex-direction: column; gap: 8px; }
-.menu-list .btn { text-align: left; }
 .confirm-row { display: flex; gap: 8px; }
 .confirm-row .btn { flex: 1; }
 
@@ -238,7 +235,7 @@ details.rules ul { padding-left: 18px; margin: 6px 0; }
   <section id="game" class="screen" hidden>
     <header class="topbar">
       <div class="players" id="players"></div>
-      <button class="menu-btn" data-act="menu" aria-label="Menu"><svg viewBox="0 0 20 20"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+      <span id="menuSlot"></span>
     </header>
     <main class="board-wrap">
       <svg id="board" xmlns="http://www.w3.org/2000/svg"><g id="static"></g><g id="dynamic"></g></svg>
@@ -257,6 +254,8 @@ details.rules ul { padding-left: 18px; margin: 6px 0; }
   <div id="curtain" class="curtain" hidden></div>
 </div>
 
+<script src="../shared/hubkit.js"></script>
+<script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
 <script>
 const Engine = (() => {
 'use strict';
@@ -812,6 +811,7 @@ function doDiscard(s, p, cards) {
   if (tot !== need) return err(`Discard exactly ${need}`);
   RES.forEach(r => { const k = cards[r] || 0; h[r] -= k; s.bank[r] += k; });
   log(s, `${nm(s, p)} discards ${need} cards.`, p);
+  fx(s, { type: 'discard', p });
   s.discardQ.shift();
   if (!s.discardQ.length) s.phase = 'robber';
   return OK;
@@ -976,6 +976,7 @@ function doBankTrade(s, give, get) {
   s.players[p].hand[give] -= ratio; s.bank[give] += ratio;
   giveFromBank(s, p, get, 1);
   log(s, `${nm(s, p)} trades ${ratio} ${RES_NAME[give]} for 1 ${RES_NAME[get]}.`, p);
+  fx(s, { type: 'bank', p });
   return OK;
 }
 function validTrade(s, a, b, give, get) {
@@ -1013,6 +1014,7 @@ function doRespond(s, accept) {
   if (accept && validTrade(s, o.from, o.to, o.give, o.get)) {
     transfer(s, o.from, o.to, o.give, o.get);
     log(s, `${nm(s, o.to)} accepts ${nm(s, o.from)}’s trade.`, o.to);
+    fx(s, { type: 'trade', a: o.from, b: o.to, offer: true });
   } else log(s, `${nm(s, o.to)} declines ${nm(s, o.from)}’s trade.`, o.to);
   s.offer = null; s.phase = 'main';
   return OK;
@@ -1559,7 +1561,7 @@ const ui = {
   mode: null, revealed: null, undo: [], view: null, base: null, timer: null,
   edgeKind: 'road', trade: { tab: 'bank', give: null, get: null, pg: {}, pw: {} },
   flashHexes: [], newKeys: new Set(), gains: {}, modal: null, modalKey: null, picks: {}, sel: [], confirm: null,
-  cfg: null, homeConfirm: false,
+  cfg: null, homeConfirm: false, lastActor: null,
 };
 
 function defaultCfg() {
@@ -1688,6 +1690,7 @@ function log0() { ui.undo = []; ui.mode = null; ui.revealed = null; ui.modal = n
 
 function enterGame() {
   $('#home').hidden = true; $('#game').hidden = false;
+  ui.lastActor = E.actor(G);   // no chime on a new game, a rematch or a resume
   closeModal();
   renderStatic();
   afterAction();
@@ -1698,7 +1701,14 @@ function goHome() {
   $('#game').hidden = true; $('#home').hidden = false;
   ui.homeConfirm = false;
   renderHome();
+  syncFloat();
 }
+function resumeSave() {
+  const sv = loadSave(); if (!sv) { renderHome(); return false; }
+  G = sv.G; G.fx = []; log0(); enterGame(); return true;
+}
+// The kit's floating menu button shows where the game has no topbar: setup screen and the pass-the-device curtain.
+function syncFloat() { try { HubKit.setFloating(!$('#home').hidden || !$('#curtain').hidden); } catch (e) { } }
 
 /* ================= BOARD ================= */
 function hexPts(x, y, r) {
@@ -1997,6 +2007,7 @@ function render() {
   renderDock();
   renderCurtain();
   renderPhaseModal();
+  syncFloat();
 }
 
 function renderPlayers() {
@@ -2190,7 +2201,6 @@ function drawModal() {
       <div class="confirm-row"><button class="btn" data-act="offer-no" data-confirm="Decline?">Decline</button><button class="btn primary" data-act="offer-yes" data-confirm="Accept?" ${E.RES.every(r => (o.get[r] || 0) <= G.players[o.to].hand[r]) ? '' : 'disabled'}>Accept</button></div>`);
   } else if (k === 'trade') html = tradeModal();
   else if (k === 'dev') html = devModal();
-  else if (k === 'menu') html = menuModal();
   else if (k === 'log') html = sheet('Game log', `<div class="loglist">${G.log.slice().reverse().map(l => `<div>${l.p !== null ? `<i style="background:${pcol(l.p)}"></i>` : ''}${esc(l.t)}</div>`).join('')}</div>`, true);
   else if (k === 'costs') html = sheet('Building costs', costsHtml(), true);
   else if (k === 'results') html = resultsModal();
@@ -2204,7 +2214,8 @@ function costsHtml() {
   const row = (label, kind) => `<div>${label}</div><div class="pips">${Object.keys(E.COST[kind]).map(r => Array(E.COST[kind][r]).fill(`<i style="background:${RES_DOT[r]}" title="${E.RES_NAME[r]}"></i>`).join('')).join('')}</div>`;
   return `<div class="costs">${row('Road', 'road')}${row('Settlement (1 point)', 'settlement')}${row('City (2 points)', 'city')}${G && G.mode === 'seafarers' ? row('Ship', 'ship') : ''}${row('Development card', 'dev')}</div>
     <p>${E.RES.map(r => `<span style="color:${RES_DOT[r]};font-weight:800">■</span> ${E.RES_NAME[r]}`).join(' &nbsp; ')}</p>
-    <p>Longest Road (5+ in a row) and Largest Army (3+ knights) are worth 2 points each.${G && G.mode === 'seafarers' ? ' Your first settlement on each new island is worth 2 extra points.' : ''}</p>`;
+    <p>Longest Road (5+ in a row) and Largest Army (3+ knights) are worth 2 points each.${G && G.mode === 'seafarers' ? ' Your first settlement on each new island is worth 2 extra points.' : ''}</p>
+    ${G ? `<p>Bank: ${E.RES.map(r => `<span style="color:${RES_DOT[r]};font-weight:800">■</span> ${G.bank[r]}`).join(' &nbsp; ')} · Dev cards left: ${G.deck.length} · Playing to ${G.target}</p>` : ''}`;
 }
 
 function tradeModal() {
@@ -2263,22 +2274,6 @@ function devModal() {
   return sheet('Development cards', `<div class="devlist">${list}</div>${picker}<p>${G.deck.length} cards left in the deck.</p>`, true);
 }
 
-function menuModal() {
-  if (ui.confirm === 'quit') {
-    return sheet('Leave this game?', `<p>The game is saved on this device. You can resume it from the start screen.</p><div class="confirm-row"><button class="btn" data-act="close-modal">Stay</button><button class="btn primary" data-act="home">Go to start screen</button></div>`, true);
-  }
-  const bank = E.RES.map(r => `<span style="color:${RES_DOT[r]};font-weight:800">■</span> ${G.bank[r]}`).join(' &nbsp; ');
-  return sheet('Menu', `<div class="menu-list">
-      <button class="btn" data-act="open-costs">Building costs</button>
-      <button class="btn" data-act="open-log">Game log</button>
-      <button class="btn" data-act="toggle-confirm">${ui.cfg.confirm ? 'Stop asking to confirm moves' : 'Ask to confirm moves'}</button>
-      <button class="btn" data-act="toggle-privacy">${ui.cfg.hideHands ? 'Stop hiding hands between turns' : 'Hide hands between turns'}</button>
-      ${G.players.some(p => p.bot) ? `<button class="btn" data-act="cycle-level">Bot skill: ${{ easy: 'Easy', normal: 'Normal', hard: 'Hard' }[G.level || 'normal']}</button>` : ''}
-      <button class="btn" data-act="cycle-speed">Bot speed: ${{ slow: 'Relaxed', normal: 'Normal', fast: 'Fast' }[ui.cfg.speed]}</button>
-      <button class="btn danger" data-act="quit">Leave game</button>
-    </div><p>Bank: ${bank} · Dev cards left: ${G.deck.length} · Playing to ${G.target}</p>`, true);
-}
-
 function resultsModal() {
   const rows = G.players.map(p => {
     let set = 0, cit = 0;
@@ -2310,7 +2305,9 @@ function renderPhaseModal() {
 }
 
 /* ================= ACTIONS ================= */
+function sfx(name, quiet) { try { HubKit.sfx(name, quiet ? { volume: 0.6 } : undefined); } catch (e) { } }
 function toast(msg, color, isErr) {
+  if (isErr) sfx('error');
   const box = $('#toasts');
   const el = document.createElement('div');
   el.className = 'toast' + (isErr ? ' err' : '');
@@ -2336,8 +2333,13 @@ function processFx() {
   const fxs = G.fx.splice(0);
   let flash = null;
   fxs.forEach(f => {
-    if (f.type === 'build') { if (!ui.newKeys.size) ui.popAt = Date.now(); ui.newKeys.add((f.kind === 'settlement' || f.kind === 'city' ? 'v' : 'e') + f.id); }
+    const q = f.p !== undefined && G.players[f.p].bot;   // bot actions play quieter
+    if (f.type === 'build') {
+      if (!ui.newKeys.size) ui.popAt = Date.now(); ui.newKeys.add((f.kind === 'settlement' || f.kind === 'city' ? 'v' : 'e') + f.id);
+      sfx('build', q); if (f.kind === 'city') sfx('score', q);
+    }
     if (f.type === 'roll') {
+      sfx('dice', q);
       const d = $('#dice'); d.classList.remove('rolling'); void d.offsetWidth; d.classList.add('rolling');
       clearTimeout(ui.rollTimer); ui.rollTimer = setTimeout(() => d.classList.remove('rolling'), 600);
       if (f.dice[0] + f.dice[1] === 7) toast(`${G.players[f.p].name} rolled 7: robber time`, pcol(f.p));
@@ -2352,9 +2354,16 @@ function processFx() {
       });
       Object.keys(f.gold || {}).forEach(p => { ui.gains[p] = (ui.gains[p] || 0) + f.gold[p]; });
       ui.bump = bump;
+      if (Object.keys(ui.gains).some(p => ui.gains[p] > 0 && !G.players[p].bot)) { const bq = G.players[E.actor(G)].bot; setTimeout(() => sfx('draw', bq), 380); }
       setTimeout(() => { ui.gains = {}; ui.bump = {}; if (G) renderPlayers(); }, 1900);
     }
+    if (f.type === 'robber') sfx('thud', q);
+    if (f.type === 'discard') sfx('swish', q);
+    if (f.type === 'bank') sfx('coin', q);
+    if (f.type === 'dev') sfx('flip', q);
+    if (f.type === 'play') sfx('flip', q);
     if (f.type === 'steal') {
+      sfx('swish', G.players[f.to].bot);
       const what = E.RES_NAME[f.res];
       if (f.from === v) toast(`${G.players[f.to].name} stole your ${what}`, pcol(f.to));
       else if (f.to === v) toast(`You stole ${what} from ${G.players[f.from].name}`, pcol(f.to));
@@ -2364,8 +2373,9 @@ function processFx() {
     if (f.type === 'dev' && f.p === v && !G.players[f.p].bot) toast(`You drew: ${E.DEV_NAME[f.card]}`, '#8a55cf');
     if (f.type === 'play' && G.players[f.p].bot) toast(`${G.players[f.p].name} played ${E.DEV_NAME[f.card]}`, pcol(f.p));
     if (f.type === 'mono') toast(`${G.players[f.p].name} took ${f.n} ${E.RES_NAME[f.res]} with Monopoly`, pcol(f.p));
-    if (f.type === 'trade' && (G.players[f.a].bot || G.players[f.b].bot)) toast(`${G.players[f.a].name} traded with ${G.players[f.b].name}`, pcol(f.a));
-    if (f.type === 'win') setTimeout(() => openModal('results'), 900);
+    if (f.type === 'trade') sfx('coin', G.players[f.a].bot);
+    if (f.type === 'trade' && !f.offer && (G.players[f.a].bot || G.players[f.b].bot)) toast(`${G.players[f.a].name} traded with ${G.players[f.b].name}`, pcol(f.a));
+    if (f.type === 'win') setTimeout(() => { sfx(G && !G.players[f.p].bot ? 'win' : 'end'); openModal('results'); }, 900);
   });
   if (flash && flash.length) {
     ui.flashHexes = flash; ui.flashAt = Date.now();
@@ -2378,6 +2388,10 @@ function afterAction() {
   if (!G) return;
   ui.pending = null;
   processFx();
+  // chime when control passes from someone else to a human (also the pass-the-device screen in pass and play)
+  const actor = E.actor(G);
+  if (ui.lastActor !== null && ui.lastActor !== actor && G.phase !== 'gameover' && !G.players[actor].bot) sfx('chime');
+  ui.lastActor = actor;
   if (G.phase !== 'main') ui.mode = null;
   if (ui.mode && ui.mode.kind !== 'moveTo' && ui.mode.kind !== 'moveFrom' && !E.canBuildKind(G, G.current, ui.mode.kind)) ui.mode = null;
   saveGame();
@@ -2479,14 +2493,10 @@ function onAct(name, el) {
     case 'opt': syncNames(); c[d.k] = !c[d.k]; saveCfg(); renderHome(); break;
     case 'speed': syncNames(); c.speed = d.s; saveCfg(); renderHome(); break;
     case 'level': syncNames(); c.level = d.l; saveCfg(); renderHome(); break;
-    case 'cycle-level': G.level = { easy: 'normal', normal: 'hard', hard: 'easy' }[G.level || 'normal']; c.level = G.level; saveCfg(); saveGame(); drawModal(); break;
     case 'start': syncNames(); if (loadSave()) { ui.homeConfirm = true; renderHome(); } else startGame(); break;
     case 'start-force': startGame(); break;
     case 'cancel-new': ui.homeConfirm = false; renderHome(); break;
-    case 'continue': {
-      const sv = loadSave(); if (!sv) { renderHome(); break; }
-      G = sv.G; G.fx = []; log0(); enterGame(); break;
-    }
+    case 'continue': resumeSave(); break;
     /* game */
     case 'reveal': ui.revealed = E.actor(G); render(); break;
     case 'roll': act(() => E.doRoll(G)); break;
@@ -2500,7 +2510,6 @@ function onAct(name, el) {
     case 'cancel-mode': ui.mode = null; ui.pending = null; render(); break;
     case 'pending-yes': if (ui.pending) { runTap(ui.pending); if (G) render(); } break;
     case 'pending-no': ui.pending = null; render(); break;
-    case 'toggle-confirm': c.confirm = !c.confirm; saveCfg(); ui.pending = null; closeModal(); render(); break;
     case 'buy-dev': act(() => E.doBuyDev(G)); break;
     case 'end-turn': ui.mode = null; act(() => E.doEndTurn(G)); break;
     case 'undo': { const snap = ui.undo.pop(); if (snap) { G = JSON.parse(snap); G.fx = []; ui.mode = null; saveGame(); render(); } break; }
@@ -2556,12 +2565,6 @@ function onAct(name, el) {
     case 'do-steal': closeModal(); act(() => E.doSteal(G, +d.p)); break;
     case 'offer-yes': closeModal(); act(() => E.doRespond(G, true)); break;
     case 'offer-no': closeModal(); act(() => E.doRespond(G, false)); break;
-    case 'menu': ui.confirm = null; openModal('menu'); break;
-    case 'open-log': openModal('log'); break;
-    case 'open-costs': openModal('costs'); break;
-    case 'toggle-privacy': c.hideHands = !c.hideHands; saveCfg(); closeModal(); render(); break;
-    case 'cycle-speed': c.speed = { slow: 'normal', normal: 'fast', fast: 'slow' }[c.speed]; saveCfg(); drawModal(); break;
-    case 'quit': ui.confirm = 'quit'; drawModal(); break;
     case 'show-results': openModal('results'); break;
     case 'rematch': {
       const opts = { mode: G.mode, target: G.target, friendly: G.friendly, level: G.level, players: E.shuffle(G.players.map(p => ({ name: p.name, color: p.color, bot: p.bot }))) };
@@ -2610,12 +2613,45 @@ document.addEventListener('input', ev => {
   if (ev.target.id && ev.target.id.startsWith('pname-')) { syncNames(); saveCfg(); }
 });
 
+/* ================= MENU (HubKit) ================= */
+function menuItems() {
+  if ($('#game').hidden || !G) return [];   // setup screen: the page itself explains how to play
+  const c = ui.cfg;
+  const items = [
+    { label: 'Building costs', onSelect: () => openModal('costs') },
+    { label: 'Game log', onSelect: () => openModal('log') },
+    { label: 'Confirm moves', toggle: true, checked: !!c.confirm, onSelect: on => { c.confirm = on; saveCfg(); ui.pending = null; render(); } },
+    { label: 'Hide hands between turns', toggle: true, checked: !!c.hideHands, onSelect: on => { c.hideHands = on; saveCfg(); render(); } },
+  ];
+  if (G.players.some(p => p.bot)) {
+    items.push({ label: 'Bot skill', value: { easy: 'Easy', normal: 'Normal', hard: 'Hard' }[G.level || 'normal'],
+      onSelect: () => { G.level = { easy: 'normal', normal: 'hard', hard: 'easy' }[G.level || 'normal']; c.level = G.level; saveCfg(); saveGame(); } });
+  }
+  items.push({ label: 'Bot speed', value: { slow: 'Relaxed', normal: 'Normal', fast: 'Fast' }[c.speed],
+    onSelect: () => { c.speed = { slow: 'normal', normal: 'fast', fast: 'slow' }[c.speed]; saveCfg(); saveGame(); } });
+  items.push({ label: 'Back to setup', onSelect: () => { closeModal(); saveGame(); goHome(); } });
+  return items;
+}
+function initKit() {
+  try {
+    HubKit.init({ id: 'isles', name: 'Catan', accent: '#ffc94a', scheme: 'dark', floating: false, items: menuItems });
+    const slot = $('#menuSlot'), html = HubKit.buttonHTML('isl-menu');
+    if (slot && html) slot.outerHTML = html;
+  } catch (e) { }
+}
+
 /* ================= BOOT ================= */
 function boot(data) {
   ui.cfg = loadCfg();
+  initKit();
   setupPanZoom();
   if (data && data.G) { G = data.G; G.fx = []; if (data.ui) Object.assign(ui, { revealed: data.ui.revealed }); $('#home').hidden = true; $('#game').hidden = false; renderStatic(); afterAction(); return; }
   renderHome();
+  syncFloat();
+  if (location.hash === '#continue') {
+    resumeSave();
+    try { history.replaceState(null, '', location.pathname); } catch (e) { }
+  }
 }
 if (window.claude && window.claude.hot && window.claude.hot.snapshot) {
   try { window.claude.hot.snapshot(() => ({ G: G && !$('#game').hidden ? G : null, ui: { revealed: ui.revealed } })); } catch (e) { }
