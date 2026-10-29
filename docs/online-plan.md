@@ -1,6 +1,6 @@
 # Online play, phase 1: game codes, profiles, Codex online
 
-Status: draft for review. Owner: coordinator session. Builders: Sonnet helper agents.
+Status: reviewed; ready to build. **Read "Amendments after review" at the end first; it overrides anything above.** Owner: coordinator session. Builders: Sonnet helper agents.
 
 ## Goal
 
@@ -137,3 +137,132 @@ Notes: moves can only be appended by their owner (validation of game legality ha
 2. Builder 1: `shared/online.js`, `firebase/firestore.rules`, HubKit "You" row and `setBadge`, hub Join box, Continue for online rooms, stats line. Tested against a mock of `HubOnline` first, then live once config exists.
 3. Builder 2 (after builder 1's API is fixed): Codex online mode.
 4. Coordinator: live acceptance tests, rules verification, deploy.
+
+
+## Amendments after review (override everything above)
+
+### 1. Identity and SDK loading
+- `shared/online.js` is a **classic script** (not a module) that defines `window.HubOnline` synchronously, then lazily `import()`s the Firebase modules from `https://www.gstatic.com/firebasejs/<VER>/firebase-app.js`, `firebase-auth.js`, `firebase-firestore.js`, one pinned version for all three. Verify the URLs return 200 with curl before using them. If the import fails, online features report "unavailable" and nothing else breaks.
+- `shared/firebase-config.js` sets `window.HUB_FIREBASE_CONFIG = null;` until the owner's values are pasted in. `HubOnline.available()` is false while it is null.
+- Auth: `getAuth()` with default persistence; `await auth.authStateReady()`; call `signInAnonymously` only if `auth.currentUser` is still null. Never create a second anonymous user on reload.
+- Firestore: default memory cache (no persistent cache).
+- Emulator switch for tests: if `localStorage['hub.emulator']` is set to `"host:firestorePort:authPort"`, connect to the emulators (`connectFirestoreEmulator`, `connectAuthEmulator`) and use a demo project id (`demo-game-hub`) even when the config is null.
+- Authorised domains are not needed for anonymous auth. (Optional hardening for the owner later: restrict the API key by HTTP referrer.)
+
+### 2. Profile and stats live in HubKit (work without Firebase)
+- localStorage `hub.profile` = `{name, color, stats:{<game>:{played, won, best}}}` is the single source of truth on the device.
+- HubKit adds: `HubKit.profile()` → `{name, color}` (defaults: name "", color first swatch); `HubKit.setProfile({name, color})`; `HubKit.recordResult(game, key, {won, score})`, idempotent per `key` using localStorage `hub.statsDone` (a set of keys), updating `hub.profile.stats`; `HubKit.setBadge(bool)`; and the "You" row in the sheet (name field max 16 chars, 8 colour swatches, Save). Colours: `#e4572e`, `#f2b632`, `#4f9d69`, `#3b6fa8`, `#7c4d9b`, `#e86fa0`, `#2bb3b1`, `#8d6e4a`.
+- `HubOnline` mirrors `hub.profile` to `profiles/{uid}` after `ready()` and whenever it changes. It never reads stats back from the server in phase 1.
+- Local bot and pass-and-play games call `recordResult` too (key = a local game id); online games use key = `uid + ':' + code`.
+
+### 3. Frozen `HubOnline` API (both builders code against exactly this)
+```js
+HubOnline.available()                      // bool
+HubOnline.ready()                          // Promise<{uid}>; rejects {code:'unavailable'|'offline'|'auth'}
+HubOnline.uid                              // string after ready(), else null
+HubOnline.rooms.create({game, maxSeats})   // Promise<{code}>; seat snapshot from HubKit.profile()
+HubOnline.rooms.lookup(code)               // Promise<{exists, game, status, maxSeats, seats, seated}>; 8 s timeout; rejects {code:'offline'|'timeout'|'denied'}
+HubOnline.rooms.join(code)                 // Promise<{code, game}>; idempotent: if already seated, resolves even after start;
+                                           //  rejects {code:'missing'|'full'|'started'|'offline'|'denied'}
+HubOnline.rooms.leave(code)                // non-host, while open
+HubOnline.rooms.start(code)                // host, while open, at least 2 seated
+HubOnline.rooms.watch(code, cb)            // returns unsubscribe; cb({room, players:{uid:{setup?, moves:[], turn?}}, pending, error})
+                                           //  `pending` = this client has unconfirmed writes (from hasPendingWrites)
+HubOnline.rooms.writeMine(code, {setup?, moves, turn})  // full set of the caller's own players/{uid} doc; queued, one write at a time;
+                                           //  sets turn.at = serverTimestamp()
+HubOnline.rooms.mine()                     // [{code, game, uid, joinedAt}] from localStorage 'hub.rooms', filtered to the current uid
+HubOnline.rooms.forget(code)               // removes from 'hub.rooms' (hub "Remove" link)
+```
+- `hub.rooms` gets an entry on create, on join, and when a seated player opens `?room=`.
+- Turn summary for the hub: every write of your own doc includes `turn: {phase:'setup'|'play'|'over', next: uid|null, at}` computed by the game's replay. The hub shows the summary with the latest `at` across the room's player docs (display only; games always replay the moves).
+
+### 4. Seats, start, leave
+- Seat order = `Object.keys(seats)` sorted by uid (not joinedAt; joinedAt is client-chosen). First player = `Math.floor(r()*n)` drawn from the seeded generator after the same shuffles as the local game. The waiting room may list players in joinedAt order for display.
+- The join that fills the last seat also sets `status:'playing'` and `startedAt` (allowed by the rules). The host can start earlier with at least 2 seated.
+- Non-hosts can leave while the room is open. A host leaving or a player never setting up leaves the game stuck; accepted for phase 1 (hub "Remove" link hides it).
+- `rooms.create` writes only `game, v, host, seed, maxSeats, status, seats, createdAt` (no settings field).
+
+### 5. Security rules
+Use the reviewer's corrected rules (below) as the starting point and **prove them with the Firestore emulator** using `@firebase/rules-unit-testing`: tests must cover create, join, join-the-last-seat-starts, full room, leave, host start with 1 vs 2 seated, non-host start, writing another player's doc, rewriting or truncating your own moves, changing setup after it is set, listing rooms or profiles (must fail), oversized names. Fix the rules until every test passes; keep the final version in `firebase/firestore.rules`.
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function room(code) { return get(/databases/$(db)/documents/rooms/$(code)).data; }
+    function seatOk(s) { return s.keys().hasOnly(['name','color','joinedAt'])
+      && s.name is string && s.name.size() <= 16 && s.color is string && s.color.size() <= 16; }
+
+    match /profiles/{uid} {
+      allow get: if signedIn();
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['name','color','updatedAt','stats'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 16
+        && request.resource.data.color is string && request.resource.data.color.size() <= 16;
+    }
+
+    match /rooms/{code} {
+      function n() { return request.resource.data; }
+      function sd() { return n().seats.diff(resource.data.seats); }
+      function joining() {
+        return n().diff(resource.data).affectedKeys().hasOnly(['seats','status','startedAt'])
+          && sd().addedKeys() == [me()].toSet() && sd().affectedKeys() == sd().addedKeys()
+          && seatOk(n().seats[me()]) && n().seats.size() <= resource.data.maxSeats
+          && (n().status == 'open' || (n().status == 'playing' && n().seats.size() == resource.data.maxSeats));
+      }
+      function leaving() {
+        return me() != resource.data.host
+          && n().diff(resource.data).affectedKeys().hasOnly(['seats'])
+          && sd().removedKeys() == [me()].toSet() && sd().affectedKeys() == sd().removedKeys();
+      }
+      function starting() {
+        return me() == resource.data.host && n().status == 'playing' && resource.data.seats.size() >= 2
+          && n().diff(resource.data).affectedKeys().hasOnly(['status','startedAt']);
+      }
+      allow get: if signedIn();
+      allow create: if signedIn() && code.matches('[1-9][0-9]{5}')
+        && n().keys().hasOnly(['game','v','host','seed','maxSeats','status','seats','createdAt'])
+        && n().host == me() && n().seed is int && n().status == 'open'
+        && n().maxSeats is int && n().maxSeats >= 2 && n().maxSeats <= 4
+        && n().seats.keys().hasOnly([me()]) && seatOk(n().seats[me()]);
+      allow update: if signedIn() && resource.data.status == 'open' && (joining() || leaving() || starting());
+
+      match /players/{uid} {
+        function member() { let r = room(code); return signedIn() && me() == uid && r.status == 'playing' && uid in r.seats; }
+        function shape() { return request.resource.data.keys().hasOnly(['setup','moves','turn'])
+          && request.resource.data.get('moves', []) is list; }
+        function appendOnly() { let o = resource.data.get('moves', []); let m = request.resource.data.get('moves', []);
+          return m.size() >= o.size() && m[0:o.size()] == o; }
+        function setupFixed() { return !('setup' in resource.data) || request.resource.data.setup == resource.data.setup; }
+        allow read: if signedIn();
+        allow create: if member() && shape();
+        allow update: if member() && shape() && appendOnly() && setupFixed();
+      }
+    }
+  }
+}
+```
+Note: `players` docs allow collection reads (the room's subcollection is listed by `watch`); that is intended. Rooms and profiles allow `get` only, never `list`.
+
+### 6. Writes and pending state
+- Writes do not fail while offline (they queue). Show "Sending…" while `pending` is true; roll back only on an actual rejection (permission denied).
+- `writeMine` serialises writes (one in flight at a time).
+
+### 7. Codex online integration (must-follow list)
+- `start()` branches on `?room=CODE` **before** loading the local save or creating a local game. In online mode never call `save()` (it would overwrite `naturalists-codex-v1`), never run `aiStep`, `setupNext` or the pass-and-play `handoff` phase.
+- Generalise the online engine from `/home/user/naturalists-codex-online/index.html` to n = 2..4: replace every 2-player hardcode (`n=2` in advance, `seatsFor`, `if(!seats[1])`, `moveCount`/`ptr` `[0,0]`, `passStreak>=4` becomes `>= 2*n`, `moveCount[1-S.me]`).
+- `build()` gives each player `name` (seat snapshot), `ai:false`, and `handOwner()` returns `S.me`. Every player name in HTML goes through `esc()`.
+- Players who open a started room without a seat (different browser or device) see "This game started without you" with a link back to the hub.
+- Chime only when the turn changes to you after a remote update, never on first load.
+- Stats: `HubKit.recordResult('codex', uid+':'+code, {won, score})` once when the game is over.
+
+### 8. Service worker and hub
+- Bump `sw.js` VERSION to `gh-v2`; precache `shared/online.js` and `shared/firebase-config.js`. Do not intercept gstatic.
+- Hub: there is no Continue section today, only a line per game box. Add an "Online games" strip directly under the header (hidden when empty) listing `rooms.mine()` entries: game name, code, status from the turn summary ("Your turn", "Waiting for Sam", "Setting up", "Finished"), Open and Remove. Load online.js on the hub only when `hub.rooms` has entries or the Join box is used.
+- Join box errors: "No game with that code", "That game is full", "That game has already started", "You're offline", "Couldn't reach the game server". Player names on the hub are set with `textContent`.
+
+### 9. Build order
+1. Builder 1: `shared/online.js`, `shared/firebase-config.js`, `firebase/firestore.rules` + emulator rules tests (`firebase/test/`), HubKit profile/stats/badge additions, hub Join box and Online games strip, sw.js v2. Tests run against the Firebase emulator (Java 21 and npm are available; use `npx firebase-tools` with `--project demo-game-hub`).
+2. Builder 2 (after builder 1): Codex online mode, tested with 2–4 Playwright browser contexts against the emulator.
+3. Coordinator: acceptance, then live tests once the owner's config is in.
