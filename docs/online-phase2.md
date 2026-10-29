@@ -91,3 +91,79 @@ Extend `firebase/test/rules.test.js`: opts accepted at create (valid map, ≤ 8 
 ### C6. Tests (builder, emulator)
 - 3-player online game, 1 round each, with scripted drawing (synthetic pointer events) and guesses; scores identical everywhere; a correct guess ends the turn on every device; time-out path; skip; reload mid-game; One-phone mode unchanged.
 - Draw doc size stays under 200 KB for a 90-second dense drawing.
+
+## Amendments after review (override everything above)
+
+### R1. Replay rule (replaces A4)
+```
+loop: allowed = allowedAt(s)   // [{p, acts}]; offer phase: responder(respond) + offerer(withdrawOffer only)
+  for each allowed p: j = first index >= ptr[p] with rec.k === k && acts.includes(rec.a)
+  no candidate -> wait
+  pick by priority; ptr[p] = j+1   (records skipped over are stale; log them)
+  r = apply(s, p, rec); if r.ok k++   // invalid: k unchanged, loop again
+```
+- k counts applied records only. Each client computes k from a local replay that includes its own local unsent records (`myMoves`), not just the snapshot.
+- When one of your own records turns out stale, toast e.g. "Too late: Sam accepted your trade."
+- fx dedupe by record identity (player, index), not by a count.
+
+### R2. Pictionary drawing = append-only chunk docs (replaces A3/C4 transport)
+- Docs `rooms/{code}/draw/{uid}_{turn}_{seq}` with body `{t, i, d}`: `t` turn, `i` seq, `d` encoded new points plus `x` (clear) and `u` (undo) markers. Create a chunk every ~800 ms while drawing (never update), flush at turn end.
+- Viewers query `where('t','==',turn)`, keep ids starting with the drawer's uid, sort by `i`, animate each chunk's points over the interval.
+- API: `HubOnline.draw.add(code, t, i, d)` (queued in order, no coalescing) and `HubOnline.draw.watch(code, drawerUid, t, cb)`.
+- Drawer reload: rebuild canvas from own chunks, continue from max(i)+1.
+
+### R3. Catan action safety
+- Never spread record args into engine calls. Map each action explicitly (e.g. `roll → E.doRoll(G)` with no args; discard/gold player = the record's author seat).
+- Sanitize before the engine: ids `Number.isInteger`; kinds from fixed lists (setupEdge road|ship; build road|ship|settlement|city); card maps only resource keys with integers 0..19; `to` integer 0..n−1 and not the offerer (also add this check inside `doOffer`); `plenty` two resources, `mono` one. Wrap each apply in try/catch.
+- Invariant: failure paths never consume the generator (holds today; keep it for withdrawOffer and the sanitizer).
+- Cap offers at 5 per turn.
+
+### R4. Catan online UI rules
+- Undo disabled online; `rematch` and the instant player trade (`do-ptrade` → doTrade) removed online.
+- The UI never changes G directly online: sanitize → append to `myMoves` → full replay → write.
+- Generator state lives in the game state as `s.rng` (uint32 mulberry32, same as Codex `rng()`); `newGame(opts)` takes `opts.seed`, falling back to Math.random without one. No global setRng. Seat order: shuffle(sorted uids) with the same generator first, then newGame.
+- `placePorts`: sort by `(Math.round(angA*1e9) - Math.round(angB*1e9)) || a.id - b.id` so Safari and Chrome agree. Test: 1,000 seeds × both modes, board hash equal in Playwright chromium and webkit.
+- Profile colours (hex) map to the nearest Catan colour id; on a clash the later seat gets the first unused colour.
+- Everything using `actor`, `G.current` (renderDock, tradeModal) or `viewer()` for "me" uses `ui.seat` instead. The offerer's dock shows "Waiting for X… / Withdraw".
+- `withdrawOffer` valid only in phase 'offer' from `offer.from`; sets offer=null, phase='main', logs it.
+- Check `?room` before `loadSave`. Discards stay sequential ("Waiting for X to discard"). Offline blockers stall the game; show who is blocking.
+- Responder priority can rewrite history (an Accept committed after a Withdraw still wins); documented, with the toast from R1.
+
+### R5. Pictionary details
+- Records: `{a:'start',turn,at}`, `{a:'skip',turn}`, `{a:'correct',turn,uid,gi}`, `{a:'end',turn,why}`, `{a:'guess',turn,at,text}` (text ≤ 40).
+- Only records from `order[turn % n]` count as drawer records for a turn. Every client checks that `correct` points to a real matching guess. The word comes from a seeded shuffled deck with a pointer advanced on each start and skip.
+- Guesses that match the word are hidden in the feed immediately; never put the word in the DOM or logs for guessers.
+- Matching: NFD, strip accents, lower-case, drop a leading `a|an|the`, remove every non-`[a-z0-9]` character.
+- Timer shows `clamp(at + secs*1000 - now, 0, secs)`. The drawer ignores guesses first seen after its deadline + 1 s; after a reload it picks the matching guess with the smallest `at`. A skip keeps the clock running and adds a clear marker.
+
+### R6. Platform changes
+- `online.js`: create() accepts 2..8 seats and `opts`; lookup() and watch() return `opts`; the draw API from R2.
+- HubLobby (built with Splendor) needs an `opts` pass-through and 2–8 seats; do that after the Splendor builder finishes.
+- Rules: whitelist opts and add the draw collection:
+```
+function optsOk(o) { return o is map && o.size() <= 8
+  && o.keys().hasOnly(['mode','target','friendly','secs','rounds'])
+  && o.get('mode','base') in ['base','seafarers']
+  && o.get('target',10) is int && o.get('target',10) >= 5 && o.get('target',10) <= 20
+  && o.get('friendly',false) is bool
+  && o.get('secs',60) is int && o.get('secs',60) in [45,60,90]
+  && o.get('rounds',1) is int && o.get('rounds',1) in [1,2,3]; }
+// rooms create: keys add 'opts'; && (!('opts' in n()) || optsOk(n().opts)); maxSeats 2..8
+match /draw/{docId} {
+  function inRoom() { let r = room(code); return signedIn() && r.status == 'playing' && me() in r.seats; }
+  function chunkOk() { let x = request.resource.data;
+    return x.keys().hasOnly(['t','i','d']) && x.t is int && x.t >= 0 && x.t < 100
+      && x.i is int && x.i >= 0 && x.i < 100000 && x.d is string && x.d.size() <= 40000
+      && docId == me() + '_' + string(x.t) + '_' + string(x.i); }
+  allow read: if signedIn();
+  allow create: if inRoom() && chunkOk();
+  allow update: if inRoom() && chunkOk() && request.resource.data == resource.data;
+  allow delete: if false;
+}
+```
+(If `string()` misbehaves in the emulator, use `docId.matches(me() + '_[0-9]+_[0-9]+')` plus the t/i checks.) Update the existing maxSeats test (5 → 9 as the rejected value). New tests: opts valid/invalid/oversized/changed-later; draw: own prefix ok, other prefix fails, mismatched id fails, non-member fails, open room fails, 40,001-char d fails, identical re-send ok, changed re-send fails.
+
+### R7. Build order
+1. Platform builder now: rules + tests, online.js (opts, 8 seats, draw API). Not sw.js and not lobby.js (owned by the Splendor builder). Owner publishes the rules once.
+2. Catan engine builder now, in parallel: state-held generator, sanitizer, withdrawOffer, `to` check, atan2 tie-break, a pure `replayCatan(seed, uids, opts, lists)` tested in Node (deadlock scenario, race, injected records) plus chromium/webkit board hashes. Local regression must pass.
+3. After 1, 2 and the Splendor builder: HubLobby opts/8 seats, then Catan online UI and Pictionary online in parallel.
