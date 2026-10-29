@@ -2,6 +2,8 @@
 <title>Pen and Paper Pictionary</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=DM+Sans:wght@400;500;700&display=swap">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
 <style>
 /* Layout: one-screen phone flow (setup > hand over > secret word > timer > verdict > scores) on faint graph paper */
 :root{
@@ -70,12 +72,30 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--mark);outline-o
 .score .on{border-color:var(--ink);box-shadow:3px 3px 0 var(--ink)}
 .tiny{font-size:.85rem}
 .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.top button{min-height:40px;padding:6px 12px;font-size:.85rem}
+.top{min-height:44px}
+.fl{height:28px;flex:none}
+.rules-back{position:fixed;inset:0;z-index:2000;background:rgba(10,14,20,.6);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:max(64px,calc(env(safe-area-inset-top,0px) + 56px)) 16px 24px}
+.rules-back .card{width:100%;max-width:30rem;margin:auto 0}
+.rules-back ol{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:8px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
 <main id="app"></main>
+<div class="rules-back" id="rules" hidden><div class="card" role="dialog" aria-modal="true" aria-labelledby="rules-t">
+  <h2 id="rules-t">How to play</h2>
+  <ol>
+    <li>Split into 2 to 4 teams. One phone runs the words and the clock; draw on paper.</li>
+    <li>On your team's turn, pick a drawer. Everyone else looks away while the drawer taps to reveal the secret word.</li>
+    <li>The drawer may skip the word once per turn, then taps Start the clock and draws. No letters, numbers or talking.</li>
+    <li>Teammates shout guesses. If they get it before time runs out, tap Guessed it. When time is up, the group says whether the team got it.</li>
+    <li>A correct guess scores one point. Everyone gets the same number of turns, and the highest score wins.</li>
+  </ol>
+  <p class="muted tiny">Pause stops the clock. The menu pauses it too; tap Resume when you are ready.</p>
+  <button class="primary" id="rules-ok" type="button">Got it</button>
+</div></div>
 
+<script src="../shared/hubkit.js"></script>
+<script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
 <script>
 const WORDS = {
   Object: ["Hourglass","Stethoscope","Lighthouse","Parachute","Typewriter","Chandelier","Compass","Hammock","Telescope","Drawbridge","Accordion","Padlock","Scarecrow","Kaleidoscope","Wheelbarrow","Periscope","Metronome","Snow globe","Jukebox","Bagpipes","Windmill","Trampoline","Catapult","Sundial","Umbrella stand","Tricycle","Ladle","Harpoon","Bunk bed","Submarine"],
@@ -98,26 +118,23 @@ function pickWord(){
   const [c,w] = pool[Math.floor(Math.random()*pool.length)];
   S.used.add(w); S.word={c,w};
 }
-function beep(f=880,d=.25,n=1){
-  try{const a=new (window.AudioContext||window.webkitAudioContext)();
-    for(let i=0;i<n;i++){const o=a.createOscillator(),g=a.createGain();o.frequency.value=f;o.connect(g);g.connect(a.destination);
-      const t=a.currentTime+i*.32;g.gain.setValueAtTime(.25,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.start(t);o.stop(t+d)}}catch(e){}
-}
+const sfx=(n,o)=>{try{HubKit.sfx(n,o)}catch(e){}};
 async function keepAwake(){try{S.wake=await navigator.wakeLock.request("screen")}catch(e){}}
 
-function go(screen){S.screen=screen;render()}
+function go(screen){S.screen=screen;if(screen==="final")sfx("win");render()}
 function startGame(){
   S.scores=S.teams.map(()=>0);S.turn=0;S.used.clear();keepAwake();go("handover");
 }
 function beginDraw(){pickWord();S.skipsLeft=1;S.reveal=false;S.left=S.secs;S.paused=false;go("secret")}
 function startTimer(){
-  S.end=Date.now()+S.left*1000;S.paused=false;go("draw");
+  S.end=Date.now()+S.left*1000;S.paused=false;S.prev=S.left;go("draw");
   clearInterval(S.tick);
   S.tick=setInterval(()=>{
     if(S.paused)return;
     S.left=Math.max(0,Math.ceil((S.end-Date.now())/1000));
+    if(S.left!==S.prev){S.prev=S.left;if(S.left>=1&&S.left<=10)sfx("tick")}
     paint();
-    if(S.left<=0){clearInterval(S.tick);beep(660,.3,3);if(navigator.vibrate)navigator.vibrate([200,100,200]);go("verdict")}
+    if(S.left<=0){clearInterval(S.tick);sfx("buzzer");go("verdict")}
   },250);
 }
 function verdict(ok){
@@ -125,14 +142,14 @@ function verdict(ok){
   S.turn++;
   go(S.turn>=total()?"final":"scores");
 }
-function skip(){if(S.skipsLeft>0){S.skipsLeft--;pickWord();render()}}
+function skip(){if(S.skipsLeft>0){S.skipsLeft--;pickWord();sfx("flip");render()}}
 
 function scoreList(active){
   return `<div class="score">${S.teams.map((t,i)=>`<div class="${i===active?'on':''}"><span class="dot" style="background:${COLORS[i]}"></span><span class="n">${esc(t)}</span><span class="p">${S.scores[i]}</span></div>`).join("")}</div>`;
 }
 function status(){
   const r = Math.floor(S.turn/S.teams.length)+1;
-  return `<div class="top"><span class="label">Round ${Math.min(r,S.rounds)} of ${S.rounds}</span><button id="quit">End game</button></div>`;
+  return `<div class="top"><span class="label">Round ${Math.min(r,S.rounds)} of ${S.rounds}</span>${HubKit.buttonHTML()}</div>`;
 }
 
 function render(){
@@ -189,8 +206,44 @@ function render(){
     ${w.length>1?`<p class="muted">${w.map(esc).join(" and ")}</p>`:''}${scoreList(-1)}</div>
     <div class="row"><button id="again" class="primary">Play again</button><button id="setup">Change teams</button></div>`;
   }
+  if(S.screen==="setup"||S.screen==="final")h='<div class="fl"></div>'+h;
   a.innerHTML=h; bind(); paint();
+  try{HubKit.setFloating(S.screen==="setup"||S.screen==="final")}catch(e){}
+  if(S.screen==="setup"||S.screen==="final")clearSave();else save();
 }
+const SAVE_KEY="pictionary.save.v1";
+function clearSave(){try{localStorage.removeItem(SAVE_KEY)}catch(e){}}
+function save(){
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify({v:1,screen:S.screen,teams:S.teams,scores:S.scores,turn:S.turn,rounds:S.rounds,secs:S.secs,used:[...S.used],skipsLeft:S.skipsLeft}))}catch(e){}
+}
+function restore(){
+  try{
+    const d=JSON.parse(localStorage.getItem(SAVE_KEY)||"null");
+    if(!d||d.v!==1||!["handover","secret","draw","verdict","scores"].includes(d.screen))return false;
+    const n=Array.isArray(d.teams)?d.teams.length:0, ok=x=>Number.isInteger(x)&&x>=0;
+    if(n<2||n>4||!d.teams.every(t=>typeof t==="string")||!Array.isArray(d.scores)||d.scores.length!==n||!d.scores.every(ok)||!Array.isArray(d.used)||!d.used.every(w=>typeof w==="string"))return false;
+    if(!ok(d.turn)||!(d.rounds>=1&&d.rounds<=9)||!(d.secs>=5&&d.secs<=600)||d.turn>=n*d.rounds)return false;
+    // the current word is the last one added to the used list
+    const w=d.used[d.used.length-1], c=Object.keys(WORDS).find(k=>WORDS[k].includes(w));
+    let screen=d.screen;
+    if(screen==="verdict"&&!c)screen="handover";
+    if(screen==="secret"||screen==="draw")screen="handover";
+    S.teams=d.teams.slice();S.scores=d.scores.slice();S.turn=d.turn;S.rounds=d.rounds;S.secs=d.secs;S.left=d.secs;
+    S.used=new Set(d.used);S.skipsLeft=d.skipsLeft===0?0:1;S.reveal=false;S.paused=false;
+    S.word=c?{c,w}:null;S.screen=screen;
+    keepAwake();
+    return true;
+  }catch(e){return false}
+}
+function showRules(){
+  const r=$("rules");r.hidden=false;$("rules-ok").focus({preventScroll:true});
+}
+function hideRules(){
+  const r=$("rules");if(r.hidden)return;r.hidden=true;
+  const b=[...document.querySelectorAll('[data-hubkit="menu"]')].find(x=>x.offsetParent!==null||getComputedStyle(x).position==="fixed");
+  if(b)b.focus({preventScroll:true});
+}
+function endGame(){clearInterval(S.tick);go(S.turn>0?"final":"setup")}
 function paint(){
   if(S.screen!=="draw")return;
   const tm=$("tm"); if(!tm)return;
@@ -212,20 +265,38 @@ function bind(){
   const wb=document.querySelector(".wordbox.hidden-word");
   if(wb&&S.screen==="secret")wb.onclick=()=>{S.reveal=true;render()};
   on("hide",()=>{S.reveal=false;render()});
-  on("go",()=>{if(S.reveal){S.reveal=false;startTimer()}});
+  on("go",()=>{if(S.reveal){sfx("tap");S.reveal=false;startTimer()}});
   on("skip",skip);
   on("peek",()=>{S.reveal=!S.reveal;render()});
   on("pause",()=>{
     if(S.paused){S.end=Date.now()+S.left*1000;S.paused=false}else{S.paused=true}
     render();
   });
-  on("got",()=>{clearInterval(S.tick);beep(990,.2,1);verdict(true)});
-  on("yes",()=>verdict(true)); on("no",()=>verdict(false));
+  on("got",()=>{clearInterval(S.tick);sfx("score");verdict(true)});
+  on("yes",()=>{sfx("score");verdict(true)}); on("no",()=>verdict(false));
   on("next",()=>go("handover"));
-  on("again",startGame); on("setup",()=>go("setup"));
-  on("quit",()=>{clearInterval(S.tick);go(S.turn>0?"final":"setup")});
+  on("again",()=>{clearSave();startGame()}); on("setup",()=>{clearSave();go("setup")});
 }
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&S.screen==="draw")keepAwake()});
+$("rules-ok").onclick=hideRules;
+$("rules").addEventListener("click",e=>{if(e.target===$("rules"))hideRules()});
+document.addEventListener("keydown",e=>{
+  if($("rules").hidden)return;
+  if(e.key==="Escape"){e.preventDefault();hideRules()}
+  else if(e.key==="Tab"){e.preventDefault();$("rules-ok").focus()}
+});
+try{HubKit.init({
+  id:"sketch",name:"Pictionary",accent:"#ffd23f",scheme:"auto",floating:true,
+  items:()=>{
+    const it=[{label:"How to play",onSelect:showRules}];
+    if(S.screen!=="setup"&&S.screen!=="final")it.push({label:"End game",confirm:"Tap again to end this game",onSelect:endGame});
+    return it;
+  },
+  onOpen:()=>{
+    if(S.screen==="draw"&&!S.paused){S.paused=true;render()}
+  }
+})}catch(e){}
+restore();
 render();
 </script>
 
