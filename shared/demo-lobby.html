@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HubLobby demo</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: light dark; --bg:#eef1f5; --card:#fff; --text:#1b2230; --muted:#5d6675; --line:rgba(20,30,50,.15); }
+  @media (prefers-color-scheme: dark) { :root { --bg:#121722; --card:#1a2030; --text:#eef1f6; --muted:#a3adbd; --line:rgba(255,255,255,.15); } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); }
+  h1 { margin:0; font-size:20px; }
+  main { max-width:640px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  h2 { margin:0 0 10px; font-size:13px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  button.t, input.t { min-height:44px; padding:8px 12px; border:1px solid var(--line); border-radius:10px; background:transparent; color:inherit; font:inherit; }
+  button.t { cursor:pointer; }
+  input.t { width:9em; }
+  pre { margin:0; padding:10px; border-radius:10px; background:rgba(128,128,128,.14); font:13px/1.45 ui-monospace,Menlo,Consolas,monospace; white-space:pre-wrap; word-break:break-word; min-height:3em; }
+  p { margin:0 0 10px; color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<header><h1>HubLobby demo</h1></header>
+<main>
+  <section>
+    <h2>Create or join</h2>
+    <p>Opens the create/join sheet for the demo game. Rooms are made with game id "demo".</p>
+    <div class="row"><button class="t" id="openCJ" type="button">HubLobby.openCreateJoin()</button></div>
+  </section>
+  <section>
+    <h2>Enter a room</h2>
+    <p>Routes like a ?room=CODE link: wrong game redirects, unknown code errors, not seated, waiting room, or straight to play. This page also reads ?room=CODE on load.</p>
+    <div class="row"><input class="t" id="code" inputmode="numeric" placeholder="123456" maxlength="6" aria-label="Game code"><button class="t" id="enterBtn" type="button">HubLobby.enter()</button><button class="t" id="waitBtn" type="button">HubLobby.waitingRoom()</button></div>
+  </section>
+  <section>
+    <h2>Event log</h2>
+    <pre id="log">(nothing yet)</pre>
+  </section>
+</main>
+<script src="firebase-config.js"></script>
+<script src="hubkit.js"></script>
+<script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
+<script src="online.js"></script>
+<script src="lobby.js"></script>
+<script>
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var lines = [];
+  function log(m) { lines.unshift(m); lines = lines.slice(0, 10); $('#log').textContent = lines.join('\n'); }
+  var GAME = 'demo', NAME = 'Demo Game';
+  var opts = {
+    game: GAME, gameName: NAME, minToStart: 2,
+    onPlay: function (c) { log('onPlay ' + c.code + ' uid ' + c.uid + (c.room ? ' status ' + c.room.status : '')); },
+    onExit: function () { log('onExit'); }
+  };
+  function goRoom(code) {
+    log('onRoom ' + code);
+    HubLobby.enter(code, opts);
+  }
+  $('#openCJ').addEventListener('click', function () {
+    HubLobby.openCreateJoin({ game: GAME, gameName: NAME, seatOptions: [2, 3, 4], onRoom: goRoom, onClose: function () { log('onClose'); } });
+  });
+  $('#enterBtn').addEventListener('click', function () { HubLobby.enter($('#code').value, opts); });
+  $('#waitBtn').addEventListener('click', function () {
+    HubLobby.waitingRoom($('#code').value, {
+      game: GAME, gameName: NAME,
+      onStart: function (room) { log('onStart ' + room.status); },
+      onLeave: function () { log('onLeave'); },
+      onClose: function () { log('onClose (host)'); }
+    });
+  });
+  var rc = new URLSearchParams(location.search).get('room');
+  if (rc) HubLobby.enter(rc, opts);
+})();
+</script>
+</body>
+</html>

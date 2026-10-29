@@ -18,6 +18,14 @@ service cloud.firestore {
 
     match /rooms/{code} {
       function n() { return request.resource.data; }
+      // Room options fixed at creation (Catan mode/target/friendly, Pictionary secs/rounds); never changed later.
+      function optsOk(o) { return o is map && o.size() <= 8
+        && o.keys().hasOnly(['mode','target','friendly','secs','rounds'])
+        && o.get('mode','base') in ['base','seafarers']
+        && o.get('target',10) is int && o.get('target',10) >= 5 && o.get('target',10) <= 20
+        && o.get('friendly',false) is bool
+        && o.get('secs',60) is int && o.get('secs',60) in [45,60,90]
+        && o.get('rounds',1) is int && o.get('rounds',1) in [1,2,3]; }
       function sd() { return n().seats.diff(resource.data.seats); }
       // Add only yourself while open and not full. The join that fills the last seat may also start the game.
       function joining() {
@@ -40,9 +48,10 @@ service cloud.firestore {
       // get only: rooms are looked up by code, never listed
       allow get: if signedIn();
       allow create: if signedIn() && code.matches('[1-9][0-9]{5}')
-        && n().keys().hasOnly(['game','v','host','seed','maxSeats','status','seats','createdAt'])
+        && n().keys().hasOnly(['game','v','host','seed','maxSeats','status','seats','createdAt','opts'])
         && n().game is string && n().host == me() && n().seed is int && n().status == 'open'
-        && n().maxSeats is int && n().maxSeats >= 2 && n().maxSeats <= 4
+        && n().maxSeats is int && n().maxSeats >= 2 && n().maxSeats <= 8
+        && (!('opts' in n()) || optsOk(n().opts))
         && n().seats.keys().hasOnly([me()]) && seatOk(n().seats[me()]);
       allow update: if signedIn() && resource.data.status == 'open' && (joining() || leaving() || starting());
 
@@ -58,6 +67,19 @@ service cloud.firestore {
         allow read: if signedIn();
         allow create: if member() && shape();
         allow update: if member() && shape() && appendOnly() && setupFixed();
+      }
+
+      // Pictionary drawing: append-only chunks {t, i, d}, id = <uid>_<turn>_<seq>. An identical re-send is allowed (idempotent retry).
+      match /draw/{docId} {
+        function inRoom() { let r = room(code); return signedIn() && r.status == 'playing' && me() in r.seats; }
+        function chunkOk() { let x = request.resource.data;
+          return x.keys().hasOnly(['t','i','d']) && x.t is int && x.t >= 0 && x.t < 100
+            && x.i is int && x.i >= 0 && x.i < 100000 && x.d is string && x.d.size() <= 40000
+            && docId == me() + '_' + string(x.t) + '_' + string(x.i); }
+        allow read: if signedIn();
+        allow create: if inRoom() && chunkOk();
+        allow update: if inRoom() && chunkOk() && request.resource.data == resource.data;
+        allow delete: if false;
       }
     }
   }
