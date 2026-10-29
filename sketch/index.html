@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Pen and Paper Sketch</title>
+<title>Pen and Paper Pictionary</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=DM+Sans:wght@400;500;700&display=swap">
 <style>
@@ -139,7 +139,7 @@ function render(){
   const a=$("app"), cur=S.turn%S.teams.length, name=esc(S.teams[cur]||"");
   let h="";
   if(S.screen==="setup"){
-    h=`<div><h1>Pen &amp; Paper Sketch</h1><p class="muted">One phone for words and the clock. Draw on paper.</p></div>
+    h=`<div><h1>Pen &amp; Paper Pictionary</h1><p class="muted">One phone for words and the clock. Draw on paper.</p></div>
     <div class="card"><span class="label">Teams</span>
       ${S.teams.map((t,i)=>`<div class="teamin"><span class="dot" style="background:${COLORS[i]}"></span><input id="t${i}" value="${esc(t)}" maxlength="20" aria-label="Team ${i+1} name"></div>`).join("")}
       <div class="row">${S.teams.length<4?'<button id="addT">Add team</button>':''}${S.teams.length>2?'<button id="delT">Remove last</button>':''}</div>

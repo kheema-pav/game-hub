@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Settle the Isles</title>
+<title>Catan</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -407,7 +407,7 @@ function genBase() {
   return b;
 }
 
-/* Archipelago: a home island plus small islands across the water ("new shores"). odd-r offset rows. */
+/* Seafarers: a home island plus small islands across the water ("new shores"). odd-r offset rows. */
 const SEA_TEMPLATES = [
   [
     '.........',
@@ -1603,7 +1603,7 @@ function renderHome() {
   const save = loadSave();
   const sv = save && save.G;
   const contHtml = sv ? `<div class="card continue">
-      <div><b>Continue game</b><small>${esc(sv.mode === 'seafarers' ? 'Archipelago' : 'Classic')} · ${sv.players.map(p => esc(p.name)).join(', ')} · turn ${Math.max(1, sv.turnNo)}</small></div>
+      <div><b>Continue game</b><small>${esc(sv.mode === 'seafarers' ? 'Seafarers' : 'Classic')} · ${sv.players.map(p => esc(p.name)).join(', ')} · turn ${Math.max(1, sv.turnNo)}</small></div>
       <button class="btn primary" data-act="continue">Resume</button></div>` : '';
   const rows = cfg.players.map((p, i) => `
     <div class="prow">
@@ -1616,14 +1616,14 @@ function renderHome() {
   $('#home').innerHTML = `<div class="home-inner">
     <div class="hero">
       <svg viewBox="-1.9 -1.9 3.8 3.8">${[[0, 0, 'wheat'], [1.5, -0.87, 'wood'], [1.5, 0.87, 'ore'], [0, 1.73, 'sheep'], [-1.5, 0.87, 'brick'], [-1.5, -0.87, 'gold'], [0, -1.73, 'wood']].map(([x, y, t]) => `<polygon points="${Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 3 * k; return (x * .55 + .55 * Math.cos(a)).toFixed(2) + ',' + (y * .55 + .55 * Math.sin(a)).toFixed(2); }).join(' ')}" fill="${FILL[t]}" stroke="#0a2231" stroke-width=".07"/>`).join('')}<circle r=".3" fill="#fbf0d2"/><text y=".11" text-anchor="middle" font-size=".34" font-family="Fredoka, sans-serif" font-weight="700" fill="#c0261b">8</text></svg>
-      <div><h1>Settle the Isles</h1><p>Build, trade and race to ${cfg.target[cfg.mode]} points. Play together on one device or against bots.</p></div>
+      <div><h1>Catan</h1><p>Build, trade and race to ${cfg.target[cfg.mode]} points. Play together on one device or against bots.</p></div>
     </div>
     ${contHtml}
     <div class="card">
       <div class="label">Map</div>
       <div class="modes">
         <button class="mode" aria-pressed="${cfg.mode === 'base'}" data-act="mode" data-m="base">${miniBoard('base')}<b>Classic</b><span>One island, 19 tiles. Roads, settlements, cities, cards.</span></button>
-        <button class="mode" aria-pressed="${cfg.mode === 'seafarers'}" data-act="mode" data-m="seafarers">${miniBoard('seafarers')}<b>Archipelago</b><span>Sail ships to small islands. +2 points per new island. Gold fields and a pirate.</span></button>
+        <button class="mode" aria-pressed="${cfg.mode === 'seafarers'}" data-act="mode" data-m="seafarers">${miniBoard('seafarers')}<b>Seafarers</b><span>Sail ships to small islands. +2 points per new island. Gold fields and a pirate.</span></button>
       </div>
     </div>
     <div class="card">
@@ -1639,7 +1639,7 @@ function renderHome() {
     </div>
     <div class="card">
       <div class="label">Options</div>
-      <div class="opt"><div>Points to win<small>${cfg.mode === 'seafarers' ? 'Archipelago usually plays to 13' : 'Classic plays to 10'}</small></div>
+      <div class="opt"><div>Points to win<small>${cfg.mode === 'seafarers' ? 'Seafarers usually plays to 13' : 'Classic plays to 10'}</small></div>
         <div class="stepper"><button data-act="target" data-d="-1" ${cfg.target[cfg.mode] <= 5 ? 'disabled' : ''} aria-label="Fewer points">−</button><output>${cfg.target[cfg.mode]}</output><button data-act="target" data-d="1" ${cfg.target[cfg.mode] >= 20 ? 'disabled' : ''} aria-label="More points">+</button></div></div>
       <div class="opt"><div>Hide hands between turns<small>${nHum > 1 ? 'Shows a “pass the device” screen so nobody peeks' : 'Only matters with two or more humans'}</small></div><button class="toggle" aria-pressed="${cfg.hideHands}" data-act="opt" data-k="hideHands" aria-label="Hide hands"></button></div>
       <div class="opt"><div>Confirm moves<small>Every build, trade and turn end asks “are you sure?” first</small></div><button class="toggle" aria-pressed="${cfg.confirm !== false}" data-act="opt" data-k="confirm" aria-label="Confirm moves"></button></div>
@@ -1653,11 +1653,11 @@ function renderHome() {
       <ul>
         <li>Each player places two settlements and two roads. The second settlement gives starting resources.</li>
         <li>On your turn, roll. Every tile with that number pays its resource to each touching settlement (cities get 2).</li>
-        <li>Spend cards to build: roads, settlements, cities, development cards, and ships in Archipelago.</li>
+        <li>Spend cards to build: roads, settlements, cities, development cards, and ships in Seafarers.</li>
         <li>A 7 moves the robber. Anyone holding more than 7 cards discards half. The roller steals one card.</li>
         <li>Trade with the bank at 4:1, or better at a harbor. Trade with other players any way you agree.</li>
         <li>Points: settlement 1, city 2, Longest Road (5+) 2, Largest Army (3+ knights) 2, point cards 1.</li>
-        <li>Archipelago: ships link along water. Move one open-ended ship per turn. Gold fields pay any resource you like.</li>
+        <li>Seafarers: ships link along water. Move one open-ended ship per turn. Gold fields pay any resource you like.</li>
       </ul>
     </details>
   </div>`;

@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Gem Guild</title>
+<title>Splendor</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -378,7 +378,7 @@ button.card:hover { transform: translateY(-2px); }
 <div id="fx" aria-hidden="true"></div>
 
 <script>
-// ===== Gem Guild rules engine =====
+// ===== Splendor rules engine =====
 const COLORS = ['w', 'u', 'g', 'r', 'k'];
 const TOKENS = ['w', 'u', 'g', 'r', 'k', 'o'];
 const GEM_NAME = { w: 'Diamond', u: 'Sapphire', g: 'Emerald', r: 'Ruby', k: 'Onyx', o: 'Gold' };
@@ -1240,7 +1240,7 @@ function renderSetup() {
     </div>`).join('');
   return `<div class="setup">
     <div>
-      <h1 class="wordmark">Gem Guild</h1>
+      <h1 class="wordmark">Splendor</h1>
       <p class="lede">You are a gem merchant in the Renaissance. Collect gems, buy mines, ships and shops, and win the patronage of nobles. The first merchant to 15 prestige starts the final round.</p>
       <div class="gemline">${COLORS.map(c => gemIcon(c)).join('')}</div>
     </div>
@@ -1400,7 +1400,7 @@ function renderGame() {
        ${logHTML()}`
     : `<div class="players">${G.players.map((p, i) => playerHTML(p, i, vi)).join('')}</div>${logHTML()}`;
   return `<header class="top">
-      <span class="wordmark">Gem Guild</span>
+      <span class="wordmark">Splendor</span>
       <span class="round">Round ${G.round}</span>
       ${G.finalRound && !G.over ? '<span class="pill">Final round</span>' : ''}
       ${G.over ? '<span class="pill">Game over</span>' : ''}

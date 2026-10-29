@@ -7,10 +7,10 @@ Fan-made tabletop games for phone and laptop, served as a static site by GitHub 
 | Folder | Game | Notes |
 |---|---|---|
 | `index.html` | The hub page | Links to every game |
-| `codex/` | Naturalist's Codex | Bots (Easy/Normal/Hard), pass-and-play |
-| `isles/` | Settle the Isles | Classic and Archipelago modes, bots, pass-and-play |
-| `gems/` | Gem Guild | Bots (Easy/Medium/Hard), pass-and-play |
-| `sketch/` | Pen & Paper Sketch | One phone runs words and timer for 2–4 teams |
+| `codex/` | Codex Naturalis | Bots (Easy/Normal/Hard), pass-and-play |
+| `isles/` | Catan | Classic and Seafarers modes, bots, pass-and-play |
+| `gems/` | Splendor | Bots (Easy/Medium/Hard), pass-and-play |
+| `sketch/` | Pen & Paper Pictionary | One phone runs words and timer for 2–4 teams |
 
 Each game is a single self-contained `index.html` (only Google Fonts load from outside), so it runs from any static host.
 Saved games stay in each player's own browser.
@@ -23,4 +23,4 @@ Saved games stay in each player's own browser.
 
 ## Names
 
-These are fan-made versions. Keep original names and artwork, and avoid the official game titles.
+The games use their original names for now, labelled as unofficial fan versions in the hub footer. If a takedown request ever arrives, switch to fan names (the earlier versions in git history used Naturalist's Codex, Settle the Isles, Gem Guild and Pen & Paper Sketch).
