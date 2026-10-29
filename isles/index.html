@@ -256,6 +256,9 @@ button.hk-menu-btn.isl-menu { align-self: flex-start; color: var(--ink); }
 
 <script src="../shared/hubkit.js"></script>
 <script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
+<script src="../shared/firebase-config.js"></script>
+<script src="../shared/online.js"></script>
+<script src="../shared/lobby.js"></script>
 <script>
 const Engine = (() => {
 'use strict';
@@ -1754,8 +1757,11 @@ const ui = {
   mode: null, revealed: null, undo: [], view: null, base: null, timer: null,
   edgeKind: 'road', trade: { tab: 'bank', give: null, get: null, pg: {}, pw: {} },
   flashHexes: [], newKeys: new Set(), gains: {}, modal: null, modalKey: null, picks: {}, sel: [], confirm: null,
-  cfg: null, homeConfirm: false, lastActor: null,
+  cfg: null, homeConfirm: false, lastActor: null, seat: null, notice: '',
 };
+
+/* Online play state (see the ONLINE section below). `ON.active` is false for every local game. */
+const ON = { token: 0, unsub: null, active: false };
 
 function defaultCfg() {
   return {
@@ -1773,13 +1779,14 @@ function loadCfg() {
 }
 function saveCfg() { try { localStorage.setItem(CFG_KEY, JSON.stringify(ui.cfg)); } catch (e) { } }
 function saveGame() {
+  if (ON.active) return;   // online games never touch the local save
   try { if (G && G.phase !== 'gameover') localStorage.setItem(SAVE_KEY, JSON.stringify({ G, opts: { hideHands: ui.cfg.hideHands, speed: ui.cfg.speed } })); else localStorage.removeItem(SAVE_KEY); } catch (e) { }
 }
 function loadSave() { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d && d.G && d.G.v === 1) return d; } catch (e) { } return null; }
 function colorHex(id) { return (COLORS.find(c => c.id === id) || COLORS[0]).hex; }
 function pcol(p) { return colorHex(G.players[p].color); }
 function humans() { return G.players.filter(p => !p.bot); }
-function privacyOn() { return ui.cfg.hideHands && humans().length > 1; }
+function privacyOn() { return !ON.active && ui.cfg.hideHands && humans().length > 1; }
 
 /* ================= HOME ================= */
 function miniBoard(mode) {
@@ -1813,7 +1820,9 @@ function renderHome() {
       <svg viewBox="-1.9 -1.9 3.8 3.8">${[[0, 0, 'wheat'], [1.5, -0.87, 'wood'], [1.5, 0.87, 'ore'], [0, 1.73, 'sheep'], [-1.5, 0.87, 'brick'], [-1.5, -0.87, 'gold'], [0, -1.73, 'wood']].map(([x, y, t]) => `<polygon points="${Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 3 * k; return (x * .55 + .55 * Math.cos(a)).toFixed(2) + ',' + (y * .55 + .55 * Math.sin(a)).toFixed(2); }).join(' ')}" fill="${FILL[t]}" stroke="#0a2231" stroke-width=".07"/>`).join('')}<circle r=".3" fill="#fbf0d2"/><text y=".11" text-anchor="middle" font-size=".34" font-family="Fredoka, sans-serif" font-weight="700" fill="#c0261b">8</text></svg>
       <div><h1>Catan</h1><p>Build, trade and race to ${cfg.target[cfg.mode]} points. Play together on one device or against bots.</p></div>
     </div>
+    ${ui.notice ? `<div class="card"><p style="margin:0;line-height:1.4">${esc(ui.notice)}</p></div>` : ''}
     ${contHtml}
+    ${onlineAvailable() ? `<div class="card" id="online-card"><div class="label">Online</div><div class="opt"><div>Play on separate phones<small>Uses the map and options below. 2 to 4 players, no bots. Share a six-digit code.</small></div><button class="btn primary" data-act="online-open">Play online</button></div></div>` : ''}
     <div class="card">
       <div class="label">Map</div>
       <div class="modes">
@@ -1971,7 +1980,7 @@ function spotsFor(viewer) {
   const out = { v: [], e: [], h: [] };
   if (!G || G.phase === 'gameover') return out;
   const a = E.actor(G);
-  if (G.players[a].bot || needCurtain()) return out;
+  if (G.players[a].bot || needCurtain() || (ON.active && a !== ui.seat)) return out;
   if (G.phase === 'setup') {
     if (G.setup.step === 'settlement') out.v = E.validSettlements(G, a, true);
     else {
@@ -2174,12 +2183,13 @@ function setupPanZoom() {
 
 /* ================= RENDER ================= */
 function needCurtain() {
-  if (!G || G.phase === 'gameover' || G.phase === 'setup') return false;
+  if (!G || ON.active || G.phase === 'gameover' || G.phase === 'setup') return false;
   const a = E.actor(G);
   return !G.players[a].bot && privacyOn() && ui.revealed !== a;
 }
 function viewer() {
   if (!G) return null;
+  if (ON.active) return ui.seat;   // online: you only ever see your own cards
   const a = E.actor(G);
   if (!G.players[a].bot && !needCurtain()) return a;
   const h = humans();
@@ -2198,6 +2208,7 @@ function render() {
   renderDice();
   renderTicker();
   renderDock();
+  renderStatus();
   renderCurtain();
   renderPhaseModal();
   syncFloat();
@@ -2211,6 +2222,7 @@ function renderPlayers() {
     const showHidden = G.phase === 'gameover' || p.id === me;
     const hid = E.hiddenVP(G, p.id);
     const badges = [];
+    if (ON.active && p.id === ui.seat) badges.push('<span class="badge">YOU</span>');
     if (G.longest.p === p.id) badges.push('<span class="badge">ROAD</span>');
     if (G.army.p === p.id) badges.push('<span class="badge">ARMY</span>');
     const gain = ui.gains[p.id] ? `<span class="gain">+${ui.gains[p.id]}</span>` : '';
@@ -2266,10 +2278,11 @@ function renderDock() {
   const col = colorHex(pa.color);
   if (G.phase === 'gameover') {
     prompt = `${esc(G.players[G.winner].name)} wins!`;
-    body = (v !== null ? handHtml(v, { noDev: true }) : '') + `<div class="row2"><button class="btn primary" data-act="show-results">See results</button><button class="btn" data-act="home">New game</button></div>`;
+    body = (v !== null ? handHtml(v, { noDev: true }) : '') + `<div class="row2"><button class="btn primary" data-act="show-results">See results</button>${ON.active ? '<button class="btn" data-act="leave">Leave game</button>' : '<button class="btn" data-act="home">New game</button>'}</div>`;
     $('#dock').innerHTML = `<div class="prompt" style="--pc:${pcol(G.winner)}"><i></i><span>${prompt}</span></div>${body}`;
     return;
   }
+  if (ON.active && a !== ui.seat) { renderWaitingDock(a); return; }
   if (pa.bot || needCurtain()) {
     const what = pa.bot ? `<span class="thinking">${esc(pa.name)} is playing</span>` : `<span>Waiting for ${esc(pa.name)}</span>`;
     $('#dock').innerHTML = `<div class="prompt" style="--pc:${col}"><i></i>${what}</div>${v !== null ? handHtml(v, { noDev: true }) : ''}`;
@@ -2397,6 +2410,7 @@ function drawModal() {
   else if (k === 'log') html = sheet('Game log', `<div class="loglist">${G.log.slice().reverse().map(l => `<div>${l.p !== null ? `<i style="background:${pcol(l.p)}"></i>` : ''}${esc(l.t)}</div>`).join('')}</div>`, true);
   else if (k === 'costs') html = sheet('Building costs', costsHtml(), true);
   else if (k === 'results') html = resultsModal();
+  else if (k === 'leave') html = sheet('Leave this game?', `<p>The game goes on without you until you come back. Open it again from the game link or the Online list on the hub.</p><div class="confirm-row"><button class="btn" data-act="close-modal">Stay</button><button class="btn primary" data-act="leave">Leave game</button></div>`, true);
   const old = m.querySelector('.sheet');
   const top = old ? old.scrollTop : 0;
   m.innerHTML = html; m.hidden = false;
@@ -2412,7 +2426,7 @@ function costsHtml() {
 }
 
 function tradeModal() {
-  const me = G.current, pl = G.players[me], t = ui.trade;
+  const me = ON.active ? ui.seat : G.current, pl = G.players[me], t = ui.trade;
   const tabs = `<div class="tabs"><button aria-pressed="${t.tab === 'bank'}" data-act="trade-tab" data-t="bank">Bank & harbors</button><button aria-pressed="${t.tab === 'players'}" data-act="trade-tab" data-t="players">Players</button></div>`;
   let inner = '';
   if (t.tab === 'bank') {
@@ -2431,11 +2445,11 @@ function tradeModal() {
     const others = G.players.filter(o => o.id !== me).map(o => {
       let status = `${E.handCount(o.hand)} cards`;
       if (o.bot && G.talk && ((G.talk.accepts[o.id] || 0) >= L.maxAccepts || (G.talk.declines[o.id] || 0) >= L.maxDeclines)) status = 'Done trading this turn';
-      else if (!o.bot) status += ' · agree out loud first';
-      const label = o.bot ? 'Offer' : 'Trade';
-      return `<div class="who"><i style="background:${colorHex(o.color)}"></i><div class="n">${esc(o.name)}<small>${status}</small></div><button class="btn primary" data-act="do-ptrade" data-confirm="Sure?" data-p="${o.id}" ${mine ? '' : 'disabled'}>${label}</button></div>`;
+      else if (!o.bot && !ON.active) status += ' · agree out loud first';
+      const label = o.bot || ON.active ? 'Offer' : 'Trade';
+      return `<div class="who"><i style="background:${colorHex(o.color)}"></i><div class="n">${esc(o.name)}<small>${status}</small></div><button class="btn primary" data-act="do-ptrade" data-confirm="Sure?" data-p="${o.id}" ${mine && !(ON.active && G.offerMade >= E.MAX_OFFERS) ? '' : 'disabled'}>${label}</button></div>`;
     }).join('');
-    inner = `<div class="label">You give</div>${stepperGrid('pg', pg, giveLim)}<div class="label">You want</div>${stepperGrid('pw', pw, lim)}<p>${ready ? 'Send this offer to:' : 'Pick what you give and what you want.'}</p>${others}`;
+    inner = `<div class="label">You give</div>${stepperGrid('pg', pg, giveLim)}<div class="label">You want</div>${stepperGrid('pw', pw, lim)}<p>${ready ? (ON.active ? `Send this offer to one player. They can accept or decline. ${Math.max(0, E.MAX_OFFERS - G.offerMade)} offers left this turn.` : 'Send this offer to:') : 'Pick what you give and what you want.'}</p>${others}`;
   }
   return sheet('Trade', tabs + inner, true);
 }
@@ -2478,12 +2492,12 @@ function resultsModal() {
   return sheet(`${esc(G.players[G.winner].name)} wins!`, `<div style="overflow-x:auto"><table class="score-table"><tr><th></th><th>Builds</th><th>Road</th><th>Army</th>${sea ? '<th>Isles</th>' : ''}<th>Cards</th><th>Total</th></tr>
     ${rows.map(r => `<tr><td><span style="color:${colorHex(r.p.color)};font-weight:800">●</span> ${esc(r.p.name)}</td><td>${r.set + r.cit * 2}</td><td>${r.lr}</td><td>${r.la}</td>${sea ? `<td>${r.isl}</td>` : ''}<td>${r.vp}</td><td><b>${r.tot}</b></td></tr>`).join('')}</table></div>
     <p>Dice rolls this game: ${hist}</p>
-    <div class="confirm-row"><button class="btn" data-act="home">Change setup</button><button class="btn primary" data-act="rematch">Play again</button></div>`, true);
+    ${ON.active ? '<div class="confirm-row"><button class="btn" data-act="close-modal">See the board</button><button class="btn primary" data-act="leave">Leave game</button></div>' : '<div class="confirm-row"><button class="btn" data-act="home">Change setup</button><button class="btn primary" data-act="rematch">Play again</button></div>'}`, true);
 }
 
 function renderPhaseModal() {
   const a = E.actor(G);
-  const human = !G.players[a].bot && !needCurtain();
+  const human = ON.active ? a === ui.seat : (!G.players[a].bot && !needCurtain());
   const phaseModal = { discard: 'discard', gold: 'gold', steal: 'steal', offer: 'offer' }[G.phase];
   if (human && phaseModal) {
     const key = phaseModal + ':' + a + ':' + (G.discardQ.length) + ':' + (G.goldQ.length);
@@ -2511,6 +2525,9 @@ function toast(msg, color, isErr) {
   setTimeout(() => el.remove(), isErr ? 2200 : 2800);
 }
 
+/* Runs one player action: through the engine on this device in a local game, as a record in an online game. */
+function perform(name, args, localFn, opts) { return ON.active ? sendOnline(name, args) : act(localFn, opts); }
+
 function act(fn, opts) {
   if (!G) return;
   const snap = opts && opts.undo ? JSON.stringify(G) : null;
@@ -2521,12 +2538,15 @@ function act(fn, opts) {
   return true;
 }
 
+/* A bot, or in an online game any seat but yours, plays quieter. */
+function quiet(p) { return ON.active ? p !== ui.seat : !!G.players[p].bot; }
+
 function processFx() {
   const v = viewer();
   const fxs = G.fx.splice(0);
   let flash = null;
   fxs.forEach(f => {
-    const q = f.p !== undefined && G.players[f.p].bot;   // bot actions play quieter
+    const q = f.p !== undefined && quiet(f.p);   // bot and remote-player actions play quieter
     if (f.type === 'build') {
       if (!ui.newKeys.size) ui.popAt = Date.now(); ui.newKeys.add((f.kind === 'settlement' || f.kind === 'city' ? 'v' : 'e') + f.id);
       sfx('build', q); if (f.kind === 'city') sfx('score', q);
@@ -2547,7 +2567,7 @@ function processFx() {
       });
       Object.keys(f.gold || {}).forEach(p => { ui.gains[p] = (ui.gains[p] || 0) + f.gold[p]; });
       ui.bump = bump;
-      if (Object.keys(ui.gains).some(p => ui.gains[p] > 0 && !G.players[p].bot)) { const bq = G.players[E.actor(G)].bot; setTimeout(() => sfx('draw', bq), 380); }
+      if (Object.keys(ui.gains).some(p => ui.gains[p] > 0 && !G.players[p].bot)) { const bq = quiet(E.actor(G)); setTimeout(() => sfx('draw', bq), 380); }
       setTimeout(() => { ui.gains = {}; ui.bump = {}; if (G) renderPlayers(); }, 1900);
     }
     if (f.type === 'robber') sfx('thud', q);
@@ -2556,7 +2576,7 @@ function processFx() {
     if (f.type === 'dev') sfx('flip', q);
     if (f.type === 'play') sfx('flip', q);
     if (f.type === 'steal') {
-      sfx('swish', G.players[f.to].bot);
+      sfx('swish', quiet(f.to));
       const what = E.RES_NAME[f.res];
       if (f.from === v) toast(`${G.players[f.to].name} stole your ${what}`, pcol(f.to));
       else if (f.to === v) toast(`You stole ${what} from ${G.players[f.from].name}`, pcol(f.to));
@@ -2564,11 +2584,11 @@ function processFx() {
     }
     if (f.type === 'award') toast(`${G.players[f.p].name}: ${f.what}`, pcol(f.p));
     if (f.type === 'dev' && f.p === v && !G.players[f.p].bot) toast(`You drew: ${E.DEV_NAME[f.card]}`, '#8a55cf');
-    if (f.type === 'play' && G.players[f.p].bot) toast(`${G.players[f.p].name} played ${E.DEV_NAME[f.card]}`, pcol(f.p));
+    if (f.type === 'play' && quiet(f.p)) toast(`${G.players[f.p].name} played ${E.DEV_NAME[f.card]}`, pcol(f.p));
     if (f.type === 'mono') toast(`${G.players[f.p].name} took ${f.n} ${E.RES_NAME[f.res]} with Monopoly`, pcol(f.p));
-    if (f.type === 'trade') sfx('coin', G.players[f.a].bot);
+    if (f.type === 'trade') sfx('coin', quiet(f.a) && quiet(f.b));
     if (f.type === 'trade' && !f.offer && (G.players[f.a].bot || G.players[f.b].bot)) toast(`${G.players[f.a].name} traded with ${G.players[f.b].name}`, pcol(f.a));
-    if (f.type === 'win') setTimeout(() => { sfx(G && !G.players[f.p].bot ? 'win' : 'end'); openModal('results'); }, 900);
+    if (f.type === 'win') setTimeout(() => { sfx(G && !quiet(f.p) ? 'win' : 'end'); openModal('results'); }, 900);
   });
   if (flash && flash.length) {
     ui.flashHexes = flash; ui.flashAt = Date.now();
@@ -2583,13 +2603,14 @@ function afterAction() {
   processFx();
   // chime when control passes from someone else to a human (also the pass-the-device screen in pass and play)
   const actor = E.actor(G);
-  if (ui.lastActor !== null && ui.lastActor !== actor && G.phase !== 'gameover' && !G.players[actor].bot) sfx('chime');
+  if (!ON.active && ui.lastActor !== null && ui.lastActor !== actor && G.phase !== 'gameover' && !G.players[actor].bot) sfx('chime');
   ui.lastActor = actor;
-  if (G.phase !== 'main') ui.mode = null;
+  if (G.phase !== 'main' || (ON.active && G.current !== ui.seat)) ui.mode = null;
   if (ui.mode && ui.mode.kind !== 'moveTo' && ui.mode.kind !== 'moveFrom' && !E.canBuildKind(G, G.current, ui.mode.kind)) ui.mode = null;
   saveGame();
   render();
   scheduleBot();
+  if (ON.active) signals();
 }
 
 function botDelay() {
@@ -2600,6 +2621,7 @@ function botDelay() {
 }
 function scheduleBot() {
   clearTimeout(ui.timer); ui.timer = null;
+  if (ON.active) return;   // no bots online
   if (!G || G.phase === 'gameover') return;
   const a = E.actor(G);
   if (!G.players[a].bot) return;
@@ -2620,7 +2642,7 @@ function scheduleBot() {
 function onBoardTap(t) {
   if (!G || G.phase === 'gameover') return;
   const a = E.actor(G);
-  if (G.players[a].bot || needCurtain()) return;
+  if (G.players[a].bot || needCurtain() || (ON.active && a !== ui.seat)) return;
   const tap = {
     v: t.dataset.v !== undefined ? +t.dataset.v : null,
     e: t.dataset.e !== undefined ? +t.dataset.e : null,
@@ -2643,19 +2665,19 @@ function runTap(tap) {
   ui.pending = null;
   const { v, e, h, k } = tap;
   if (G.phase === 'setup') {
-    if (v !== null) act(() => E.doSetupSettlement(G, v));
-    else if (e !== null) act(() => E.doSetupEdge(G, e, k));
-  } else if (G.phase === 'robber' && h !== null) act(() => E.doMoveRobber(G, h));
-  else if (G.phase === 'roadBuilding' && e !== null) act(() => E.doBuild(G, k, e));
+    if (v !== null) perform('setupSettlement', [v], () => E.doSetupSettlement(G, v));
+    else if (e !== null) perform('setupEdge', [e, k], () => E.doSetupEdge(G, e, k));
+  } else if (G.phase === 'robber' && h !== null) perform('moveRobber', [h], () => E.doMoveRobber(G, h));
+  else if (G.phase === 'roadBuilding' && e !== null) perform('build', [k, e], () => E.doBuild(G, k, e));
   else if (G.phase === 'main' && ui.mode) {
     const m = ui.mode.kind;
-    if ((m === 'settlement' || m === 'city') && v !== null) { ui.mode = null; act(() => E.doBuild(G, m, v), { undo: true }); }
+    if ((m === 'settlement' || m === 'city') && v !== null) { ui.mode = null; perform('build', [m, v], () => E.doBuild(G, m, v), { undo: true }); }
     else if ((m === 'road' || m === 'ship') && e !== null) {
       const keep = m;
-      if (act(() => E.doBuild(G, keep, e), { undo: true }) && E.canBuildKind(G, G.current, keep)) { ui.mode = { kind: keep }; render(); }
+      if (perform('build', [keep, e], () => E.doBuild(G, keep, e), { undo: true }) && E.canBuildKind(G, G.current, keep)) { ui.mode = { kind: keep }; render(); }
     }
     else if (m === 'moveFrom' && e !== null) { ui.mode = { kind: 'moveTo', from: e }; render(); }
-    else if (m === 'moveTo' && e !== null) { const from = ui.mode.from; ui.mode = null; act(() => E.doMoveShip(G, from, e), { undo: true }); }
+    else if (m === 'moveTo' && e !== null) { const from = ui.mode.from; ui.mode = null; perform('moveShip', [from, e], () => E.doMoveShip(G, from, e), { undo: true }); }
   }
 }
 
@@ -2686,14 +2708,14 @@ function onAct(name, el) {
     case 'opt': syncNames(); c[d.k] = !c[d.k]; saveCfg(); renderHome(); break;
     case 'speed': syncNames(); c.speed = d.s; saveCfg(); renderHome(); break;
     case 'level': syncNames(); c.level = d.l; saveCfg(); renderHome(); break;
-    case 'start': syncNames(); if (loadSave()) { ui.homeConfirm = true; renderHome(); } else startGame(); break;
+    case 'start': ui.notice = ''; syncNames(); if (loadSave()) { ui.homeConfirm = true; renderHome(); } else startGame(); break;
     case 'start-force': startGame(); break;
     case 'cancel-new': ui.homeConfirm = false; renderHome(); break;
     case 'continue': resumeSave(); break;
     /* game */
     case 'reveal': ui.revealed = E.actor(G); render(); break;
-    case 'roll': act(() => E.doRoll(G)); break;
-    case 'play-knight': act(() => E.doPlayDev(G, 'knight')); break;
+    case 'roll': perform('roll', [], () => E.doRoll(G)); break;
+    case 'play-knight': perform('playDev', ['knight'], () => E.doPlayDev(G, 'knight')); break;
     case 'build': {
       const k = d.k;
       ui.pending = null;
@@ -2703,22 +2725,24 @@ function onAct(name, el) {
     case 'cancel-mode': ui.mode = null; ui.pending = null; render(); break;
     case 'pending-yes': if (ui.pending) { runTap(ui.pending); if (G) render(); } break;
     case 'pending-no': ui.pending = null; render(); break;
-    case 'buy-dev': act(() => E.doBuyDev(G)); break;
-    case 'end-turn': ui.mode = null; act(() => E.doEndTurn(G)); break;
-    case 'undo': { const snap = ui.undo.pop(); if (snap) { G = JSON.parse(snap); G.fx = []; ui.mode = null; saveGame(); render(); } break; }
+    case 'buy-dev': perform('buyDev', [], () => E.doBuyDev(G)); break;
+    case 'end-turn': ui.mode = null; perform('endTurn', [], () => E.doEndTurn(G)); break;
+    case 'undo': if (ON.active) break; { const snap = ui.undo.pop(); if (snap) { G = JSON.parse(snap); G.fx = []; ui.mode = null; saveGame(); render(); } break; }
     case 'move-ship': ui.mode = { kind: 'moveFrom' }; render(); break;
     case 'edge-kind': ui.edgeKind = d.k; render(); break;
-    case 'end-free': act(() => E.doEndFreeRoads(G)); break;
+    case 'end-free': perform('endFreeRoads', [], () => E.doEndFreeRoads(G)); break;
     case 'trade': ui.trade = { tab: ui.trade.tab, give: null, get: null, pg: {}, pw: {} }; openModal('trade'); break;
     case 'trade-tab': ui.trade.tab = d.t; drawModal(); break;
     case 'bank-give': ui.trade.give = d.r; if (ui.trade.get === d.r) ui.trade.get = null; drawModal(); break;
     case 'bank-get': ui.trade.get = d.r; drawModal(); break;
-    case 'do-bank': { const t = ui.trade; if (act(() => E.doBankTrade(G, t.give, t.get), { undo: true })) { if (G.players[G.current].hand[t.give] < E.tradeRatio(G, G.current, t.give)) t.give = null; drawModal(); } break; }
+    case 'do-bank': { const t = ui.trade; if (perform('bankTrade', [t.give, t.get], () => E.doBankTrade(G, t.give, t.get), { undo: true })) { if (G.players[G.current].hand[t.give] < E.tradeRatio(G, G.current, t.give)) t.give = null; drawModal(); } break; }
     case 'pg': case 'pw': { const o = ui.trade[name]; o[d.r] = Math.max(0, (o[d.r] || 0) + +d.d); if (o[d.r] && name === 'pg') ui.trade.pw[d.r] = 0; if (o[d.r] && name === 'pw') ui.trade.pg[d.r] = 0; drawModal(); break; }
     case 'do-ptrade': {
       const t = ui.trade, g = Object.assign(E.emptyHand(), t.pg), w = Object.assign(E.emptyHand(), t.pw);
       const other = +d.p, on = G.players[other];
-      if (on.bot) {
+      if (ON.active) {   // online, trades between people are always an offer the other player answers
+        if (sendOnline('offer', [other, nonzero(g), nonzero(w)])) { t.pg = {}; t.pw = {}; toast(`Offer sent to ${on.name}`, pcol(other)); }
+      } else if (on.bot) {
         // the bot receives g and pays w
         const j = Bot.respond(G, other, G.current, g, w);
         if (!j.ok) {
@@ -2736,7 +2760,7 @@ function onAct(name, el) {
     case 'play-dev': {
       const t = d.t;
       if (t === 'plenty' || t === 'mono') { ui.confirm = t; ui.sel = []; drawModal(); break; }
-      closeModal(); act(() => E.doPlayDev(G, t)); break;
+      closeModal(); perform('playDev', [t], () => E.doPlayDev(G, t)); break;
     }
     case 'dev-sel': {
       const n = ui.confirm === 'plenty' ? 2 : 1;
@@ -2747,23 +2771,28 @@ function onAct(name, el) {
     case 'dev-confirm': {
       const t = ui.confirm, sel = ui.sel.slice();
       closeModal();
-      act(() => E.doPlayDev(G, t, { res: t === 'plenty' ? sel : sel[0] }));
+      perform('playDev', [t, { res: t === 'plenty' ? sel : sel[0] }], () => E.doPlayDev(G, t, { res: t === 'plenty' ? sel : sel[0] }));
       break;
     }
     case 'pick': {
       const r = d.r; ui.picks[r] = Math.max(0, (ui.picks[r] || 0) + +d.d); drawModal(); break;
     }
-    case 'do-discard': { const p = G.discardQ[0].p, picks = Object.assign(E.emptyHand(), ui.picks); ui.picks = {}; act(() => E.doDiscard(G, p, picks)); break; }
-    case 'do-gold': { const p = G.goldQ[0].p, picks = Object.assign(E.emptyHand(), ui.picks); ui.picks = {}; act(() => E.doGold(G, p, picks)); break; }
-    case 'do-steal': closeModal(); act(() => E.doSteal(G, +d.p)); break;
-    case 'offer-yes': closeModal(); act(() => E.doRespond(G, true)); break;
-    case 'offer-no': closeModal(); act(() => E.doRespond(G, false)); break;
+    case 'do-discard': { const p = G.discardQ[0].p, picks = Object.assign(E.emptyHand(), ui.picks); ui.picks = {}; perform('discard', [nonzero(picks)], () => E.doDiscard(G, p, picks)); break; }
+    case 'do-gold': { const p = G.goldQ[0].p, picks = Object.assign(E.emptyHand(), ui.picks); ui.picks = {}; perform('gold', [nonzero(picks)], () => E.doGold(G, p, picks)); break; }
+    case 'do-steal': closeModal(); perform('steal', [+d.p], () => E.doSteal(G, +d.p)); break;
+    case 'offer-yes': closeModal(); perform('respond', [true], () => E.doRespond(G, true)); break;
+    case 'offer-no': closeModal(); perform('respond', [false], () => E.doRespond(G, false)); break;
     case 'show-results': openModal('results'); break;
     case 'rematch': {
+      if (ON.active) break;
       const opts = { mode: G.mode, target: G.target, friendly: G.friendly, level: G.level, players: E.shuffle(G.players.map(p => ({ name: p.name, color: p.color, bot: p.bot }))) };
       closeModal(); G = E.newGame(opts); log0(); enterGame(); break;
     }
-    case 'home': closeModal(); saveGame(); goHome(); break;
+    case 'home': if (ON.active) { leaveOnline(); break; } closeModal(); saveGame(); goHome(); break;
+    case 'online-open': ui.notice = ''; openOnlineLobby(); break;
+    case 'online-retry': retryOnline(); break;
+    case 'leave': leaveOnline(); break;
+    case 'withdraw': sendOnline('withdrawOffer', []); break;
     case 'close-modal': closeModal(); if (G) render(); break;
     case 'close-modal-bg': break;
     case 'zoom-in': zoomAt(1 / 1.3); break;
@@ -2788,6 +2817,7 @@ document.addEventListener('click', ev => {
   if (el.dataset.confirm && ui.cfg.confirm && G && !ui.armed) { arm(el); return; }
   if (ui.armed) { clearTimeout(ui.armed.timer); ui.armed = null; }
   onAct(el.dataset.act, el);
+  if (ON.active) flushDeferred();   // a draft just ended? apply the newest room snapshot held back meanwhile
 });
 // first tap arms a button ("Sure?"), second tap runs it
 function arm(el) {
@@ -2806,6 +2836,317 @@ document.addEventListener('input', ev => {
   if (ev.target.id && ev.target.id.startsWith('pname-')) { syncNames(); saveCfg(); }
 });
 
+/* ================= ONLINE =================
+   Spec: docs/online-phase2.md section B with the review amendments (R1, R3, R4), plus the patterns of docs/online-splendor.md.
+   The room (seed, seats, opts) and every player's own append-only list of records {k, a, args} come from HubOnline.rooms.watch.
+   Every update replays the whole game from scratch with Engine.replayCatan; the local seat is the viewer (ui.seat).
+   The UI never changes G directly online: it sanitizes, appends a record to my list (the overlay `ON.mine`), replays and writes.
+   Online games never touch local storage for the game itself: no save, no continue, no undo, no rematch, no bots, no curtain.
+   Accepted limits: the seed lets anyone with devtools predict dice and cards; hands of other players are technically derivable
+   from the seed; an unsent record is lost if the tab closes while offline; a withdraw that loses a race with an accept is
+   rewritten (the responder always wins) and its author is told with a toast. */
+const OL = { game: 'isles', name: 'Catan', accent: { light: '#ffc94a', dark: '#ffc94a' } };
+const onlineAvailable = () => { try { return !!(window.HubOnline && window.HubLobby && HubOnline.available()); } catch (e) { return false; } };
+const fmtCode = c => (c && c.length === 6 ? `${c.slice(0, 3)} ${c.slice(3)}` : (c || ''));
+const roomLink = code => `${location.origin}${location.pathname}?room=${code}`;
+const nonzero = c => { const o = {}; E.RES.forEach(r => { if (c && c[r] > 0) o[r] = c[r]; }); return o; };
+const fingerprint = s => JSON.stringify(s, (k, v) => (k === 'board' || k === 'fx') ? undefined : v);
+
+function resetOn() {
+  Object.assign(ON, {
+    active: false, code: null, uid: null, room: null, players: {}, pending: false, err: null, mine: [], built: false,
+    seen: new Set(), warned: new Set(), deferred: null, k: 0, seatUids: [], applied: 0, fp: '', flagged: false, badge: false,
+    wrote: false, rec: false, fatal: '', shownPending: false, msg: '',
+  });
+  ui.seat = null;
+}
+resetOn();
+
+/* ---------- seats, names, colours ---------- */
+// Profile colour (hex) -> the nearest Catan colour id; replayCatan hands a clashing later seat the first unused colour.
+function nearestColorId(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return null;
+  const n = parseInt(m[1], 16), c = [n >> 16 & 255, n >> 8 & 255, n & 255];
+  let best = null, bd = Infinity;
+  COLORS.forEach(col => {
+    const q = parseInt(col.hex.slice(1), 16);
+    const d = (c[0] - (q >> 16 & 255)) ** 2 + (c[1] - (q >> 8 & 255)) ** 2 + (c[2] - (q & 255)) ** 2;
+    if (d < bd) { bd = d; best = col.id; }
+  });
+  return best;
+}
+function seatInfo() {
+  const seats = (ON.room && ON.room.seats) || {};
+  const uids = Object.keys(seats).sort();
+  const base = uids.map((u, i) => String((seats[u] && seats[u].name) || '').replace(/\s+/g, ' ').trim().slice(0, 16) || `Player ${i + 1}`);
+  const players = {};
+  uids.forEach((u, i) => {   // duplicate names get a number, in sorted-uid order, so every device agrees
+    const k = base.slice(0, i).filter(x => x.toLowerCase() === base[i].toLowerCase()).length;
+    players[u] = { name: k ? `${base[i]} ${k + 1}` : base[i], color: nearestColorId(seats[u] && seats[u].color) };
+  });
+  return { uids, players };
+}
+
+/* ---------- my own record list ---------- */
+// The longer of the server's copy and what this device has composed, so a move shows at once before the server confirms it.
+function mineList() {
+  const d = ON.players[ON.uid], sm = d && Array.isArray(d.moves) ? d.moves : [];
+  return ON.mine.length > sm.length ? ON.mine : sm;
+}
+function buildReplay() {
+  const { uids, players } = seatInfo();
+  const o = (ON.room && ON.room.opts) || {};
+  const lists = {};
+  uids.forEach(u => { lists[u] = u === ON.uid ? mineList() : ((ON.players[u] || {}).moves || []); });
+  const res = E.replayCatan({ seed: ON.room.seed, uids, opts: { mode: o.mode, target: o.target, friendly: o.friendly, players }, lists });
+  return { res, lists };
+}
+function turnSummary() {
+  const over = G.phase === 'gameover';
+  return { phase: over ? 'over' : G.phase === 'setup' ? 'setup' : 'play', next: over ? null : (ON.seatUids[E.actor(G)] || null) };
+}
+function flush() {
+  const code = ON.code, tok = ON.token;
+  HubOnline.rooms.writeMine(code, { moves: mineList(), turn: turnSummary() }).then(() => { }, e => {
+    if (tok !== ON.token || !ON.active) return;
+    if (e && e.code === 'denied') {   // the server refused: forget what only this device knew and rebuild from the server
+      ON.mine = []; toast('That move could not be saved. Please try again.', null, true);
+      if (drafting()) ON.deferred = ON.deferred || { room: ON.room, players: ON.players, pending: false }; else refresh(true);
+    }
+  });
+}
+
+/* ---------- sending one action ---------- */
+function sendOnline(a, args) {
+  if (!ON.active || !G || ui.seat === null) return false;
+  const seat = ui.seat;
+  if (!E.allowedAt(G).some(x => x.p === seat && x.acts.includes(a))) { toast('Not your move right now', null, true); return false; }
+  const rec = { k: ON.k, a, args };
+  if (!E.sanitizeAction(G, seat, rec)) { toast('That move is not possible', null, true); return false; }
+  // dry run on a copy so a refused move costs nothing and tells the player why (the generator is never consumed by a failure)
+  const copy = JSON.parse(JSON.stringify(G)); copy.fx = [];
+  const r = E.applyAction(copy, seat, E.sanitizeAction(copy, seat, rec));
+  if (!r.ok) { toast(r.err || 'Not possible', null, true); return false; }
+  ON.mine = [...mineList(), rec];
+  ui.pending = null;
+  refresh();
+  flush();
+  return true;
+}
+
+/* ---------- watching the room ---------- */
+// A draft is anything half-composed on this device. Room updates wait (only the newest is kept) until it is committed or cancelled.
+const hasKeys = o => !!o && Object.keys(o).some(k => o[k]);
+function drafting() {
+  if (!ON.active || !G) return false;
+  if (ui.pending || ui.mode) return true;
+  if (ui.modal === 'trade') return ui.trade.tab === 'players' ? (hasKeys(ui.trade.pg) || hasKeys(ui.trade.pw)) : !!(ui.trade.give || ui.trade.get);
+  if (ui.modal === 'discard' || ui.modal === 'gold') return hasKeys(ui.picks);
+  if (ui.modal === 'dev') return !!ui.confirm;
+  return false;
+}
+function flushDeferred() {
+  if (!ON.active || !ON.deferred || drafting()) return;
+  const snap = ON.deferred;
+  ON.deferred = null;
+  consume(snap);
+}
+function onSnap(snap) {
+  if (snap.error) {
+    ON.err = snap.error;
+    if (!G) { ON.fatal = snap.error.code === 'offline' ? "You're offline. Reconnect and try again." : "Couldn't reach the game server."; renderConnecting(); }
+    else if (!drafting()) render();
+    return;
+  }
+  const hadErr = !!ON.err;
+  ON.err = null;
+  if (!snap.room) { if (!G) { ON.fatal = 'No game with that code.'; renderConnecting(); } return; }
+  if (drafting()) { ON.deferred = snap; return; }
+  consume(snap, hadErr);
+}
+function consume(snap, hadErr) {
+  ON.room = snap.room; ON.players = snap.players || {}; ON.pending = !!snap.pending;
+  const code = ON.code;
+  if (!(ON.room.seats && ON.room.seats[ON.uid])) { leaveOnline(); HubLobby.notSeated(code, { gameName: OL.name, accent: OL.accent, onClose: exitLobby, closeLabel: 'Back to setup' }); return; }
+  if (ON.room.status !== 'playing') { leaveOnline(); enterRoom(code); return; }
+  const sm = (ON.players[ON.uid] || {}).moves;
+  if (Array.isArray(sm) && sm.length >= ON.mine.length) ON.mine = [];   // the server has caught up with this device
+  refresh(hadErr);
+}
+function fatal(msg) { ON.fatal = msg; G = null; ON.built = false; renderConnecting(); }
+
+function refresh(forceRender) {
+  let b;
+  try { b = buildReplay(); } catch (e) { try { console.warn('Catan online: cannot replay', e); } catch (_) { } fatal("This game can't be shown."); return; }
+  const res = b.res, seat = res.seats.indexOf(ON.uid);
+  if (seat < 0) { fatal("This game can't be shown."); return; }
+  const first = !ON.built, old = G;
+  const wasAct = !first && !!old && old.phase !== 'gameover' && E.actor(old) === ui.seat;
+  ui.seat = seat; ON.seatUids = res.seats; ON.k = res.k;
+  // fx are deduped by record identity (seat, index in that seat's list): only records not seen on this device play their effects
+  const fresh = res.applied.filter(x => !ON.seen.has(x.p + ':' + x.idx));
+  res.applied.forEach(x => ON.seen.add(x.p + ':' + x.idx));
+  notifyOwn(res, b.lists, first);
+  const fp = fingerprint(res.state);
+  let changed = false;
+  if (first) {
+    changed = true;
+    G = res.state; G.fx = [];
+    ON.built = true; ON.applied = res.applied.length; ON.fp = fp;
+    enterOnlineGame();
+  } else if (res.applied.length === ON.applied && fp === ON.fp) {
+    // nothing new: keep the state on screen so the sounds and effects of my own move are not cut off
+  } else {
+    changed = true;
+    G = res.state;
+    G.fx = [].concat(...fresh.slice(-8).map(x => x.fx));
+    ON.applied = res.applied.length; ON.fp = fp;
+    afterAction();
+  }
+  const actNow = G.phase !== 'gameover' && E.actor(G) === seat;
+  // chime, tab title and menu badge only when the turn passes to me after a remote update, never on first load
+  if (changed && !first && !wasAct && actNow && fresh.some(x => x.p !== seat)) { setTimeout(() => sfx('chime'), 450); ON.flagged = true; }
+  if (!actNow) ON.flagged = false;
+  recordIfOver();
+  if (!ON.wrote) {   // the hub reads the turn summary from my own document, so make sure it exists
+    ON.wrote = true;
+    if (!ON.players[ON.uid] && !mineList().length) flush();
+  }
+  if (!changed && (forceRender || ON.pending !== ON.shownPending)) render();
+  ON.shownPending = ON.pending;
+  signals();
+}
+
+// Toasts for my own records that lost a race or were refused. History from before this page load stays silent.
+function notifyOwn(res, lists, first) {
+  const seat = res.seats.indexOf(ON.uid), mine = lists[ON.uid] || [], nm = p => res.state.players[p].name;
+  const say = (key, text) => { if (ON.warned.has(key)) return; ON.warned.add(key); if (!first) toast(text, null, true); };
+  res.stale.forEach(e => {
+    if (e.p !== seat) return;
+    const rec = mine[e.idx] || {};
+    const win = res.applied.find(x => x.k === rec.k && x.p !== seat);
+    let text = 'That move came too late and was skipped.';
+    if (win && win.a === 'respond') {
+      const r = (lists[res.seats[win.p]] || [])[win.idx];
+      text = `Too late: ${nm(win.p)} ${r && r.args && r.args[0] === true ? 'accepted' : 'declined'} your trade.`;
+    } else if (win) text = `Too late: ${nm(win.p)} moved first.`;
+    say('s' + e.idx, text);
+  });
+  res.invalid.forEach(e => { if (e.p === seat) say('i' + e.idx, `That move was not allowed${e.err ? ': ' + e.err : ''}.`); });
+}
+
+function recordIfOver() {
+  if (!ON.active || !G || G.phase !== 'gameover' || ON.rec || ui.seat === null) return;
+  ON.rec = true;
+  try { if (HubKit.recordResult) HubKit.recordResult(OL.game, `${ON.uid}:${ON.code}`, { won: G.winner === ui.seat, score: E.totalVP(G, ui.seat) }); } catch (e) { /* stats are optional */ }
+}
+function signals() {
+  const on = !!(ON.active && ON.flagged && G && G.phase !== 'gameover' && E.actor(G) === ui.seat);
+  const t = on ? 'Your turn · Catan' : 'Catan';
+  if (document.title !== t) document.title = t;
+  if (on !== ON.badge) { ON.badge = on; try { if (HubKit.setBadge) HubKit.setBadge(on); } catch (e) { /* optional */ } }
+}
+
+/* ---------- screens ---------- */
+function waitVerb() {
+  switch (G.phase) {
+    case 'setup': return G.setup.step === 'settlement' ? 'place a settlement' : (G.mode === 'seafarers' ? 'place a road or ship' : 'place a road');
+    case 'roll': return 'roll';
+    case 'robber': return G.mode === 'seafarers' ? 'move the robber or pirate' : 'move the robber';
+    case 'steal': return 'choose who to rob';
+    case 'discard': return 'discard';
+    case 'gold': return 'pick gold';
+    case 'roadBuilding': return 'place free roads';
+    case 'offer': return 'answer the offer';
+    default: return 'finish their turn';
+  }
+}
+function renderWaitingDock(a) {
+  const pa = G.players[a], me = ui.seat;
+  let text, extra = '';
+  if (G.phase === 'offer' && G.offer) {
+    const o = G.offer;
+    if (o.from === me) {
+      text = `Waiting for ${esc(pa.name)} to answer: your ${esc(E.describe(o.give))} for their ${esc(E.describe(o.get))}`;
+      extra = '<div class="row2"><button class="btn" data-act="withdraw">Withdraw offer</button></div>';
+    } else text = `${esc(G.players[o.from].name)} offers ${esc(pa.name)} a trade. Waiting for ${esc(pa.name)}`;
+  } else text = `Waiting for ${esc(pa.name)} to ${waitVerb()}`;
+  $('#dock').innerHTML = `<div class="prompt" style="--pc:${colorHex(pa.color)}"><i></i><span class="thinking">${text}</span></div>${handHtml(me)}${extra}`;
+}
+function renderStatus() {   // "Sending…" while my writes are unconfirmed, "Offline" while the room cannot be reached
+  if (!ON.active) return;
+  const tag = ON.err ? 'Offline' : ON.pending ? 'Sending…' : '';
+  const pr = document.querySelector('#dock .prompt span');
+  if (tag && pr) pr.insertAdjacentHTML('beforeend', ` <small style="color:var(--muted);font-weight:700">· ${tag}</small>`);
+}
+function renderConnecting() {
+  $('#home').hidden = false; $('#game').hidden = true;
+  $('#home').innerHTML = `<div class="home-inner"><div class="hero"><div><h1>Catan</h1></div></div>
+    <div class="card"><div class="label">Online game ${esc(fmtCode(ON.code))}</div>
+      <p style="margin:0" role="status">${esc(ON.fatal || 'Connecting to the game server…')}</p>
+      <div class="confirm-row">${ON.fatal ? '<button class="btn primary" data-act="online-retry">Try again</button>' : ''}<button class="btn" data-act="leave">Leave</button></div></div></div>`;
+  syncFloat();
+}
+function enterOnlineGame() {
+  ui.mode = null; ui.pending = null; ui.undo = []; ui.revealed = null; ui.gains = {}; ui.flashHexes = []; ui.diceKey = null;
+  $('#home').hidden = true; $('#game').hidden = false;
+  ui.lastActor = E.actor(G);
+  closeModal();
+  renderStatic();
+  afterAction();
+  if (G.phase === 'gameover') openModal('results');
+}
+
+/* ---------- entering and leaving ---------- */
+function stopWatch() {
+  ON.token++;
+  if (ON.unsub) { try { ON.unsub(); } catch (e) { /* already stopped */ } ON.unsub = null; }
+}
+function openOnlineLobby() {
+  const c = ui.cfg;
+  HubLobby.openCreateJoin({
+    game: OL.game, gameName: OL.name, seatOptions: [2, 3, 4], accent: OL.accent, onRoom: enterRoom,
+    opts: () => ({ mode: c.mode, target: c.target[c.mode], friendly: !!c.friendly }),   // the setup screen's own controls
+  });
+}
+// HubLobby looks the room up, joins, shows the waiting room and calls back when the game is on.
+function enterRoom(code) {
+  try { history.replaceState(null, '', `${location.pathname}?room=${code}`); } catch (e) { /* ignore */ }
+  HubLobby.enter(code, { game: OL.game, gameName: OL.name, minToStart: 2, accent: OL.accent, onPlay: c => beginOnline(c.code, c.uid), onExit: exitLobby });
+}
+function exitLobby() {
+  try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
+  if (!ON.active) { $('#game').hidden = true; $('#home').hidden = false; renderHome(); syncFloat(); }
+}
+function beginOnline(code, uid) {
+  stopWatch();
+  clearTimeout(ui.timer); ui.timer = null;
+  resetOn();
+  Object.assign(ON, { active: true, code, uid });
+  G = null;
+  ui.mode = null; ui.pending = null; ui.undo = []; ui.notice = '';
+  try { history.replaceState(null, '', `${location.pathname}?room=${code}`); } catch (e) { /* ignore */ }
+  renderConnecting();
+  const tok = ON.token;
+  ON.unsub = HubOnline.rooms.watch(code, snap => { if (tok === ON.token) onSnap(snap); });
+}
+function retryOnline() { if (ON.active) beginOnline(ON.code, ON.uid); }
+function leaveClick() { if (G && G.phase !== 'gameover') openModal('leave'); else leaveOnline(); }
+function leaveOnline() {
+  stopWatch();
+  const was = ON.active;
+  resetOn();
+  try { document.title = 'Catan'; if (HubKit.setBadge) HubKit.setBadge(false); } catch (e) { /* optional */ }
+  try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
+  try { HubLobby.close(); } catch (e) { /* optional */ }
+  clearTimeout(ui.timer); ui.timer = null;
+  G = null;
+  ui.mode = null; ui.pending = null; ui.undo = [];
+  closeModal(); $('#curtain').hidden = true;
+  if (was) { $('#game').hidden = true; $('#home').hidden = false; renderHome(); syncFloat(); }
+}
+
 /* ================= MENU (HubKit) ================= */
 function menuItems() {
   if ($('#game').hidden || !G) return [];   // setup screen: the page itself explains how to play
@@ -2814,8 +3155,9 @@ function menuItems() {
     { label: 'Building costs', onSelect: () => openModal('costs') },
     { label: 'Game log', onSelect: () => openModal('log') },
     { label: 'Confirm moves', toggle: true, checked: !!c.confirm, onSelect: on => { c.confirm = on; saveCfg(); ui.pending = null; render(); } },
-    { label: 'Hide hands between turns', toggle: true, checked: !!c.hideHands, onSelect: on => { c.hideHands = on; saveCfg(); render(); } },
   ];
+  if (ON.active) { items.push({ label: 'Leave game', onSelect: () => leaveClick() }); return items; }
+  items.push({ label: 'Hide hands between turns', toggle: true, checked: !!c.hideHands, onSelect: on => { c.hideHands = on; saveCfg(); render(); } });
   if (G.players.some(p => p.bot)) {
     items.push({ label: 'Bot skill', value: { easy: 'Easy', normal: 'Normal', hard: 'Hard' }[G.level || 'normal'],
       onSelect: () => { G.level = { easy: 'normal', normal: 'hard', hard: 'easy' }[G.level || 'normal']; c.level = G.level; saveCfg(); saveGame(); } });
@@ -2838,6 +3180,18 @@ function boot(data) {
   ui.cfg = loadCfg();
   initKit();
   setupPanZoom();
+  // ?room=CODE opens that online game before any local save, #continue or hot-reload state is looked at
+  const rc = new URLSearchParams(location.search).get('room');
+  if (rc !== null && rc !== '') {
+    const code = rc.replace(/\D/g, '');
+    const valid = /^[1-9][0-9]{5}$/.test(code);
+    renderHome(); syncFloat();
+    if (valid && onlineAvailable()) { enterRoom(code); return; }
+    ui.notice = valid ? 'Online play is not available right now. You can still play on this device.' : 'That link does not hold a valid six-digit game code.';
+    try { history.replaceState(null, '', location.pathname); } catch (e) { }
+    renderHome();
+    return;
+  }
   if (data && data.G) { G = data.G; G.fx = []; if (data.ui) Object.assign(ui, { revealed: data.ui.revealed }); $('#home').hidden = true; $('#game').hidden = false; renderStatic(); afterAction(); return; }
   renderHome();
   syncFloat();
@@ -2847,7 +3201,7 @@ function boot(data) {
   }
 }
 if (window.claude && window.claude.hot && window.claude.hot.snapshot) {
-  try { window.claude.hot.snapshot(() => ({ G: G && !$('#game').hidden ? G : null, ui: { revealed: ui.revealed } })); } catch (e) { }
+  try { window.claude.hot.snapshot(() => ({ G: G && !$('#game').hidden && !ON.active ? G : null, ui: { revealed: ui.revealed } })); } catch (e) { }
 }
 if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(boot);
 else boot((window.claude && window.claude.hot && window.claude.hot.data) || {});
