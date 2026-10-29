@@ -78,24 +78,79 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--mark);outline-o
 .rules-back .card{width:100%;max-width:30rem;margin:auto 0}
 .rules-back ol{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:8px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* Online play: a fixed one-screen layout that follows the visual viewport, so the canvas stays above the phone keyboard */
+html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none}
+.notice{background:var(--card);border:2px solid var(--ink);border-radius:12px;padding:10px 12px;font-size:.9rem}
+.play{position:fixed;left:0;right:0;top:var(--vvt,0px);height:var(--vvh,100dvh);width:min(100%,44rem);margin:0 auto;z-index:5;display:flex;flex-direction:column;gap:8px;
+  padding:max(8px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px))}
+.phead{display:flex;align-items:center;gap:10px;min-height:44px;flex:none}
+.pwho{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.15}
+.pwho b{font-family:var(--display);font-weight:400;font-size:1.15rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pwho .label{font-size:.68rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ptimer{font-family:var(--display);font-size:2rem;line-height:1;font-variant-numeric:tabular-nums}
+.ptimer.low{color:var(--bad)}
+.play .bar{height:8px;flex:none}
+.pword{flex:none;display:flex;align-items:center;gap:10px;background:var(--mark);color:var(--mark-ink);border:3px solid var(--ink);border-radius:12px;padding:6px 6px 6px 12px;box-shadow:3px 3px 0 var(--ink)}
+.pw{flex:1;min-width:0;display:flex;flex-direction:column}
+.pw .cat{font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+.pw .word{font-family:var(--display);font-size:clamp(1.25rem,6vw,1.8rem);line-height:1.05;overflow-wrap:anywhere}
+.pword button{min-height:44px;padding:6px 12px;font-size:.9rem;box-shadow:none}
+.cbox{flex:1 1 0;min-height:90px;display:flex;align-items:center;justify-content:center}
+.cwrap{border:3px solid var(--ink);border-radius:10px;box-shadow:3px 3px 0 var(--ink);overflow:hidden;background:#fff;line-height:0;flex:none}
+.cwrap canvas{display:block;touch-action:none;cursor:crosshair}
+.is-guesser .cwrap canvas{cursor:default}
+.tools{flex:none;display:flex;flex-direction:column;gap:6px}
+.trow{display:flex;gap:6px}
+.trow>*{flex:1 1 0;min-width:0}
+.sw{min-height:44px;padding:0;border-radius:10px;background:var(--c);border:2px solid var(--ink)}
+.sw.er{background:var(--card);color:var(--ink);font-size:.72rem}
+.sw[aria-pressed="true"]{box-shadow:inset 0 0 0 3px var(--paper),inset 0 0 0 5px var(--ink)}
+.sw.er[aria-pressed="true"]{background:var(--ink);color:var(--paper);box-shadow:none}
+.tb{min-height:44px;padding:6px 4px;font-size:.85rem;box-shadow:none}
+.tb[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.tb i{display:inline-block;border-radius:50%;background:currentColor;vertical-align:middle}
+.feed{flex:none;height:4.3rem;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;font-size:.95rem;line-height:1.3}
+.is-drawer .feed{height:2.7rem}
+.feed div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed .me{color:var(--muted)}
+.feed .ok{color:var(--good);font-weight:700;white-space:normal}
+@media (max-height:640px){.feed{height:2.7rem}}
+.gform{flex:none;display:flex;gap:8px}
+.gform input{flex:1;min-width:0;min-height:50px;border:2px solid var(--ink);background:var(--card);border-radius:12px;padding:0 12px;font-size:16px;font-weight:700;user-select:text;-webkit-user-select:text}
+.gform button{min-height:50px;padding:0 18px}
+.recap{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:4px;font-size:.9rem}
+.big .score{text-align:left}
+.score .tag{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.hl-root .hl-seg{flex-wrap:wrap}
+body .hl-root .hl-seg button{flex:1 1 22%;min-width:0;padding:0 4px;font-size:14px;line-height:1.2}
 </style>
 
 <main id="app"></main>
 <div class="rules-back" id="rules" hidden><div class="card" role="dialog" aria-modal="true" aria-labelledby="rules-t">
   <h2 id="rules-t">How to play</h2>
-  <ol>
+  <ol id="rules-local">
     <li>Split into 2 to 4 teams. One phone runs the words and the clock; draw on paper.</li>
     <li>On your team's turn, pick a drawer. Everyone else looks away while the drawer taps to reveal the secret word.</li>
     <li>The drawer may skip the word once per turn, then taps Start the clock and draws. No letters, numbers or talking.</li>
     <li>Teammates shout guesses. If they get it before time runs out, tap Guessed it. When time is up, the group says whether the team got it.</li>
     <li>A correct guess scores one point. Everyone gets the same number of turns, and the highest score wins.</li>
   </ol>
-  <p class="muted tiny">Pause stops the clock. The menu pauses it too; tap Resume when you are ready.</p>
+  <ol id="rules-online" hidden>
+    <li>Everyone plays on their own phone, 2 to 8 players. You take turns drawing, in a random order that is the same on every phone.</li>
+    <li>When it is your turn, tap Start drawing. You see the secret word and the clock starts. Draw it on the canvas: no letters or numbers.</li>
+    <li>Everyone else watches your drawing live and types guesses. You may skip the word once per turn.</li>
+    <li>The first correct guess ends the turn: 2 points for the guesser and 1 for the drawer. If time runs out, nobody scores.</li>
+    <li>Everyone draws the chosen number of times. The highest score wins.</li>
+  </ol>
+  <p class="muted tiny" id="rules-note">Pause stops the clock. The menu pauses it too; tap Resume when you are ready.</p>
   <button class="primary" id="rules-ok" type="button">Got it</button>
 </div></div>
 
 <script src="../shared/hubkit.js"></script>
 <script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
+<script src="../shared/firebase-config.js"></script>
+<script src="../shared/online.js"></script>
+<script src="../shared/lobby.js"></script>
 <script>
 const WORDS = {
   Object: ["Hourglass","Stethoscope","Lighthouse","Parachute","Typewriter","Chandelier","Compass","Hammock","Telescope","Drawbridge","Accordion","Padlock","Scarecrow","Kaleidoscope","Wheelbarrow","Periscope","Metronome","Snow globe","Jukebox","Bagpipes","Windmill","Trampoline","Catapult","Sundial","Umbrella stand","Tricycle","Ladle","Harpoon","Bunk bed","Submarine"],
@@ -152,7 +207,8 @@ function status(){
   return `<div class="top"><span class="label">Round ${Math.min(r,S.rounds)} of ${S.rounds}</span>${HubKit.buttonHTML()}</div>`;
 }
 
-function render(){
+function render(noClear){
+  if(ON.active)return;
   const a=$("app"), cur=S.turn%S.teams.length, name=esc(S.teams[cur]||"");
   let h="";
   if(S.screen==="setup"){
@@ -167,7 +223,8 @@ function render(){
       <div class="seg">${[2,3,5].map(v=>`<button data-rounds="${v}" aria-pressed="${S.rounds===v}">${v}</button>`).join("")}</div>
     </div>
     <button class="primary" id="start">Start game</button>
-    <p class="muted tiny">Each team gets one word per turn. Guess it before time runs out to score a point. One skip per turn.</p>`;
+    <p class="muted tiny">Each team gets one word per turn. Guess it before time runs out to score a point. One skip per turn.</p>
+    ${S.notice?`<p class="notice" role="status">${esc(S.notice)}</p>`:''}${onlineCardHTML()}`;
   }
   else if(S.screen==="handover"){
     h=`${status()}<div class="stage big"><span class="label">Up next</span><h1 style="color:${'var(--ink)'}">${name}</h1>
@@ -209,7 +266,7 @@ function render(){
   if(S.screen==="setup"||S.screen==="final")h='<div class="fl"></div>'+h;
   a.innerHTML=h; bind(); paint();
   try{HubKit.setFloating(S.screen==="setup"||S.screen==="final")}catch(e){}
-  if(S.screen==="setup"||S.screen==="final")clearSave();else save();
+  if(!noClear){if(S.screen==="setup"||S.screen==="final")clearSave();else save()}
 }
 const SAVE_KEY="pictionary.save.v1";
 function clearSave(){try{localStorage.removeItem(SAVE_KEY)}catch(e){}}
@@ -236,7 +293,9 @@ function restore(){
   }catch(e){return false}
 }
 function showRules(){
-  const r=$("rules");r.hidden=false;$("rules-ok").focus({preventScroll:true});
+  const r=$("rules");
+  $("rules-local").hidden=ON.active;$("rules-online").hidden=!ON.active;$("rules-note").hidden=ON.active;
+  r.hidden=false;$("rules-ok").focus({preventScroll:true});
 }
 function hideRules(){
   const r=$("rules");if(r.hidden)return;r.hidden=true;
@@ -276,8 +335,11 @@ function bind(){
   on("yes",()=>{sfx("score");verdict(true)}); on("no",()=>verdict(false));
   on("next",()=>go("handover"));
   on("again",()=>{clearSave();startGame()}); on("setup",()=>{clearSave();go("setup")});
+  document.querySelectorAll("[data-osecs]").forEach(b=>b.onclick=()=>{O.secs=+b.dataset.osecs;render(true)});
+  document.querySelectorAll("[data-orounds]").forEach(b=>b.onclick=()=>{O.rounds=+b.dataset.orounds;render(true)});
+  on("ocreate",openOnlineLobby); on("ojoin",openOnlineLobby);
 }
-document.addEventListener("visibilitychange",()=>{if(!document.hidden&&S.screen==="draw")keepAwake()});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&(S.screen==="draw"||ON.active))keepAwake();if(!document.hidden&&ON.active)onTick()});
 $("rules-ok").onclick=hideRules;
 $("rules").addEventListener("click",e=>{if(e.target===$("rules"))hideRules()});
 document.addEventListener("keydown",e=>{
@@ -285,19 +347,574 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){e.preventDefault();hideRules()}
   else if(e.key==="Tab"){e.preventDefault();$("rules-ok").focus()}
 });
+/* ---------- Online play (each player on their own phone) ----------
+   Spec: docs/online-phase2.md section C with R2 and R5 (amendments win), patterns from docs/online-splendor.md.
+   Everyone rebuilds the whole game from the room (seed, seats, options) and each player's own record list, so all phones agree.
+   Records (each in its author's own `moves` list; a record that does not fit the rules is ignored by every client):
+     drawer of turn t:  {a:"start",turn,at}  {a:"skip",turn}  {a:"correct",turn,uid,gi}  {a:"end",turn,why:"guessed"|"time"}
+     any guesser:       {a:"guess",turn,at,text}            (text <= 40; gi = index of that guess in the guesser's own list)
+   Only the drawer of turn t (order[t % n]) counts for start/skip/correct/end. `correct` must point at a real guess whose text
+   matches the word. The word comes from a seeded shuffled deck whose pointer advances on every valid start and skip.
+   Drawing = append-only chunk docs rooms/{code}/draw/{uid}_{turn}_{i} = {t,i,d}; d is a ";"-joined list of items:
+     s<c>.<w>   new stroke: colour 0-5 (6 = eraser), width 0-2
+     p<x>,<y> <dx>,<dy> ...   points 0-1000 on each axis; the first is absolute, the others are deltas (appended to the open stroke)
+     x   clear      u   undo the last stroke
+   Nothing here touches local storage; the word is never written to the DOM or the console on a guesser's phone (guessers only keep
+   a hash of it; accepted: the seed technically lets a determined player derive it).
+   The one-phone game above is untouched. */
+const OL={game:"sketch",name:"Pictionary",accent:"#ffd23f"};
+const O={secs:60,rounds:1};
+const PEN=["#18212d","#d64545","#f08c1a","#1f9d55","#2f6fd6","#8a4fd0"], PEN_NAMES=["Black","Red","Orange","Green","Blue","Purple"];
+const WID=[5,11,22], ERS=2.6, CHUNK_MS=800, CHUNK_MAX=30000;
+const WL=Object.entries(WORDS).flatMap(([c,l])=>l.map(w=>({c,w})));
+const ON={active:false,code:null,uid:null,room:null,players:{},D:null,mine:{moves:[]},unsub:null,token:0,first:true,fatal:"",err:null,
+  vkey:"",vsig:"",tick:0,lastSec:-1,buzzed:-1,seen:{},seenT:-1,seenInit:false,gnote:null,flag:false,badge:false,rec:false,wrote:false,note:""};
+const DRW={board:null,out:null,nextI:0,sent:new Set(),got:new Set(),ready:false,timer:0,unsub:null,t:-1,drawer:null,mine:false,pen:0,size:1,tail:null,
+  q:[],applied:[],tailT:0,raf:0,initial:true,wsig:"",fsig:"",ro:null,down:false};
+
+const onlineAvailable=()=>{try{return !!(window.HubOnline&&window.HubLobby&&HubOnline.available())}catch(e){return false}};
+const fmtCode=c=>c&&c.length===6?c.slice(0,3)+" "+c.slice(3):(c||"");
+const safeColor=c=>typeof c==="string"&&/^#[0-9a-fA-F]{6}$/.test(c)?c:"";
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function rng(seed){let a=seed>>>0;return()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function sshuffle(arr,r){const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+// Matching (R5): NFD, strip accents, lower-case, drop a leading a|an|the, keep only [a-z0-9]
+const normGuess=s=>String(s==null?"":s).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/^\s*(?:a|an|the)\s+/,"").replace(/[^a-z0-9]/g,"");
+function h53(str){let h1=0xdeadbeef,h2=0x41c6ce57;for(let i=0;i<str.length;i++){const ch=str.charCodeAt(i);h1=Math.imul(h1^ch,2654435761);h2=Math.imul(h2^ch,1597334677)}
+  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);return 4294967296*(2097151&h2)+(h1>>>0)}
+const wkey=s=>h53(normGuess(s));
+const roomOpts=room=>{const o=(room&&room.opts)||{};return{secs:[45,60,90].includes(o.secs)?o.secs:60,rounds:[1,2,3].includes(o.rounds)?o.rounds:1}};
+const isRec=x=>x&&typeof x==="object"&&!Array.isArray(x);
+
+// Rebuilds the whole game. `movesOf(uid)` is that player's record list. Seat order: uids sorted, then shuffled with the seeded
+// generator; the word deck is shuffled next (the same generator), so every phone gets the same order and the same words.
+function replayOnline(room,movesOf,myUid){
+  const seats=(room&&room.seats)||{}, uids=Object.keys(seats).sort(), n=uids.length;
+  if(n<2||n>8||typeof room.seed!=="number")return null;
+  const r=rng(room.seed), order=sshuffle(uids,r), deck=sshuffle(WL.map((_,i)=>i),r), {secs,rounds}=roomOpts(room), total=n*rounds;
+  const base=uids.map((u,i)=>String((seats[u]&&seats[u].name)||"").replace(/\s+/g," ").trim().slice(0,16)||`Player ${i+1}`);
+  const names={}, colors={};
+  uids.forEach((u,i)=>{const k=base.slice(0,i).filter(x=>x.toLowerCase()===base[i].toLowerCase()).length;names[u]=k?`${base[i]} ${k+1}`:base[i];colors[u]=safeColor(seats[u]&&seats[u].color)||COLORS[i%COLORS.length]});
+  const lists=new Map(order.map(u=>{const m=movesOf(u);return[u,Array.isArray(m)?m:[]]}));
+  const scores={}, done=[]; order.forEach(u=>{scores[u]=0});
+  let cur=null, ptr=0, over=false;
+  for(let t=0;t<total;t++){
+    const d=order[t%n], dm=lists.get(d);
+    const si=dm.findIndex(x=>isRec(x)&&x.a==="start"&&x.turn===t&&Number.isFinite(x.at));
+    if(si<0){cur={t,drawer:d,started:false};break}
+    let wi=deck[ptr++%deck.length], skipped=false, end=null;
+    for(let j=si+1;j<dm.length&&!end;j++){
+      const x=dm[j];
+      if(!isRec(x)||x.turn!==t)continue;
+      if(x.a==="skip"){if(!skipped){skipped=true;wi=deck[ptr++%deck.length]}}
+      else if(x.a==="correct"){
+        const gm=lists.get(x.uid), q=gm&&Number.isInteger(x.gi)&&x.gi>=0?gm[x.gi]:null;
+        if(x.uid!==d&&isRec(q)&&q.a==="guess"&&q.turn===t&&typeof q.text==="string"&&wkey(q.text)===wkey(WL[wi].w))end={why:"guessed",guesser:x.uid,gi:x.gi};
+      }
+      else if(x.a==="end"&&x.why==="time")end={why:"time"};
+    }
+    if(end){
+      if(end.why==="guessed"){scores[end.guesser]+=2;scores[d]+=1}
+      done.push({t,drawer:d,c:WL[wi].c,w:WL[wi].w,why:end.why,guesser:end.guesser||null});
+      if(t===total-1)over=true;
+      continue;
+    }
+    const key=wkey(WL[wi].w), guesses=[];
+    order.forEach(u=>{if(u===d)return;lists.get(u).forEach((q,gi)=>{
+      if(isRec(q)&&q.a==="guess"&&q.turn===t&&typeof q.text==="string"){const text=q.text.slice(0,40);guesses.push({uid:u,gi,at:Number.isFinite(q.at)?q.at:0,text,match:wkey(text)===key})}})});
+    guesses.sort((a,b)=>a.at-b.at||(a.uid<b.uid?-1:a.uid>b.uid?1:a.gi-b.gi));
+    // the word itself is only kept on the drawer's own phone; everyone else holds a hash
+    cur={t,drawer:d,started:true,at:dm[si].at,skipped,key,word:d===myUid?WL[wi]:null,guesses};
+    break;
+  }
+  return{order,names,colors,n,secs,rounds,total,scores,done,cur:over?null:cur,over,me:order.indexOf(myUid)};
+}
+const remaining=(D,c)=>clamp(c.at+D.secs*1000-Date.now(),0,D.secs*1000);
+const roundOf=(D,t)=>Math.min(D.rounds,Math.floor(t/D.n)+1);
+
+/* ----- canvas model: strokes drawn on a 4:3 white sheet, points 0-1000 on each axis ----- */
+function newBoard(cv){
+  const b={cv,ctx:cv.getContext("2d"),strokes:[],open:null,W:0,H:0,dpr:1};
+  const ink=s=>s.c===6?"#fff":PEN[s.c];
+  const lw=s=>WID[s.w]*(s.c===6?ERS:1)*b.W/1000;
+  b.fit=(bw,bh)=>{
+    const W=Math.max(60,Math.floor(Math.min(bw,bh*4/3))), H=Math.floor(W*3/4), dpr=Math.min(2,window.devicePixelRatio||1);
+    if(W===b.W&&H===b.H&&dpr===b.dpr)return;
+    b.W=W;b.H=H;b.dpr=dpr;cv.style.width=W+"px";cv.style.height=H+"px";cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
+    b.ctx.setTransform(dpr,0,0,dpr,0,0);b.redraw();
+  };
+  b.redraw=()=>{
+    const c=b.ctx;c.fillStyle="#fff";c.fillRect(0,0,b.W,b.H);c.lineCap="round";c.lineJoin="round";
+    for(const s of b.strokes){
+      if(!s.pts.length)continue;
+      c.strokeStyle=c.fillStyle=ink(s);c.lineWidth=lw(s);
+      if(s.pts.length===1){c.beginPath();c.arc(s.pts[0][0]*b.W/1000,s.pts[0][1]*b.H/1000,lw(s)/2,0,6.2832);c.fill();continue}
+      c.beginPath();c.moveTo(s.pts[0][0]*b.W/1000,s.pts[0][1]*b.H/1000);
+      for(let k=1;k<s.pts.length;k++)c.lineTo(s.pts[k][0]*b.W/1000,s.pts[k][1]*b.H/1000);
+      c.stroke();
+    }
+  };
+  b.begin=(c,w)=>{b.open={c,w,pts:[]};b.strokes.push(b.open);if(b.strokes.length>400)b.strokes.shift()};
+  b.add=(x,y)=>{
+    const s=b.open;if(!s)return;
+    const c=b.ctx,k=s.pts.length;s.pts.push([x,y]);
+    c.lineCap="round";c.lineJoin="round";c.strokeStyle=c.fillStyle=ink(s);c.lineWidth=lw(s);
+    if(!k){c.beginPath();c.arc(x*b.W/1000,y*b.H/1000,lw(s)/2,0,6.2832);c.fill()}
+    else{const p=s.pts[k-1];c.beginPath();c.moveTo(p[0]*b.W/1000,p[1]*b.H/1000);c.lineTo(x*b.W/1000,y*b.H/1000);c.stroke()}
+  };
+  b.undo=()=>{b.strokes.pop();b.open=null;b.redraw()};
+  b.clear=()=>{b.strokes=[];b.open=null;b.redraw()};
+  b.apply=op=>{
+    if(op.k==="s")b.begin(op.c,op.w);else if(op.k==="p")b.add(op.x,op.y);
+    else if(op.k==="x")b.clear();else if(op.k==="u")b.undo();
+  };
+  return b;
+}
+/* ----- chunk encoding ----- */
+const encPts=pts=>pts.map((p,i)=>i?`${p[0]-pts[i-1][0]},${p[1]-pts[i-1][1]}`:`${p[0]},${p[1]}`).join(" ");
+function newOut(){
+  const o={items:[],buf:[]};
+  o.fl=()=>{if(o.buf.length){o.items.push("p"+encPts(o.buf));o.buf=[]}};
+  o.s=(c,w)=>{o.fl();o.items.push(`s${c}.${w}`)};
+  o.pt=(x,y)=>{o.buf.push([x,y]);if(o.buf.length>=1500)o.fl()};
+  o.x=()=>{o.fl();o.items.push("x")};
+  o.u=()=>{o.fl();o.items.push("u")};
+  // pending items as chunk strings, each kept well under the 40,000 character limit
+  o.take=()=>{
+    o.fl();const res=[];let cur=[],len=0;
+    for(const it of o.items){if(len+it.length+1>CHUNK_MAX&&cur.length){res.push(cur.join(";"));cur=[];len=0}cur.push(it);len+=it.length+1}
+    if(cur.length)res.push(cur.join(";"));o.items=[];return res;
+  };
+  return o;
+}
+function parseChunk(d){
+  const ops=[];if(typeof d!=="string")return ops;
+  for(const it of d.split(";").slice(0,3000)){
+    const k=it[0];
+    if(k==="s"){const m=/^s([0-6])\.([0-2])$/.exec(it);if(m)ops.push({k:"s",c:+m[1],w:+m[2]})}
+    else if((k==="x"||k==="u")&&it.length===1)ops.push({k});
+    else if(k==="p"){let x=0,y=0,first=true;
+      for(const pr of it.slice(1).split(" ")){const m=/^(-?\d{1,5}),(-?\d{1,5})$/.exec(pr);if(!m)continue;
+        if(first){x=+m[1];y=+m[2];first=false}else{x+=+m[1];y+=+m[2]}
+        ops.push({k:"p",x:clamp(x,0,1000),y:clamp(y,0,1000)});if(ops.length>20000)return ops}}
+  }
+  return ops;
+}
+
+/* ----- the room, the replay and who does what ----- */
+const mineMoves=()=>{const d=ON.players[ON.uid]||{},sm=Array.isArray(d.moves)?d.moves:[];return ON.mine.moves.length>sm.length?ON.mine.moves:sm};
+const summary=()=>({phase:ON.D&&ON.D.over?"over":"play",next:ON.D&&!ON.D.over&&ON.D.cur?ON.D.cur.drawer:null});
+function flush(){
+  const code=ON.code,tok=ON.token;
+  HubOnline.rooms.writeMine(code,{moves:mineMoves(),turn:summary()}).then(()=>{},e=>{
+    if(tok!==ON.token||!ON.active)return;
+    if(e&&e.code==="denied"){ON.mine={moves:[]};recompute();showView()}
+  });
+}
+// Appends my records, shows the result at once (the overlay) and sends them.
+function push(...recs){
+  ON.mine.moves=[...mineMoves(),...recs];
+  recompute();flush();showView();
+}
+function recompute(){
+  const movesOf=u=>u===ON.uid?mineMoves():((ON.players[u]||{}).moves||[]);
+  const prev=ON.D, D=replayOnline(ON.room,movesOf,ON.uid);
+  if(!D||D.me<0){ON.D=null;ON.fatal="This game can't be shown.";return}
+  ON.D=D;ON.fatal="";
+  if(!prev){return}
+  if(D.done.length>prev.done.length){
+    const last=D.done[D.done.length-1];
+    if(last.why==="guessed")sfx("score");else if(ON.buzzed!==last.t){ON.buzzed=last.t;sfx("buzzer")}
+  }
+  if(D.over&&!prev.over)sfx("win");
+  const c=D.cur,pc=prev.cur;
+  if(c&&c.drawer===ON.uid&&!c.started&&!(pc&&pc.t===c.t&&pc.drawer===ON.uid&&!pc.started)){sfx("chime");ON.flag=true}   // it is my turn to draw
+  if(!c||c.drawer!==ON.uid||c.started)ON.flag=false;
+}
+function recordIfOver(){
+  const D=ON.D;
+  if(!ON.active||!D||!D.over||ON.rec)return;
+  ON.rec=true;
+  if(ON.players[ON.uid]&&(ON.players[ON.uid].turn||{}).phase!=="over")flush();   // my own summary says "over" too
+  try{const max=Math.max(...Object.values(D.scores)),mine=D.scores[ON.uid];
+    if(HubKit.recordResult)HubKit.recordResult(OL.game,`${ON.uid}:${ON.code}`,{won:mine===max,score:mine})}catch(e){}
+}
+function signals(){
+  const on=ON.active&&ON.flag;
+  const t=on?"Your turn to draw · Pictionary":ON.title;
+  if(document.title!==t)document.title=t;
+  if(on!==ON.badge){ON.badge=on;try{if(HubKit.setBadge)HubKit.setBadge(on)}catch(e){}}
+}
+function onSnap(snap){
+  if(snap.error){
+    ON.err=snap.error;
+    if(!ON.D){ON.fatal=snap.error.code==="offline"?"You're offline. Reconnect and try again.":"Couldn't reach the game server.";showView()}
+    return;
+  }
+  const hadErr=!!ON.err;ON.err=null;
+  if(!snap.room){if(!ON.D){ON.fatal="No game with that code.";showView()}return}
+  ON.room=snap.room;ON.players=snap.players||{};
+  const code=ON.code;
+  if(!(ON.room.seats&&ON.room.seats[ON.uid])){leaveOnline();HubLobby.notSeated(code,{gameName:OL.name,accent:OL.accent});return}
+  if(ON.room.status!=="playing"){leaveOnline();enterRoom(code);return}
+  const first=!ON.D;
+  recompute();
+  if(!ON.D){showView();return}
+  if(first||hadErr)ON.vsig="";
+  if(!ON.wrote){ON.wrote=true;if(!ON.players[ON.uid]&&!ON.mine.moves.length)flush()}   // the hub reads the turn summary from my own doc
+  showView();
+  recordIfOver();signals();
+}
+// Drawer duties: confirm the first matching guess, or end the turn when the time is up (a second of grace for slow networks).
+function drive(){
+  const D=ON.D,c=D&&D.cur;
+  if(!ON.active||!D||D.over||!c||!c.started||c.drawer!==ON.uid)return;
+  if(ON.seenT!==c.t){ON.seen={};ON.seenT=c.t;ON.seenInit=false}
+  const now=Date.now(), deadline=c.at+D.secs*1000+1000;
+  const ms=c.guesses.filter(g=>g.match);
+  for(const g of ms){const k=g.uid+"#"+g.gi;if(!(k in ON.seen))ON.seen[k]=ON.seenInit?now:null}
+  ON.seenInit=true;
+  const ok=ms.filter(g=>{const s=ON.seen[g.uid+"#"+g.gi];return(s!=null?s:g.at)<=deadline});
+  if(ok.length){
+    ok.sort((a,b)=>{const sa=ON.seen[a.uid+"#"+a.gi],sb=ON.seen[b.uid+"#"+b.gi];
+      return(sa==null?0:1)-(sb==null?0:1)||(sa==null?a.at-b.at:sa-sb)||a.at-b.at});
+    const g=ok[0];pushChunks();
+    push({a:"correct",turn:c.t,uid:g.uid,gi:g.gi},{a:"end",turn:c.t,why:"guessed"});
+    return;
+  }
+  if(now>=deadline){pushChunks();push({a:"end",turn:c.t,why:"time"})}
+}
+function onTick(){
+  const D=ON.D,c=D&&D.cur;
+  if(!ON.active||!D||D.over||!c||!c.started)return;
+  const rem=remaining(D,c),sec=Math.ceil(rem/1000);
+  paintTimer(rem);
+  if(sec!==ON.lastSec){
+    const was=ON.lastSec;ON.lastSec=sec;
+    if(sec>=1&&sec<=10)sfx("tick");
+    if(sec===0&&was>0&&ON.buzzed!==c.t){ON.buzzed=c.t;sfx("buzzer")}
+  }
+  drive();
+}
+function paintTimer(rem){
+  const D=ON.D,tm=$("tm");if(!tm||!D)return;
+  const s=Math.ceil(rem/1000);
+  tm.textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+  tm.classList.toggle("low",s<=10);
+  const b=$("bar");if(b)b.style.width=(rem/(D.secs*1000)*100)+"%";
+}
+
+/* ----- entering and leaving ----- */
+function openOnlineLobby(){
+  S.notice="";
+  HubLobby.openCreateJoin({game:OL.game,gameName:OL.name,seatOptions:[2,3,4,5,6,7,8],opts:()=>({secs:O.secs,rounds:O.rounds}),accent:OL.accent,onRoom:enterRoom});
+}
+function enterRoom(code){
+  S.notice="";
+  try{history.replaceState(null,"",`${location.pathname}?room=${code}`)}catch(e){}
+  HubLobby.enter(code,{game:OL.game,gameName:OL.name,minToStart:2,accent:OL.accent,onPlay:c=>beginOnline(c.code,c.uid),onExit:exitLobby});
+}
+function exitLobby(){
+  try{history.replaceState(null,"",location.pathname)}catch(e){}
+  if(!ON.active)render(true);
+}
+function startOnline(){
+  ON.title=document.title;
+  const rc=new URLSearchParams(location.search).get("room");
+  if(rc==null||rc==="")return false;
+  const code=rc.replace(/\D/g,""), valid=/^[1-9][0-9]{5}$/.test(code);
+  if(valid&&onlineAvailable()){render(true);enterRoom(code);return true}
+  S.notice=valid?"Online play is not available right now. You can still play on this device.":"That link doesn't hold a valid six-digit game code.";
+  try{history.replaceState(null,"",location.pathname)}catch(e){}
+  return false;
+}
+function stopWatch(){
+  ON.token++;
+  if(ON.unsub){try{ON.unsub()}catch(e){}ON.unsub=null}
+}
+function beginOnline(code,uid){
+  stopWatch();teardownPlay();
+  Object.assign(ON,{active:true,code,uid,room:null,players:{},D:null,mine:{moves:[]},first:true,fatal:"",err:null,vkey:"",vsig:"",lastSec:-1,buzzed:-1,seen:{},seenT:-1,
+    gnote:null,flag:false,badge:false,rec:false,wrote:false,note:""});
+  S.notice="";keepAwake();
+  try{history.replaceState(null,"",`${location.pathname}?room=${code}`)}catch(e){}
+  clearInterval(ON.tick);ON.tick=setInterval(onTick,250);
+  showView();
+  const tok=ON.token;
+  ON.unsub=HubOnline.rooms.watch(code,snap=>{if(tok===ON.token)onSnap(snap)});
+}
+function leaveOnline(){
+  stopWatch();teardownPlay();clearInterval(ON.tick);ON.tick=0;
+  const was=ON.active;
+  Object.assign(ON,{active:false,code:null,uid:null,room:null,players:{},D:null,mine:{moves:[]},fatal:"",err:null,vkey:"",vsig:"",flag:false,badge:false});
+  try{document.title=ON.title;if(HubKit.setBadge)HubKit.setBadge(false)}catch(e){}
+  try{history.replaceState(null,"",location.pathname)}catch(e){}
+  try{HubLobby.close()}catch(e){}
+  try{S.wake&&S.wake.release&&S.wake.release();S.wake=null}catch(e){}
+  S.screen="setup";
+  if(was)render(true);
+}
+/* ----- views ----- */
+const players=D=>D.order.map(u=>({u,name:D.names[u],color:D.colors[u],pts:D.scores[u]}));
+function oScoreList(D,nextUid){
+  return `<div class="score">${players(D).map(p=>`<div class="${p.u===nextUid?'on':''}"><span class="dot" style="background:${p.color}"></span><span class="n">${esc(p.name)}${p.u===ON.uid?' (you)':''}</span>${p.u===nextUid?'<span class="tag">draws next</span>':''}<span class="p">${p.pts}</span></div>`).join("")}</div>`;
+}
+function oStatus(D,t){return `<div class="top"><span class="label">Round ${roundOf(D,t)} of ${D.rounds}</span>${HubKit.buttonHTML()}</div>`}
+function resultCard(D,last){
+  const g=last.guesser;
+  return `<div class="wordbox"><span class="cat">${g?esc(D.names[g])+' guessed it!':"Time's up"}</span><span class="word">${esc(last.w)}</span>
+    <span class="cat">${g?`+2 ${esc(D.names[g])} · +1 ${esc(D.names[last.drawer])}`:'No points this turn'}</span></div>`;
+}
+function viewKey(){
+  const D=ON.D;
+  if(ON.fatal||!D)return "conn";
+  if(D.over)return "over";
+  return D.cur.started?"play:"+D.cur.t:"inter:"+D.cur.t;
+}
+function showView(){
+  if(!ON.active)return;
+  const key=viewKey();
+  if(key!==ON.vkey){teardownPlay();ON.vkey=key;ON.vsig="";buildStatic(key)}
+  if(key.startsWith("play:"))paintPlay();
+  else{
+    const sig=JSON.stringify([key,ON.fatal,ON.D&&ON.D.scores,ON.D&&ON.D.done.length]);
+    if(sig!==ON.vsig){ON.vsig=sig;buildStatic(key)}
+  }
+  signals();
+}
+function buildStatic(key){
+  const D=ON.D,a=$("app");let h="";
+  document.documentElement.classList.toggle("noscroll",key.startsWith("play:"));
+  try{HubKit.setFloating(key==="over"||key==="conn")}catch(e){}
+  if(key==="conn"){
+    h=`<div class="fl"></div><div class="stage big"><span class="label">Online game ${esc(fmtCode(ON.code))}</span>
+      <h2 role="status">${esc(ON.fatal||"Connecting to the game server…")}</h2>
+      <div class="row">${ON.fatal?'<button class="primary" data-oa="retry">Try again</button>':''}<button data-oa="leave">Leave</button></div></div>`;
+  }
+  else if(key==="over"){
+    const list=players(D).sort((x,y)=>y.pts-x.pts), max=list[0].pts, w=list.filter(p=>p.pts===max);
+    h=`<div class="fl"></div><div class="stage big"><span class="label">Final</span><h1>${w.length>1?"It's a tie":esc(w[0].name)+" wins"}</h1>
+      ${w.length>1?`<p class="muted">${w.map(p=>esc(p.name)).join(" and ")}</p>`:''}
+      <div class="score">${list.map(p=>`<div class="${p.pts===max?'on':''}"><span class="dot" style="background:${p.color}"></span><span class="n">${esc(p.name)}${p.u===ON.uid?' (you)':''}</span><span class="p">${p.pts}</span></div>`).join("")}</div>
+      <div class="card" style="text-align:left"><span class="label">Turn by turn</span><ol class="recap">${D.done.map(r=>`<li>${esc(D.names[r.drawer])} drew “${esc(r.w)}”: ${r.guesser?esc(D.names[r.guesser])+' got it':'nobody got it'}</li>`).join("")}</ol></div></div>
+      <button class="primary" data-oa="leave">Back to start</button>`;
+  }
+  else if(key.startsWith("inter:")){
+    const c=D.cur,mine=c.drawer===ON.uid,last=D.done[D.done.length-1],name=esc(D.names[c.drawer]);
+    h=`${oStatus(D,c.t)}<div class="stage big">
+      ${last?resultCard(D,last):`<span class="label">Get ready</span><h2>${D.n} players, ${D.total} turns</h2>`}
+      ${oScoreList(D,c.drawer)}
+      <p class="muted">${mine?'It is your turn to draw.':`Next: ${name}`}</p></div>
+      ${mine?'<button class="primary" data-oa="start">Start drawing</button>':`<p class="muted big" role="status">Waiting for ${name} to start drawing…</p>`}`;
+  }
+  else if(key.startsWith("play:")){
+    h=playHTML();
+  }
+  a.innerHTML=h;
+  a.onclick=onAppClick;
+  if(key.startsWith("play:"))setupPlay();
+}
+function onAppClick(e){
+  const b=e.target.closest&&e.target.closest("[data-oa]");
+  if(!b||b.disabled)return;
+  const c=ON.D&&ON.D.cur,act=b.dataset.oa;
+  if(act==="leave")leaveOnline();
+  else if(act==="retry"){beginOnline(ON.code,ON.uid)}
+  else if(act==="start"){if(c&&c.drawer===ON.uid&&!c.started){sfx("tap");push({a:"start",turn:c.t,at:Date.now()})}}
+  else if(act==="skip"){if(c&&c.started&&c.drawer===ON.uid&&!c.skipped&&DRW.ready){sfx("flip");DRW.board.clear();DRW.out.x();push({a:"skip",turn:c.t})}}
+  else if(act==="pen"){DRW.pen=+b.dataset.v;paintTools()}
+  else if(act==="size"){DRW.size=+b.dataset.v;paintTools()}
+  else if(act==="undo"){if(DRW.board&&DRW.board.strokes.length){DRW.board.undo();DRW.out.u()}}
+  else if(act==="clear"){if(DRW.board&&DRW.board.strokes.length){DRW.board.clear();DRW.out.x()}}
+}
+function playHTML(){
+  const mine=ON.D.cur.drawer===ON.uid;
+  return `<div class="play ${mine?'is-drawer':'is-guesser'}" id="play">
+    <div class="phead"><div class="pwho"><span class="label" id="plab"></span><b id="pname"></b></div><span class="ptimer" id="tm" role="timer" aria-label="Time left">0:00</span>${HubKit.buttonHTML()}</div>
+    <div class="bar"><i id="bar"></i></div>
+    ${mine?'<div class="pword" id="pword"></div>':''}
+    <div class="cbox" id="cbox"><div class="cwrap"><canvas id="cv" aria-label="${mine?'Your drawing':'The drawing'}"></canvas></div></div>
+    ${mine?`<div class="tools">
+      <div class="trow" role="group" aria-label="Pen colour and eraser">${PEN.map((c,i)=>`<button type="button" class="sw" data-oa="pen" data-v="${i}" style="--c:${c}" aria-label="${PEN_NAMES[i]}" aria-pressed="false"></button>`).join("")}<button type="button" class="sw er" data-oa="pen" data-v="6" aria-label="Eraser" aria-pressed="false">Erase</button></div>
+      <div class="trow"><span class="trow" role="group" aria-label="Pen size" style="flex:3">${[6,12,20].map((d,i)=>`<button type="button" class="tb" data-oa="size" data-v="${i}" aria-label="Size ${i+1}" aria-pressed="false"><i style="width:${d}px;height:${d}px"></i></button>`).join("")}</span>
+        <button type="button" class="tb" data-oa="undo">Undo</button><button type="button" class="tb" data-oa="clear">Clear</button></div></div>`:''}
+    <div class="feed" id="feed" aria-live="polite"></div>
+    ${mine?'':`<form class="gform" id="gform" autocomplete="off"><input id="gi" type="text" maxlength="40" enterkeyhint="send" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Type your guess" aria-label="Your guess"><button class="primary" type="submit">Guess</button></form>`}
+  </div>`;
+}
+function paintTools(){
+  document.querySelectorAll("[data-oa=pen]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.v===DRW.pen)));
+  document.querySelectorAll("[data-oa=size]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.v===DRW.size)));
+}
+function paintPlay(){
+  const D=ON.D,c=D&&D.cur;if(!c||!c.started||!$("play"))return;
+  const mine=c.drawer===ON.uid;
+  $("plab").textContent=`Round ${roundOf(D,c.t)} of ${D.rounds} · turn ${c.t+1} of ${D.total}`;
+  $("pname").textContent=mine?"You are drawing":`${D.names[c.drawer]} is drawing`;
+  paintTimer(remaining(D,c));
+  if(mine){
+    const sig=c.word.w+"|"+c.skipped;
+    if(sig!==DRW.wsig){DRW.wsig=sig;$("pword").innerHTML=`<div class="pw"><span class="cat">${esc(c.word.c)}</span><span class="word">${esc(c.word.w)}</span></div><button type="button" data-oa="skip" ${c.skipped?'disabled':''}>${c.skipped?'No skips left':'Skip word'}</button>`}
+  }
+  // the feed: wrong guesses only (a matching guess is hidden at once, on every phone)
+  const lines=c.guesses.filter(g=>!g.match).slice(-4).map(g=>`<div class="${g.uid===ON.uid?'me':''}"><b>${esc(D.names[g.uid])}</b> ${esc(g.text)}</div>`);
+  if(!mine&&ON.gnote&&ON.gnote.t===c.t)lines.push(`<div class="ok">${esc(ON.gnote.msg)}</div>`);
+  if(mine&&!lines.length)lines.push('<div class="me">Waiting for guesses…</div>');
+  const f=lines.join("");
+  if(f!==DRW.fsig){DRW.fsig=f;$("feed").innerHTML=f}
+}
+
+/* ----- the drawing: drawer's canvas, viewers' canvas ----- */
+function setupPlay(){
+  const c=ON.D.cur,mine=c.drawer===ON.uid,cv=$("cv");
+  Object.assign(DRW,{board:newBoard(cv),t:c.t,drawer:c.drawer,mine,sent:new Set(),got:new Set(),ready:!mine,nextI:0,q:[],applied:[],tailT:0,initial:true,wsig:"",fsig:"",down:false,tail:null});
+  if(mine){DRW.pen=0;DRW.size=1;DRW.out=newOut()}
+  const box=$("cbox"),lay=()=>{DRW.board&&DRW.board.fit(box.clientWidth-14,box.clientHeight-14)};
+  lay();
+  if(window.ResizeObserver){DRW.ro=new ResizeObserver(lay);DRW.ro.observe(box)}
+  if(mine){
+    DRW.timer=setInterval(pushChunks,CHUNK_MS);
+    bindDrawer(cv);paintTools();
+    DRW.unsub=HubOnline.draw.watch(ON.code,c.drawer,c.t,ownChunks);
+  }else{
+    bindGuess();
+    DRW.unsub=HubOnline.draw.watch(ON.code,c.drawer,c.t,viewChunks);
+  }
+  syncVV();
+  ON.lastSec=-1;
+  paintPlay();
+}
+function teardownPlay(){
+  if(DRW.mine&&DRW.out&&ON.active&&DRW.t>=0){try{pushChunks()}catch(e){}}
+  clearInterval(DRW.timer);DRW.timer=0;
+  if(DRW.unsub){try{DRW.unsub()}catch(e){}DRW.unsub=null}
+  if(DRW.ro){try{DRW.ro.disconnect()}catch(e){}DRW.ro=null}
+  cancelAnimationFrame(DRW.raf);DRW.raf=0;DRW.q=[];DRW.board=null;DRW.out=null;DRW.t=-1;DRW.mine=false;DRW.ready=false;
+  document.documentElement.classList.remove("noscroll");
+}
+function syncVV(){
+  const vv=window.visualViewport,r=document.documentElement.style;
+  r.setProperty("--vvh",(vv?vv.height:window.innerHeight)+"px");
+  r.setProperty("--vvt",(vv?vv.offsetTop:0)+"px");
+}
+if(window.visualViewport){visualViewport.addEventListener("resize",syncVV);visualViewport.addEventListener("scroll",syncVV)}
+window.addEventListener("resize",syncVV);
+syncVV();
+
+function pushChunks(){
+  if(!DRW.out||!DRW.mine||!ON.active)return;
+  for(const d of DRW.out.take()){
+    const i=DRW.nextI++,t=DRW.t,id=`${ON.uid}_${t}_${i}`;
+    DRW.sent.add(id);sendChunk(t,i,d,0);
+  }
+}
+function sendChunk(t,i,d,tries){
+  const code=ON.code,tok=ON.token;
+  HubOnline.draw.add(code,t,i,d).catch(e=>{
+    if(tok!==ON.token||!ON.active||tries>=4||(e&&e.code==="invalid"))return;
+    setTimeout(()=>{if(tok===ON.token&&ON.active)sendChunk(t,i,d,tries+1)},1500*(tries+1));
+  });
+}
+function ownChunks(list,err){          // after a reload: rebuild my canvas from my own chunks, then continue from max(i)+1
+  if(!DRW.mine)return;
+  if(!err)for(const ch of list){
+    DRW.nextI=Math.max(DRW.nextI,ch.i+1);
+    if(DRW.sent.has(ch.id)||DRW.got.has(ch.id))continue;
+    DRW.got.add(ch.id);
+    for(const op of parseChunk(ch.d))DRW.board.apply(op);
+  }
+  if(!DRW.ready)DRW.board.open=null;
+  DRW.ready=true;
+}
+function viewChunks(list,err){
+  if(DRW.mine||!DRW.board||err)return;
+  const same=DRW.applied.length<=list.length&&DRW.applied.every((id,k)=>list[k].id===id);
+  if(!same){DRW.board.clear();DRW.q=[];DRW.applied=[];DRW.tailT=0;DRW.initial=true}
+  const now=performance.now();
+  for(const ch of list.slice(DRW.applied.length)){
+    DRW.applied.push(ch.id);
+    const ops=parseChunk(ch.d);
+    if(DRW.initial){ops.forEach(op=>DRW.board.apply(op));continue}
+    if(DRW.tailT-now>1500){DRW.q.forEach(o=>DRW.board.apply(o.op));DRW.q=[];DRW.tailT=0}   // far behind: catch up at once
+    const at=Math.max(now,DRW.tailT),step=ops.length?CHUNK_MS*0.9/ops.length:0;
+    ops.forEach((op,j)=>DRW.q.push({t:at+j*step,op}));
+    DRW.tailT=at+CHUNK_MS;
+  }
+  DRW.initial=false;
+  if(DRW.q.length&&!DRW.raf)DRW.raf=requestAnimationFrame(animate);
+}
+function animate(){
+  DRW.raf=0;
+  const now=performance.now();
+  while(DRW.q.length&&DRW.q[0].t<=now&&DRW.board)DRW.board.apply(DRW.q.shift().op);
+  if(DRW.q.length&&DRW.board)DRW.raf=requestAnimationFrame(animate);
+}
+function bindDrawer(cv){
+  const pos=e=>{const r=cv.getBoundingClientRect();return[clamp(Math.round((e.clientX-r.left)/r.width*1000),0,1000),clamp(Math.round((e.clientY-r.top)/r.height*1000),0,1000)]};
+  let lx=-9,ly=-9;
+  const add=(x,y,force)=>{
+    if(!force&&Math.abs(x-lx)<2&&Math.abs(y-ly)<2){DRW.tail=[x,y];return}
+    DRW.board.add(x,y);DRW.out.pt(x,y);lx=x;ly=y;DRW.tail=null;
+  };
+  cv.addEventListener("pointerdown",e=>{
+    if(!DRW.ready||!DRW.mine||DRW.down||(e.pointerType==="mouse"&&e.button!==0))return;
+    e.preventDefault();try{cv.setPointerCapture(e.pointerId)}catch(_){}
+    DRW.down=true;DRW.board.begin(DRW.pen,DRW.size);DRW.out.s(DRW.pen,DRW.size);
+    const[x,y]=pos(e);lx=-9;ly=-9;add(x,y,true);
+  });
+  cv.addEventListener("pointermove",e=>{
+    if(!DRW.down)return;
+    const evs=e.getCoalescedEvents?e.getCoalescedEvents():[];
+    for(const ev of(evs.length?evs:[e])){const[x,y]=pos(ev);add(x,y)}
+  });
+  const up=()=>{
+    if(!DRW.down)return;
+    DRW.down=false;
+    if(DRW.tail){add(DRW.tail[0],DRW.tail[1],true)}
+  };
+  ["pointerup","pointercancel","lostpointercapture"].forEach(n=>cv.addEventListener(n,up));
+  cv.addEventListener("contextmenu",e=>e.preventDefault());
+}
+function bindGuess(){
+  const f=$("gform"),inp=$("gi");
+  f.onsubmit=e=>{
+    e.preventDefault();
+    const c=ON.D&&ON.D.cur;if(!c||!c.started||c.drawer===ON.uid)return;
+    const text=inp.value.replace(/\s+/g," ").trim().slice(0,40);
+    if(!text)return;
+    if(c.guesses.filter(g=>g.uid===ON.uid).length>=60)return;
+    inp.value="";
+    push({a:"guess",turn:c.t,at:Date.now(),text});
+    if(wkey(text)===c.key){ON.gnote={t:c.t,msg:"That's it! Waiting for the drawer's phone to confirm…"};paintPlay()}
+    else sfx("tap");
+    inp.focus({preventScroll:true});
+  };
+}
+function onlineCardHTML(){
+  if(!onlineAvailable())return "";
+  return `<div class="card" id="ocard"><span class="label">Online · each player on their own phone</span>
+    <p class="muted tiny">2 to 8 players. You take turns drawing on your phone; everyone else watches live and types guesses.</p>
+    <span class="label">Drawing time</span>
+    <div class="seg">${[45,60,90].map(v=>`<button data-osecs="${v}" aria-pressed="${O.secs===v}">${v}s</button>`).join("")}</div>
+    <span class="label">Turns each</span>
+    <div class="seg">${[1,2,3].map(v=>`<button data-orounds="${v}" aria-pressed="${O.rounds===v}">${v}</button>`).join("")}</div>
+    <div class="row"><button class="primary" id="ocreate">Create online game</button><button id="ojoin">Join with a code</button></div></div>`;
+}
+
 try{HubKit.init({
   id:"sketch",name:"Pictionary",accent:"#ffd23f",scheme:"auto",floating:true,
   items:()=>{
     const it=[{label:"How to play",onSelect:showRules}];
+    if(ON.active){it.push({label:"Leave game",confirm:"Tap again to leave this game",onSelect:leaveOnline});return it}
     if(S.screen!=="setup"&&S.screen!=="final")it.push({label:"End game",confirm:"Tap again to end this game",onSelect:endGame});
     return it;
   },
   onOpen:()=>{
+    if(ON.active)return;
     if(S.screen==="draw"&&!S.paused){S.paused=true;render()}
   }
 })}catch(e){}
-restore();
-render();
+if(!startOnline()){restore();render()}
 </script>
 
 </body></html>
