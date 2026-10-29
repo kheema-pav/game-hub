@@ -36,6 +36,8 @@ Online games use a six-digit code. Nobody signs in: each browser gets an anonymo
 4. Firestore > Rules: paste the contents of `firebase/firestore.rules` and **Publish**.
 5. Paste the config into `shared/firebase-config.js` as `window.HUB_FIREBASE_CONFIG = { apiKey: "...", authDomain: "...", projectId: "...", appId: "..." };`, commit and push. (The values are public by design; the rules protect the data. Anonymous sign-in needs no authorised-domain entry. Optionally restrict the API key by HTTP referrer in Google Cloud > Credentials.)
 
+Rules update for bigger rooms and drawing (platform v2): rooms may now have 2 to 8 seats and an optional `opts` map (at most 8 keys from a fixed whitelist: `mode`, `target`, `friendly`, `secs`, `rounds`, with simple values; set at creation and never changed), and a new `rooms/{code}/draw/{uid}_{turn}_{seq}` collection holds Pictionary drawing chunks (`{t, i, d}`, create-only, `d` up to 40,000 characters, written only by a seated player of a started room under their own uid; an identical re-send is allowed so retries are safe). Re-publish `firebase/firestore.rules` once when updating an existing project.
+
 ### Testing the rules and online code locally
 
 Needs Node and Java 21. From `firebase/test/`: `npm install`, then `npm test` starts the Firestore emulator (project `demo-game-hub`, port 8180) and runs `rules.test.js`. To try the site against local emulators, run `npx firebase emulators:start --only firestore,auth --project demo-game-hub --config ../firebase.json`, serve the site, and in the browser console set `localStorage['hub.emulator'] = '127.0.0.1:8180:9199'` (host:firestorePort:authPort; remove it to go back to the real project).

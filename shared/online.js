@@ -5,8 +5,11 @@
  *
  * Frozen API (see the plan, amendment 3):
  *   available()  ready()  uid
- *   rooms.create({game,maxSeats})  rooms.lookup(code)  rooms.join(code)  rooms.leave(code)  rooms.start(code)
+ *   rooms.create({game,maxSeats,opts})  rooms.lookup(code)  rooms.join(code)  rooms.leave(code)  rooms.start(code)
  *   rooms.watch(code, cb)  rooms.writeMine(code, {setup?, moves, turn})  rooms.mine()  rooms.forget(code)
+ * Added by docs/online-phase2.md (R2, R6):
+ *   maxSeats 2..8; opts = optional flat object (<= 8 keys, string/int/bool values) fixed at creation, returned as room.opts
+ *   draw.add(code, t, i, d)  draw.watch(code, drawerUid, t, cb)   (append-only drawing chunks for Pictionary)
  */
 (function () {
   'use strict';
@@ -219,7 +222,17 @@
     o = o || {};
     var game = o.game, maxSeats = o.maxSeats;
     if (typeof game !== 'string' || !/^[a-z][a-z0-9_-]{0,23}$/.test(game)) throw err('invalid', 'create needs a game id');
-    if (!(maxSeats === 2 || maxSeats === 3 || maxSeats === 4)) throw err('invalid', 'maxSeats must be 2, 3 or 4');
+    if (!(typeof maxSeats === 'number' && maxSeats % 1 === 0 && maxSeats >= 2 && maxSeats <= 8)) throw err('invalid', 'maxSeats must be a whole number from 2 to 8');
+    var opts = null;
+    if (o.opts !== undefined && o.opts !== null) {
+      var okOpts = typeof o.opts === 'object' && !Array.isArray(o.opts) && Object.keys(o.opts).length <= 8;
+      if (okOpts) Object.keys(o.opts).forEach(function (k) {
+        var v = o.opts[k];
+        if (!(typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && v % 1 === 0))) okOpts = false;
+      });
+      if (!okOpts) throw err('invalid', 'opts must be an object of at most 8 string, integer or boolean values');
+      opts = clean(o.opts);
+    }
     if (offlineNow()) throw err('offline', 'Offline');
     await ready().catch(readyErrFor('room'));
     var fs = core.m.fs, seat = mySeat();
@@ -231,10 +244,12 @@
           if (snap.exists()) throw COLLISION;
           var seats = {};
           seats[api.uid] = seat;
-          tx.set(ref, {
+          var data = {
             game: game, v: 1, host: api.uid, seed: 1 + randInt(2147483646), maxSeats: maxSeats,
             status: 'open', seats: seats, createdAt: fs.serverTimestamp()
-          });
+          };
+          if (opts) data.opts = opts;
+          tx.set(ref, data);
         }), 12000, 'offline');
         remember(code, game);
         return { code: code };
@@ -264,7 +279,7 @@
       var seats = d.seats && typeof d.seats === 'object' ? d.seats : {};
       return {
         exists: true, code: code, game: d.game, status: d.status, maxSeats: d.maxSeats, host: d.host,
-        seats: seats, seated: !!seats[api.uid]
+        seats: seats, seated: !!seats[api.uid], opts: d.opts && typeof d.opts === 'object' ? d.opts : {}
       };
     })(), 8000, 'timeout');
   }
@@ -418,6 +433,64 @@
     await fs.setDoc(fs.doc(core.db, 'rooms', code, 'players', api.uid), data);
   }
 
+  /* ---------- drawing chunks (Pictionary): rooms/{code}/draw/{uid}_{t}_{i} = {t, i, d}, create-only ---------- */
+  // Chunks go out strictly in call order, one at a time, never merged. A failed chunk rejects its own promise and the
+  // queue moves on; the caller may call add() again with the same arguments (an identical re-send is allowed by the rules).
+  var drawQueues = {};
+  function drawAdd(code, t, i, d) {
+    code = norm(code);
+    return new Promise(function (resolve, reject) {
+      if (!CODE_RE.test(code)) return reject(err('missing', 'No game with that code'));
+      if (!(typeof t === 'number' && t % 1 === 0 && t >= 0 && t < 100)) return reject(err('invalid', 't must be a whole number from 0 to 99'));
+      if (!(typeof i === 'number' && i % 1 === 0 && i >= 0 && i < 100000)) return reject(err('invalid', 'i must be a whole number from 0 to 99999'));
+      if (typeof d !== 'string' || d.length > 40000) return reject(err('invalid', 'd must be a string of at most 40000 characters'));
+      var q = drawQueues[code] || (drawQueues[code] = { busy: false, jobs: [] });
+      q.jobs.push({ t: t, i: i, d: d, resolve: resolve, reject: reject });
+      if (!q.busy) drawPump(code, q);
+    });
+  }
+  function drawPump(code, q) {
+    var job = q.jobs.shift();
+    if (!job) { q.busy = false; return; }
+    q.busy = true;
+    ready().catch(readyErrFor('room')).then(function () {
+      var fs = core.m.fs;
+      return fs.setDoc(fs.doc(core.db, 'rooms', code, 'draw', api.uid + '_' + job.t + '_' + job.i), { t: job.t, i: job.i, d: job.d });
+    }).then(function () { job.resolve(); }, function (e) { job.reject(fsErr(e)); }).then(function () { drawPump(code, q); });
+  }
+  // cb(list, error): list = every chunk of turn t written by drawerUid, sorted by i, as [{id, t, i, d}]. Called on every change.
+  function drawWatch(code, drawerUid, t, cb) {
+    code = norm(code);
+    var stopped = false, unsub = null, prefix = String(drawerUid) + '_';
+    function out(list, error) {
+      if (stopped || typeof cb !== 'function') return;
+      try { cb(list, error || null); } catch (e) { try { console.error(e); } catch (_) {} }
+    }
+    function fail(e) { var x = e && e.isHub ? e : fsErr(e); out([], { code: x.code, message: x.message }); }
+    if (!CODE_RE.test(code) || !drawerUid || !(typeof t === 'number' && t % 1 === 0)) {
+      Promise.resolve().then(function () { out([], null); });
+      return function () { stopped = true; };
+    }
+    ready().then(function () {
+      if (stopped) return;
+      var fs = core.m.fs;
+      unsub = fs.onSnapshot(fs.query(fs.collection(core.db, 'rooms', code, 'draw'), fs.where('t', '==', t)), function (snap) {
+        var list = [];
+        snap.forEach(function (d) {
+          if (d.id.indexOf(prefix) !== 0) return;
+          var x = plain(d.data({ serverTimestamps: 'estimate' }));
+          list.push({ id: d.id, t: x.t, i: x.i, d: typeof x.d === 'string' ? x.d : '' });
+        });
+        list.sort(function (a, b) { return a.i - b.i; });
+        out(list, null);
+      }, fail);
+    }, fail);
+    return function () {
+      stopped = true;
+      if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
+    };
+  }
+
   function mine() {
     var a = loadRooms().filter(function (r) { return !api.uid || r.uid === api.uid; });
     a.sort(function (x, y) { return (y.joinedAt || 0) - (x.joinedAt || 0); });
@@ -431,5 +504,6 @@
   api.available = available;
   api.ready = ready;
   api.rooms = { create: create, lookup: lookup, join: join, leave: leave, start: start, watch: watch, writeMine: writeMine, mine: mine, forget: forget };
+  api.draw = { add: drawAdd, watch: drawWatch };
   window.HubOnline = api;
 })();

@@ -276,8 +276,18 @@ const BASE_NUMS = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
 const SQ3 = Math.sqrt(3);
 const AX_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 
-function shuffle(a) {
-  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+/* Deterministic generator: the state holder h ({rng: uint32}) is the game state itself (s.rng) or a stand-in
+   during board generation. Without a numeric h.rng everything falls back to Math.random (local play). */
+function mulberryNext(h) { // same mulberry32 as codex/index.html rng(); the uint32 state lives in h.rng
+  const a = (h.rng + 0x6D2B79F5) | 0;
+  h.rng = a >>> 0;
+  let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+}
+function rand(h) { return (h && typeof h.rng === 'number') ? mulberryNext(h) : Math.random(); }
+function shuffle(a, h) {
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand(h) * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
 }
 function emptyHand() { return { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 }; }
@@ -355,23 +365,27 @@ function numbersOk(board) {
     });
   });
 }
-function assignNumbers(board, pool) {
+function assignNumbers(board, pool, h) {
   const land = board.hexes.filter(h => isLandT(h.terrain) && h.terrain !== 'desert');
   for (let t = 0; t < 2000; t++) {
-    const p = shuffle(pool.slice());
+    const p = shuffle(pool.slice(), h);
     land.forEach((h, i) => { h.number = p[i]; });
     if (numbersOk(board)) return;
   }
 }
 
-function placePorts(board, landPred, types) {
+function placePorts(board, landPred, types, h) {
   const H = board.hexes;
   const cands = board.edges.filter(e => e.hexes.length === 2 &&
     e.hexes.some(i => landPred(H[i])) && e.hexes.some(i => H[i].terrain === 'sea'));
   const L = H.filter(landPred);
   const cx = L.reduce((s, h) => s + h.x, 0) / L.length, cy = L.reduce((s, h) => s + h.y, 0) / L.length;
-  cands.sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
-  const m = cands.length, n = types.length, off = Math.floor(Math.random() * m);
+  // Tie-safe: angles rounded to 1e-9 with the edge id as tie-break, and near-zero offsets snapped to +0
+  // (so the +/-pi branch cut cannot flip between engines), so Safari and Chrome agree on the order.
+  const snap = d => (Math.abs(d) < 1e-9 ? 0 : d);
+  const ang = e => Math.round(Math.atan2(snap(e.y - cy), snap(e.x - cx)) * 1e9);
+  cands.sort((a, b) => (ang(a) - ang(b)) || (a.id - b.id));
+  const m = cands.length, n = types.length, off = Math.floor(rand(h) * m);
   const used = new Set(), chosen = [];
   for (let i = 0; i < n; i++) {
     const base = off + Math.round(i * m / n);
@@ -381,7 +395,7 @@ function placePorts(board, landPred, types) {
       chosen.push(e); e.v.forEach(v => used.add(v)); break;
     }
   }
-  const ts = shuffle(types.slice());
+  const ts = shuffle(types.slice(), h);
   chosen.forEach((e, i) => {
     const sea = e.hexes.find(j => H[j].terrain === 'sea');
     board.ports.push({ edge: e.id, type: ts[i], hex: sea, v: e.v.slice() });
@@ -389,7 +403,7 @@ function placePorts(board, landPred, types) {
   });
 }
 
-function genBase() {
+function genBase(h) {
   const defs = [];
   for (let r = -3; r <= 3; r++) for (let q = -3; q <= 3; q++) {
     const d = Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
@@ -397,12 +411,12 @@ function genBase() {
   }
   const terr = shuffle([
     'wood', 'wood', 'wood', 'wood', 'sheep', 'sheep', 'sheep', 'sheep', 'wheat', 'wheat', 'wheat', 'wheat',
-    'brick', 'brick', 'brick', 'ore', 'ore', 'ore', 'desert']);
+    'brick', 'brick', 'brick', 'ore', 'ore', 'ore', 'desert'], h);
   let k = 0; defs.forEach(d => { if (d.terrain === 'land') d.terrain = terr[k++]; });
   const b = buildBoard(defs);
-  b.home = 0; b.hexes.forEach(h => { h.home = isLandT(h.terrain); });
-  assignNumbers(b, BASE_NUMS);
-  placePorts(b, h => isLandT(h.terrain), ['any', 'any', 'any', 'any', 'wood', 'brick', 'sheep', 'wheat', 'ore']);
+  b.home = 0; b.hexes.forEach(x => { x.home = isLandT(x.terrain); });
+  assignNumbers(b, BASE_NUMS, h);
+  placePorts(b, x => isLandT(x.terrain), ['any', 'any', 'any', 'any', 'wood', 'brick', 'sheep', 'wheat', 'ore'], h);
   return b;
 }
 
@@ -435,9 +449,9 @@ const SEA_TEMPLATES = [
     '.........',
   ],
 ];
-function genSeafarers() {
-  const tpl = SEA_TEMPLATES[Math.floor(Math.random() * SEA_TEMPLATES.length)];
-  const flip = Math.random() < 0.5;
+function genSeafarers(h) {
+  const tpl = SEA_TEMPLATES[Math.floor(rand(h) * SEA_TEMPLATES.length)];
+  const flip = rand(h) < 0.5;
   const defs = [];
   tpl.forEach((row, r) => {
     for (let c = 0; c < row.length; c++) {
@@ -449,25 +463,27 @@ function genSeafarers() {
   });
   const main = defs.filter(d => d.terrain === 'main');
   const isle = defs.filter(d => d.terrain === 'isle');
-  const mainT = shuffle(['desert'].concat(repeat(shuffle(RES.slice()).concat(shuffle(RES.slice())).concat(shuffle(RES.slice())).concat(shuffle(RES.slice())), main.length - 1)));
+  const mainT = shuffle(['desert'].concat(repeat(shuffle(RES.slice(), h).concat(shuffle(RES.slice(), h)).concat(shuffle(RES.slice(), h)).concat(shuffle(RES.slice(), h)), main.length - 1)), h);
   main.forEach((d, i) => { d.terrain = mainT[i]; });
-  const isleT = shuffle(['gold', 'gold'].concat(repeat(shuffle(['ore', 'wheat', 'sheep', 'wood', 'brick', 'ore', 'wheat', 'brick', 'wood', 'sheep']), isle.length - 2)));
+  const isleT = shuffle(['gold', 'gold'].concat(repeat(shuffle(['ore', 'wheat', 'sheep', 'wood', 'brick', 'ore', 'wheat', 'brick', 'wood', 'sheep'], h), isle.length - 2)), h);
   isle.forEach((d, i) => { d.terrain = isleT[i]; });
   const b = buildBoard(defs);
   // home island = the biggest one
   const sizes = Array(b.islands).fill(0);
   b.hexes.forEach(h => { if (h.island !== null) sizes[h.island]++; });
   b.home = sizes.indexOf(Math.max(...sizes));
-  b.hexes.forEach(h => { h.home = h.island === b.home; });
-  assignNumbers(b, BASE_NUMS.concat(shuffle([2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 3, 4, 5, 6, 8, 9, 10, 11])));
-  placePorts(b, h => h.home, ['any', 'any', 'wood', 'brick', 'sheep', 'wheat', 'ore']);
+  b.hexes.forEach(x => { x.home = x.island === b.home; });
+  assignNumbers(b, BASE_NUMS.concat(shuffle([2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 3, 4, 5, 6, 8, 9, 10, 11], h)), h);
+  placePorts(b, x => x.home, ['any', 'any', 'wood', 'brick', 'sheep', 'wheat', 'ore'], h);
   return b;
 }
 
 /* ---------- State ---------- */
 function newGame(opts) {
   const mode = opts.mode === 'seafarers' ? 'seafarers' : 'base';
-  const board = mode === 'seafarers' ? genSeafarers() : genBase();
+  // seeded: the generator state is carried in the game state as s.rng; unseeded: Math.random as before
+  const gen = { rng: (typeof opts.seed === 'number' && isFinite(opts.seed)) ? opts.seed >>> 0 : null };
+  const board = mode === 'seafarers' ? genSeafarers(gen) : genBase(gen);
   const n = opts.players.length;
   const players = opts.players.map((p, i) => ({
     id: i, name: p.name, color: p.color, bot: !!p.bot, hand: emptyHand(), dev: [], knights: 0,
@@ -477,7 +493,7 @@ function newGame(opts) {
   const order = [];
   for (let i = 0; i < n; i++) order.push(i);
   for (let i = n - 1; i >= 0; i--) order.push(i);
-  const deck = shuffle([].concat(Array(14).fill('knight'), Array(5).fill('vp'), Array(2).fill('road'), Array(2).fill('plenty'), Array(2).fill('mono')));
+  const deck = shuffle([].concat(Array(14).fill('knight'), Array(5).fill('vp'), Array(2).fill('road'), Array(2).fill('plenty'), Array(2).fill('mono')), gen);
   const s = {
     v: 1, mode, target: opts.target || (mode === 'seafarers' ? 13 : 10), friendly: !!opts.friendly, level: ['easy', 'normal', 'hard'].includes(opts.level) ? opts.level : 'normal',
     board, players,
@@ -493,6 +509,7 @@ function newGame(opts) {
     discardQ: [], goldQ: [], after: null, stealFrom: [], freeRoads: 0, offer: null,
     winner: null, rollCounts: Array(13).fill(0),
   };
+  if (gen.rng !== null) s.rng = gen.rng;
   log(s, 'New game. Place your first settlement and road.');
   return s;
 }
@@ -745,8 +762,8 @@ function doSetupEdge(s, e, kind) {
 
 function doRoll(s, forced) {
   if (s.phase !== 'roll') return err('Not now');
-  const d1 = forced ? forced[0] : 1 + Math.floor(Math.random() * 6);
-  const d2 = forced ? forced[1] : 1 + Math.floor(Math.random() * 6);
+  const d1 = forced ? forced[0] : 1 + Math.floor(rand(s) * 6);
+  const d2 = forced ? forced[1] : 1 + Math.floor(rand(s) * 6);
   const sum = d1 + d2;
   s.dice = [d1, d2]; s.rollCounts[sum]++;
   log(s, `${nm(s, s.current)} rolled ${sum}.`, s.current);
@@ -836,7 +853,7 @@ function doSteal(s, target, auto) {
   const pool = [];
   RES.forEach(r => { for (let i = 0; i < h[r]; i++) pool.push(r); });
   if (pool.length) {
-    const r = pool[Math.floor(Math.random() * pool.length)];
+    const r = pool[Math.floor(rand(s) * pool.length)];
     h[r]--; s.players[s.current].hand[r]++;
     log(s, `${nm(s, s.current)} steals a card from ${nm(s, target)}.`, s.current);
     fx(s, { type: 'steal', from: target, to: s.current, res: r });

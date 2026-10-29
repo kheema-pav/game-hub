@@ -381,6 +381,9 @@ button.card:hover { transform: translateY(-2px); }
 
 <script src="../shared/hubkit.js"></script>
 <script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
+<script src="../shared/firebase-config.js"></script>
+<script src="../shared/online.js"></script>
+<script src="../shared/lobby.js"></script>
 
 <script>
 // ===== Splendor rules engine =====
@@ -508,23 +511,27 @@ const NOBLES = [
   return { id, name, req: { w, u, g, r, k } };
 });
 
-function shuffle(a) {
+// `rnd` defaults to Math.random, so local play is unchanged. Online games pass the room's seeded generator.
+function shuffle(a, rnd = Math.random) {
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rnd() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
 }
+// Seeded generator (mulberry32), the same one Codex uses online, and a copying shuffle for the seat order.
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function sshuffle(arr, r) { return shuffle(arr.slice(), r); }
 const emptyTokens = () => ({ w: 0, u: 0, g: 0, r: 0, k: 0, o: 0 });
 const emptyBonus = () => ({ w: 0, u: 0, g: 0, r: 0, k: 0 });
 
-function newGame(seats) {
+function newGame(seats, rnd = Math.random) {
   const n = seats.length;
   const per = n === 2 ? 4 : n === 3 ? 5 : 7;
   const bank = { w: per, u: per, g: per, r: per, k: per, o: 5 };
-  const decks = [1, 2, 3].map(lv => shuffle(CARDS.filter(c => c.level === lv).map(c => c.id)));
+  const decks = [1, 2, 3].map(lv => shuffle(CARDS.filter(c => c.level === lv).map(c => c.id), rnd));
   const market = decks.map(d => d.splice(0, 4));
-  const nobles = shuffle(NOBLES.map(x => x.id)).slice(0, n + 1);
+  const nobles = shuffle(NOBLES.map(x => x.id), rnd).slice(0, n + 1);
   const players = seats.map(s => ({
     name: s.name, type: s.type, level: s.level || null,
     tokens: emptyTokens(), bonus: emptyBonus(), pts: 0, cards: [], reserved: [], nobles: [],
@@ -543,6 +550,18 @@ function cloneState(s) {
     nobles: s.nobles.slice(), log: [],
   };
 }
+
+// cloneState empties the log (bots do not need it); the online replay keeps it.
+function cloneFull(s) { const c = cloneState(s); c.log = s.log.slice(); return c; }
+
+// The rules-relevant part of a state (no log, no UI-only fields such as seat type, uid or colour).
+function engineOf(s) {
+  return {
+    players: s.players.map(p => ({ tokens: p.tokens, bonus: p.bonus, pts: p.pts, cards: p.cards, reserved: p.reserved, nobles: p.nobles })),
+    bank: s.bank, decks: s.decks, market: s.market, nobles: s.nobles, cur: s.cur, round: s.round, finalRound: s.finalRound, over: s.over, passes: s.passes,
+  };
+}
+const fingerprint = s => JSON.stringify(engineOf(s));
 
 const tokenCount = p => TOKENS.reduce((n, c) => n + p.tokens[c], 0);
 

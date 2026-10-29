@@ -4,6 +4,7 @@ const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@fir
 const { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where } = require('firebase/firestore');
 const { setLogLevel } = require('firebase/firestore');
 setLogLevel('silent');
+const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -55,10 +56,61 @@ test('create: seats may only hold the caller', async () => {
   await assertFails(setDoc(doc(db('host'), 'rooms', '482619'), roomDoc({ seats: { host: seat(), x: seat() } })));
   await assertFails(setDoc(doc(db('host'), 'rooms', '482619'), roomDoc({ seats: { x: seat() } })));
 });
-test('create: maxSeats must be 2..4 and an int', async () => {
-  for (const m of [1, 5, 0, '3', 2.5]) {
+test('create: maxSeats must be 2..8 and an int', async () => {
+  await assertSucceeds(setDoc(doc(db('host'), 'rooms', '482618'), roomDoc({ maxSeats: 8 })));
+  await assertSucceeds(setDoc(doc(db('host'), 'rooms', '482617'), roomDoc({ maxSeats: 5 })));
+  for (const m of [1, 9, 0, -1, '3', 2.5]) {
     await assertFails(setDoc(doc(db('host'), 'rooms', '482619'), roomDoc({ maxSeats: m })));
   }
+});
+test('create: opts accepted when valid', async () => {
+  const ok = (code, opts) => assertSucceeds(setDoc(doc(db('host'), 'rooms', code), roomDoc({ opts })));
+  await ok('482601', {});
+  await ok('482602', { mode: 'base', target: 10, friendly: false });
+  await ok('482603', { mode: 'seafarers', target: 20, friendly: true });
+  await ok('482604', { target: 5 });
+  await ok('482605', { secs: 45, rounds: 3 });
+  await ok('482606', { secs: 90, rounds: 1 });
+  await ok('482607', { mode: 'base', target: 12, friendly: true, secs: 60, rounds: 2 });
+});
+test('create: opts with bad values are rejected', async () => {
+  const bad = async (opts) => assertFails(setDoc(doc(db('host'), 'rooms', '482619'), roomDoc({ opts })));
+  await bad({ mode: 'chess' });
+  await bad({ mode: 5 });
+  await bad({ target: 4 });
+  await bad({ target: 21 });
+  await bad({ target: '10' });
+  await bad({ target: 10.5 });
+  await bad({ friendly: 'yes' });
+  await bad({ friendly: 1 });
+  await bad({ secs: 30 });
+  await bad({ secs: '60' });
+  await bad({ rounds: 0 });
+  await bad({ rounds: 4 });
+  await bad({ rounds: 1.5 });
+});
+test('create: opts that is not a map, has unknown keys or is oversized is rejected', async () => {
+  const bad = async (opts) => assertFails(setDoc(doc(db('host'), 'rooms', '482619'), roomDoc({ opts })));
+  await bad('base');
+  await bad(5);
+  await bad([1, 2]);
+  await bad(null);
+  await bad({ admin: true });
+  await bad({ mode: 'base', extra: 1 });
+  await bad({ mode: 'base', target: 10, friendly: true, secs: 60, rounds: 1, a: 1, b: 2, c: 3, d: 4 }); // 9 keys
+  await bad({ k1: 1, k2: 2, k3: 3, k4: 4, k5: 5, k6: 6, k7: 7, k8: 8, k9: 9 });
+});
+test('opts: cannot be added or changed after creation (join, start, direct update)', async () => {
+  await seed('482619', roomDoc({ opts: { mode: 'base', target: 10 } }));
+  await assertFails(updateDoc(doc(db('host'), 'rooms', '482619'), { opts: { mode: 'seafarers', target: 10 } }));
+  await assertFails(updateDoc(doc(db('p2'), 'rooms', '482619'), { 'seats.p2': seat('Bo'), opts: { mode: 'seafarers' } }));
+  await assertFails(updateDoc(doc(db('p2'), 'rooms', '482619'), { 'opts.target': 20 }));
+  await assertSucceeds(updateDoc(doc(db('p2'), 'rooms', '482619'), { 'seats.p2': seat('Bo') })); // opts untouched is fine
+  await seed('482620', roomDoc());
+  await assertFails(updateDoc(doc(db('host'), 'rooms', '482620'), { opts: { mode: 'base' } }));
+  await seed('482621', roomDoc({ opts: { secs: 45 }, seats: { host: seat(), p2: seat('Bo') } }));
+  await assertFails(updateDoc(doc(db('host'), 'rooms', '482621'), { status: 'playing', startedAt: 5, opts: { secs: 90 } }));
+  await assertSucceeds(updateDoc(doc(db('host'), 'rooms', '482621'), { status: 'playing', startedAt: 5 }));
 });
 test('create: must start open, seed must be int, no extra fields', async () => {
   await assertFails(setDoc(doc(db('host'), 'rooms', '482619'), roomDoc({ status: 'playing' })));
@@ -261,6 +313,84 @@ test('players: any signed-in user may read and list the players, signed-out may 
 test('players: delete is never allowed', async () => {
   await seed('482619', playingRoom(), { p2: { moves: [mv(1)] } });
   await assertFails(deleteDoc(doc(db('p2'), 'rooms', '482619', 'players', 'p2')));
+});
+
+/* ---------- draw chunks ---------- */
+const chunk = (t, i, d) => ({ t, i, d: d === undefined ? 'c3w2:12,45;13,47' : d });
+const drawRef = (uid, code, id) => doc(db(uid), 'rooms', code || '482619', 'draw', id);
+
+test('draw: a seated member of a playing room creates a chunk with their own prefix', async () => {
+  await seed('482619', playingRoom());
+  await assertSucceeds(setDoc(drawRef('p2', '482619', 'p2_0_0'), chunk(0, 0)));
+  await assertSucceeds(setDoc(drawRef('p2', '482619', 'p2_0_1'), chunk(0, 1)));
+  await assertSucceeds(setDoc(drawRef('host', '482619', 'host_7_12'), chunk(7, 12, 'x')));
+  await assertSucceeds(setDoc(drawRef('p2', '482619', 'p2_99_99999'), chunk(99, 99999, '')));
+});
+test('draw: another player\'s prefix is rejected', async () => {
+  await seed('482619', playingRoom());
+  await assertFails(setDoc(drawRef('p2', '482619', 'host_0_0'), chunk(0, 0)));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2x_0_0'), chunk(0, 0)));
+  await assertFails(setDoc(drawRef('p2', '482619', 'host_0_0'), chunk(0, 0))); // even with a matching body
+});
+test('draw: id must match t and i in the body', async () => {
+  await seed('482619', playingRoom());
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_1'), chunk(0, 0)));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_1_0'), chunk(0, 0)));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0'), chunk(0, 0)));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_00_0'), chunk(0, 0)));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_0_x'), chunk(0, 0)));
+  await assertFails(setDoc(drawRef('p2', '482619', 'chunk'), chunk(0, 0)));
+});
+test('draw: non-member, signed-out user and open room are rejected', async () => {
+  await seed('482619', playingRoom());
+  await assertFails(setDoc(drawRef('stranger', '482619', 'stranger_0_0'), chunk(0, 0)));
+  await assertFails(setDoc(doc(anon(), 'rooms', '482619', 'draw', 'p2_0_0'), chunk(0, 0)));
+  await seed('482620', roomDoc({ seats: { host: seat(), p2: seat('Bo') } }));
+  await assertFails(setDoc(drawRef('p2', '482620', 'p2_0_0'), chunk(0, 0)));
+  await assertFails(setDoc(drawRef('host', '482620', 'host_0_0'), chunk(0, 0)));
+});
+test('draw: bad body (extra key, wrong types, out of range, missing field) is rejected', async () => {
+  await seed('482619', playingRoom());
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_0'), Object.assign(chunk(0, 0), { w: 100 })));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_0'), { t: 0, i: 0 }));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_0'), { t: 0, d: 'x' }));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_0'), { t: '0', i: 0, d: 'x' }));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_0'), { t: 0, i: 0, d: 5 }));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_0'), { t: 0, i: 0, d: ['x'] }));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_100_0'), chunk(100, 0)));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_-1_0'), chunk(-1, 0)));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_100000'), chunk(0, 100000)));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_-1'), chunk(0, -1)));
+});
+test('draw: d of 40,000 characters is fine, 40,001 fails', async () => {
+  await seed('482619', playingRoom());
+  await assertSucceeds(setDoc(drawRef('p2', '482619', 'p2_0_0'), chunk(0, 0, 'a'.repeat(40000))));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_1'), chunk(0, 1, 'a'.repeat(40001))));
+});
+test('draw: an identical re-send is allowed, a changed one is not', async () => {
+  await seed('482619', playingRoom());
+  await assertSucceeds(setDoc(drawRef('p2', '482619', 'p2_0_0'), chunk(0, 0, 'abc')));
+  await assertSucceeds(setDoc(drawRef('p2', '482619', 'p2_0_0'), chunk(0, 0, 'abc')));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_0'), chunk(0, 0, 'abd')));
+  await assertFails(setDoc(drawRef('p2', '482619', 'p2_0_0'), chunk(0, 0, '')));
+  await assertFails(updateDoc(drawRef('p2', '482619', 'p2_0_0'), { d: 'changed' }));
+  await assertFails(setDoc(drawRef('host', '482619', 'p2_0_0'), chunk(0, 0, 'abc'))); // not the owner
+});
+test('draw: delete is never allowed', async () => {
+  await seed('482619', playingRoom());
+  await assertSucceeds(setDoc(drawRef('p2', '482619', 'p2_0_0'), chunk(0, 0)));
+  await assertFails(deleteDoc(drawRef('p2', '482619', 'p2_0_0')));
+  await assertFails(deleteDoc(drawRef('host', '482619', 'p2_0_0')));
+});
+test('draw: any signed-in user may read and query chunks by turn, signed-out may not', async () => {
+  await seed('482619', playingRoom());
+  await assertSucceeds(setDoc(drawRef('p2', '482619', 'p2_0_0'), chunk(0, 0)));
+  await assertSucceeds(setDoc(drawRef('p2', '482619', 'p2_1_0'), chunk(1, 0)));
+  await assertSucceeds(getDoc(drawRef('stranger', '482619', 'p2_0_0')));
+  const snap = await assertSucceeds(getDocs(query(collection(db('host'), 'rooms', '482619', 'draw'), where('t', '==', 0))));
+  assert.strictEqual(snap.size, 1);
+  await assertFails(getDocs(query(collection(anon(), 'rooms', '482619', 'draw'), where('t', '==', 0))));
+  await assertFails(getDoc(doc(anon(), 'rooms', '482619', 'draw', 'p2_0_0')));
 });
 
 /* ---------- reads, lists, deletes ---------- */
