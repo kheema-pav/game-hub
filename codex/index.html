@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><link rel="manifest" href="../manifest.webmanifest"><link rel="apple-touch-icon" href="../icons/icon-180.png"></head><body>
 <title>Codex Naturalis</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -58,7 +58,7 @@ button{font:inherit;color:inherit}
 .pchip .bar span{display:block;height:100%;background:var(--pc)}
 .pchip.turn{border-color:var(--pc);box-shadow:0 0 0 1px var(--pc)}
 .pchip.viewing{background:var(--accent-wash)}
-.actions{display:flex;gap:8px}
+.actions{display:flex;gap:8px;align-items:center}
 .btn{background:var(--panel-2);border:1px solid var(--rule);border-radius:6px;padding:.4em .85em;cursor:pointer}
 .btn:hover{border-color:var(--accent)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:700}
@@ -234,6 +234,16 @@ table.scores .sub{display:block;font-size:.72rem;color:var(--muted);font-weight:
   .side{border-left:0;border-top:1px solid var(--rule);padding-left:max(16px,env(safe-area-inset-left,0px))}
   .hcard{font-size:9px}
   .pchip{min-width:110px}
+  .top{gap:8px 12px}
+  .brand{order:1;flex:1 1 0;min-width:0}
+  .actions{order:2}
+  .players{order:3;flex:1 1 100%}
+}
+@media (max-width:520px){
+  .players{flex-wrap:nowrap;gap:6px}
+  .pchip{min-width:0;flex:1 1 0;padding:5px 7px 6px;column-gap:6px}
+  .pchip .pscore{font-size:1.15rem}
+  .players[data-n="4"] .pchip small{display:none}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
@@ -255,7 +265,7 @@ table.scores .sub{display:block;font-size:.72rem;color:var(--muted);font-weight:
   <header class="top">
     <div class="brand"><h1>Codex Naturalis</h1><span id="roundInfo"></span></div>
     <div class="players" id="players"></div>
-    <div class="actions"><button class="btn" data-act="rules">Rules</button><button class="btn" data-act="new">New game</button></div>
+    <div class="actions"></div>
   </header>
   <main class="boardwrap">
     <div class="boardbar">
@@ -277,6 +287,8 @@ table.scores .sub{display:block;font-size:.72rem;color:var(--muted);font-weight:
 </div>
 <div class="modal-back" id="modal" hidden><div class="modal" id="modalBody" role="dialog" aria-modal="true"></div></div>
 
+<script src="../shared/hubkit.js"></script>
+<script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
 <script>
 // ---------- Card data ----------
 const KING=['F','P','A','I'], OBJS=['Q','K','M'], SYMS=[...KING,...OBJS];
@@ -451,6 +463,13 @@ const KEY='naturalists-codex-v1';
 let S=null;
 const ui={view:0,sel:null,faces:{},zoom:window.innerWidth<700?7:9,setup:{face:null,obj:null},modal:null,ng:null,origin:null,aiToken:0,fresh:null,gateOpen:-1,dismissOver:false,undo:null,aim:null,hover:null,hlObj:null,flight:null,refill:null,ptr:matchMedia('(hover: hover)').matches?'mouse':'touch'};
 const $=s=>document.querySelector(s);
+// sounds go through HubKit.sfx (looked up at call time); bots play quieter
+const sfx=(name,quiet)=>{try{HubKit.sfx(name,quiet?{volume:.6}:undefined);}catch(e){}};
+// bot speed: multiplies the delays in aiStep
+const PACES=['slow','normal','fast'], PACE_MULT={slow:1.6,normal:1,fast:.5};
+let pace='normal';
+try{const v=localStorage.getItem('codex.pace');if(PACE_MULT[v]) pace=v;}catch(e){}
+const cyclePace=()=>{pace=PACES[(PACES.indexOf(pace)+1)%PACES.length];try{localStorage.setItem('codex.pace',pace);}catch(e){}};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ic=(s,cls='')=>`<svg class="ic ic-${s} ${cls}" aria-hidden="true"><use href="#i-${s}"/></svg>`;
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
@@ -468,7 +487,7 @@ function handOwner(){
 }
 
 function newGame(cfg){
-  ui.aiToken++;
+  ui.aiToken++;ui.prevPlayer=null;
   const res=shuffle(RES_IDS), gold=shuffle(GOLD_IDS), st=shuffle(START_IDS), objs=shuffle(OBJECTIVES.map(o=>o.id));
   S={v:1,phase:'setup',turn:0,round:1,setupIdx:0,endTriggered:false,turnsLeft:0,passStreak:0,lastHuman:-1,log:[],
      resDeck:res,goldDeck:gold,market:{R:[],G:[]},common:[objs.pop(),objs.pop()],results:null,
@@ -506,6 +525,8 @@ function startTurn(){
   S.passStreak=0;
   S.phase='place';
   if(!p.ai&&humans().length>1&&S.lastHuman!==S.turn) S.phase='handoff';
+  // control passed from a different player to a human (in pass-and-play this is when the pass-the-device screen appears)
+  if(!p.ai&&ui.prevPlayer!=null&&ui.prevPlayer!==S.turn) sfx('chime');
   ui.view=S.turn;
   save();render();
   if(p.ai) aiStep();
@@ -521,6 +542,8 @@ function doPlace(id,face,x,y){
   log(`<b>${esc(p.name)}</b> played a ${NAMES[card.k]} ${kind} card${face==='back'?' face down':''}${pts?` for ${pts} point${pts>1?'s':''}`:''}.`);
   ui.fresh={view:S.turn,key:kxy(x,y),pts};
   ui.sel=null;
+  sfx('place',p.ai);
+  if(pts>0) setTimeout(()=>sfx('score',p.ai),120);
   S.phase='draw';
   if(!drawOptions().length){save();render();return setTimeout(endTurn,p.ai?500:200);}
   save();render();
@@ -546,6 +569,7 @@ function undoPlace(){
   if(!u||!canAct()||S.phase!=='draw') return;
   S=JSON.parse(u.state);
   ui.undo=null;ui.sel=u.id;ui.faces[u.id]=u.face;ui.view=S.turn;
+  sfx('swish');
   save();render();
 }
 function doDraw(src){
@@ -563,6 +587,7 @@ function doDraw(src){
   }
   if(!id) return;
   p.hand.push(id);
+  sfx('draw',p.ai);
   ui.flight={id,face:src[1]==='D'?'back':'front',from:fromRect,drawer:S.turn};
   if(src[1]!=='D') ui.refill=src;
   log(`<b>${esc(p.name)}</b> drew from ${from}.`);
@@ -570,6 +595,7 @@ function doDraw(src){
 }
 function endTurn(){
   const n=S.players.length, i=S.turn, p=cur();
+  ui.prevPlayer=i;
   if(!S.endTriggered){
     if(p.score>=20||(!S.resDeck.length&&!S.goldDeck.length)){
       S.endTriggered=true;S.turnsLeft=(n-1-i)+n;
@@ -594,6 +620,8 @@ function finishGame(){
   const winners=S.results.filter(r=>r.total===top.total&&r.done===top.done).map(r=>S.players[r.i].name);
   log(`Game over. ${winners.map(esc).join(' and ')} ${winners.length>1?'share the win':'wins'} with ${top.total} points.`);
   ui.dismissOver=false;
+  const humanWon=S.results.some(r=>r.total===top.total&&r.done===top.done&&!S.players[r.i].ai);
+  setTimeout(()=>sfx(humanWon?'win':'end'),300);
   save();render();
 }
 
@@ -667,7 +695,7 @@ function aiDraw(p){
 }
 function aiStep(){
   const token=ui.aiToken, p=cur();
-  const live=()=>token===ui.aiToken&&S&&cur()===p&&p.ai;
+  const live=()=>token===ui.aiToken&&S&&cur()===p&&p.ai, pm=PACE_MULT[pace]||1;
   setTimeout(()=>{
     if(!live()) return;
     if(S.phase==='place'){
@@ -679,12 +707,12 @@ function aiStep(){
       setTimeout(()=>{
         ui.preview=null;
         if(live()) doPlace(m.id,m.face,m.x,m.y);
-      },1000);
+      },Math.round(1000*pm));
     } else if(S.phase==='draw'){
       const src=aiDraw(p);
       if(src) doDraw(src); else endTurn();
     }
-  },S.phase==='place'?1100:1500);
+  },Math.round((S.phase==='place'?1100:1500)*pm));
 }
 
 // ---------- Rendering ----------
@@ -730,6 +758,7 @@ function render(){
 }
 function renderTop(){
   const live=S.phase!=='setup'&&S.phase!=='over';
+  $('#players').dataset.n=S.players.length;
   $('#players').innerHTML=S.players.map((p,i)=>`<button class="pchip ${live&&i===S.turn?'turn':''} ${i===ui.view?'viewing':''}" data-act="view" data-i="${i}" style="--pc:var(--p${i})" title="View ${esc(p.name)}'s codex">
     <span class="dot"></span><span class="pname">${esc(p.name)}${p.ai?`<small>${p.level==='hard'?'hard bot':p.level==='easy'?'easy bot':'bot'}</small>`:''}</span><span class="pscore">${p.score}</span>
     <span class="bar"><span style="width:${Math.min(100,p.score*5)}%"></span></span></button>`).join('');
@@ -864,6 +893,7 @@ function renderModal(){
   else if(S.phase==='handoff') h=`<h2>${esc(cur().name)}, your turn</h2><p class="lede">Pass the device to ${esc(cur().name)}. Other players look away while the hand is shown.</p><div class="mfoot"><button class="btn primary" data-act="handoff-ok">Show my hand</button></div>`;
   else if(S.phase==='over'&&!ui.dismissOver) h=resultsHTML();
   m.hidden=!h;
+  try{HubKit.setFloating(!m.hidden);}catch(e){}
   if(h&&body.dataset.sig!==h){body.innerHTML=h;body.dataset.sig=h;}
 }
 function setupHTML(){
@@ -930,8 +960,9 @@ document.addEventListener('click',e=>{
     case 'view': if(S.phase!=='setup'){ui.view=+d.i;render();} break;
     case 'sel':
       if(!canAct()||S.phase!=='place') return;
+      {const c=CARDS[d.id];sfx(ui.sel!==d.id&&c.type==='G'&&(ui.faces[d.id]||'front')==='front'&&!meetsReq(counts(cur().board),c)?'error':'tap');}
       ui.sel=ui.sel===d.id?null:d.id; ui.aim=null; ui.hlObj=null; ui.view=S.turn; render(); break;
-    case 'flip': ui.aim=null; ui.faces[d.id]=(ui.faces[d.id]||'front')==='front'?'back':'front'; render(); break;
+    case 'flip': sfx('flip'); ui.aim=null; ui.faces[d.id]=(ui.faces[d.id]||'front')==='front'?'back':'front'; render(); break;
     case 'spot': {
       if(!canAct()||S.phase!=='place'||!ui.sel) return;
       const key=kxy(+d.x,+d.y);
@@ -940,7 +971,7 @@ document.addEventListener('click',e=>{
       placeHuman(+d.x,+d.y); break;
     }
     case 'place-aim': if(ui.aim&&canAct()&&S.phase==='place'&&ui.sel){const [x,y]=ui.aim.split(',').map(Number);placeHuman(x,y);} break;
-    case 'hlobj': ui.hlObj=ui.hlObj===d.o?null:d.o; ui.view=+d.p; renderTop(); renderBoard(); renderSide(); break;
+    case 'hlobj': sfx('tap'); ui.hlObj=ui.hlObj===d.o?null:d.o; ui.view=+d.p; renderTop(); renderBoard(); renderSide(); break;
     case 'undo': undoPlace(); break;
     case 'draw': if(canAct()&&S.phase==='draw') doDraw(d.src); break;
     case 'zin': zoomTo(ui.zoom*1.25); break;
@@ -969,7 +1000,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&ui.modal&&S){ui.modal=null;render();}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&ui.undo){e.preventDefault();undoPlace();}
-  if((e.key==='f'||e.key==='F')&&ui.sel&&!ui.modal&&!/INPUT/.test(document.activeElement.tagName)){ui.aim=null;ui.faces[ui.sel]=(ui.faces[ui.sel]||'front')==='front'?'back':'front';render();}
+  if((e.key==='f'||e.key==='F')&&ui.sel&&!ui.modal&&!/INPUT/.test(document.activeElement.tagName)){sfx('flip');ui.aim=null;ui.faces[ui.sel]=(ui.faces[ui.sel]||'front')==='front'?'back':'front';render();}
 });
 
 document.addEventListener('pointerdown',e=>{ui.ptr=e.pointerType||'mouse';},true);
@@ -1062,6 +1093,15 @@ function start(data){
     else if(S.phase==='pass') setTimeout(endTurn,300);
   } else newGame([{name:'You',ai:false},{name:'Moss',ai:true}]);
 }
+HubKit.init({
+  id:'codex',name:'Codex Naturalis',accent:{light:'#7a5a12',dark:'#d8b45a'},scheme:'auto',
+  items:()=>[
+    {label:'Rules',onSelect:()=>{ui.modal='rules';render();}},
+    {label:'New game',onSelect:()=>openNewGame()},
+    {label:'Bot speed',value:pace[0].toUpperCase()+pace.slice(1),onSelect:cyclePace}
+  ]
+});
+{const a=document.querySelector('.top .actions');if(a&&!a.querySelector('[data-hubkit="menu"]')) a.insertAdjacentHTML('beforeend',HubKit.buttonHTML());}
 window.claude?.hot?.snapshot?.(()=>({S,view:ui.view,zoom:ui.zoom}));
 window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{});
 </script>
