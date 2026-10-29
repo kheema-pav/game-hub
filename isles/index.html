@@ -1,0 +1,2628 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Settle the Isles</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;700;800&display=swap">
+<style>
+/* Layout: one-screen app. Home = scrolling setup sheet; Game = player strip / ocean board / dock (side column on wide screens). */
+:root {
+  --deep: #0a2231;
+  --panel: #113246;
+  --panel-2: #174259;
+  --line: #24546d;
+  --ink: #eef4f2;
+  --muted: #98b6c2;
+  --gold: #ffc94a;
+  --gold-ink: #3a2a00;
+  --danger: #ff7a66;
+  --ok: #7ad48a;
+  --ocean-1: #1f6a8c;
+  --ocean-2: #0c3348;
+  --font-display: 'Fredoka', 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Nunito', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --radius: 14px;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--deep); color: var(--ink); font-family: var(--font-body); font-size: 15px; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+#app { height: 100%; }
+.screen { height: 100%; }
+
+/* ---------- Home ---------- */
+#home { overflow-y: auto; background: radial-gradient(120% 70% at 50% 0%, #1b5a78 0%, var(--deep) 65%); }
+.home-inner { max-width: 560px; margin: 0 auto; padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 18px; }
+.hero { display: flex; align-items: center; gap: 14px; }
+.hero svg { flex: none; width: 76px; height: 76px; }
+.hero h1 { font-family: var(--font-display); font-weight: 700; font-size: 2.1rem; line-height: 1; margin: 0; letter-spacing: .2px; }
+.hero p { margin: 6px 0 0; color: var(--muted); font-size: .95rem; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.label { font-family: var(--font-display); font-weight: 600; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.continue { background: linear-gradient(135deg, #2b6d3c, #1d5130); border-color: #3c8a50; flex-direction: row; align-items: center; justify-content: space-between; }
+.continue b { font-family: var(--font-display); font-size: 1.1rem; }
+.continue small { display: block; color: #cfe8d3; }
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mode { text-align: left; background: var(--panel-2); border: 2px solid transparent; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.mode[aria-pressed="true"] { border-color: var(--gold); background: #1d4e68; }
+.mode b { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; }
+.mode span { color: var(--muted); font-size: .85rem; line-height: 1.3; }
+.mode svg { width: 100%; height: 54px; }
+.presets { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: .85rem; font-weight: 700; }
+.prow { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; }
+.swatch { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.85); }
+.prow input { min-width: 0; width: 100%; background: var(--deep); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; color: var(--ink); font: inherit; font-weight: 700; }
+.seg { display: inline-flex; background: var(--deep); border-radius: 10px; padding: 3px; border: 1px solid var(--line); }
+.seg button { background: none; border: 0; border-radius: 8px; padding: 6px 10px; font-weight: 800; font-size: .82rem; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--gold); color: var(--gold-ink); }
+.icon-btn { background: none; border: 0; width: 32px; height: 32px; border-radius: 8px; color: var(--muted); font-size: 1.2rem; line-height: 1; }
+.icon-btn:disabled { opacity: .25; }
+.addp { align-self: flex-start; background: none; border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px; color: var(--muted); font-weight: 700; }
+.opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.opt div { min-width: 0; }
+.opt small { display: block; color: var(--muted); font-size: .8rem; }
+.stepper { display: inline-flex; align-items: center; gap: 4px; background: var(--deep); border: 1px solid var(--line); border-radius: 10px; }
+.stepper button { width: 34px; height: 34px; border: 0; background: none; font-size: 1.1rem; font-weight: 800; color: var(--ink); }
+.stepper button:disabled { opacity: .3; }
+.stepper output { min-width: 26px; text-align: center; font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.toggle { width: 48px; height: 28px; border-radius: 999px; border: 0; background: var(--deep); position: relative; flex: none; box-shadow: inset 0 0 0 1px var(--line); }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--muted); transition: transform .18s; }
+.toggle[aria-pressed="true"] { background: var(--gold); }
+.toggle[aria-pressed="true"]::after { transform: translateX(20px); background: var(--gold-ink); }
+.btn { border: 0; border-radius: 12px; padding: 12px 16px; font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; background: var(--panel-2); color: var(--ink); }
+.btn.primary { background: var(--gold); color: var(--gold-ink); box-shadow: 0 3px 0 #b8861c; }
+.btn.primary:active { transform: translateY(2px); box-shadow: 0 1px 0 #b8861c; }
+.armed, .act.armed, .btn.armed { background: #ff9f43 !important; color: #2a1600 !important; box-shadow: 0 0 0 3px rgba(255,159,67,.35) !important; animation: blink 1s ease-in-out infinite; }
+.btn:disabled { opacity: .4; cursor: default; box-shadow: none; }
+.btn.big { padding: 15px; font-size: 1.25rem; }
+.btn.danger { background: #5a2420; color: #ffd6cf; }
+details.rules summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; }
+details.rules p, details.rules li { color: var(--muted); line-height: 1.45; font-size: .9rem; }
+details.rules ul { padding-left: 18px; margin: 6px 0; }
+
+/* ---------- Game ---------- */
+#game { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "top" "board" "dock"; }
+.topbar { grid-area: top; display: flex; gap: 8px; align-items: stretch; padding-block: 8px 6px; padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: max(10px, env(safe-area-inset-right, 0px)); background: var(--deep); position: relative; z-index: 3; }
+.players { flex: 1; min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
+.pchip { position: relative; min-width: 0; background: var(--panel); border-radius: 12px; padding: 6px 7px 5px; border: 2px solid transparent; display: flex; flex-direction: column; gap: 2px; transition: border-color .2s, background .2s; }
+.pchip.turn { border-color: var(--pc); background: var(--panel-2); }
+.pchip .nm { display: flex; align-items: center; gap: 5px; font-weight: 800; font-size: .8rem; white-space: nowrap; overflow: hidden; }
+.pchip .nm i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 0 1.5px rgba(0,0,0,.4); }
+.pchip .nm span { overflow: hidden; text-overflow: ellipsis; }
+.pchip .vp { font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; line-height: 1; display: flex; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums; }
+.pchip .vp small { font-family: var(--font-body); font-size: .68rem; color: var(--muted); font-weight: 700; }
+.pchip .meta { display: flex; gap: 7px; font-size: .7rem; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+.pchip .meta span { display: inline-flex; align-items: center; gap: 2px; }
+.pchip .meta svg { width: 11px; height: 11px; }
+.pchip .badges { position: absolute; top: -6px; right: 4px; display: flex; gap: 3px; }
+.badge { background: var(--gold); color: var(--gold-ink); font-size: .58rem; font-weight: 800; border-radius: 6px; padding: 1px 4px; letter-spacing: .03em; }
+.gain { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); background: var(--ok); color: #0c2b14; font-weight: 800; font-size: .72rem; border-radius: 999px; padding: 1px 7px; animation: rise 1.8s ease-out forwards; pointer-events: none; z-index: 2; }
+.menu-btn { flex: none; width: 40px; border-radius: 12px; background: var(--panel); border: 0; display: grid; place-items: center; }
+.menu-btn svg { width: 20px; height: 20px; }
+
+.board-wrap { grid-area: board; position: relative; overflow: hidden; background: radial-gradient(90% 80% at 50% 45%, var(--ocean-1) 0%, var(--ocean-2) 100%); }
+#board { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
+.dice-box { position: absolute; top: 10px; left: max(10px, env(safe-area-inset-left, 0px)); display: flex; gap: 6px; pointer-events: none; }
+.die { width: 34px; height: 34px; background: #fbf6ea; border-radius: 8px; box-shadow: 0 3px 0 #c9bfa6, 0 4px 10px rgba(0,0,0,.3); display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); padding: 5px; }
+.die b { width: 6px; height: 6px; border-radius: 50%; background: #2a2118; place-self: center; }
+.die.red-die b { background: #c0261b; }
+.dice-box.rolling .die { animation: tumble .5s ease-out; }
+.dice-sum { align-self: center; font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.4); }
+.zoom { position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
+.zoom button { width: 36px; height: 36px; border-radius: 10px; border: 0; background: rgba(10,34,49,.75); color: var(--ink); font-weight: 800; font-size: 1.1rem; }
+.ticker { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); right: 56px; bottom: 10px; display: flex; flex-direction: column; gap: 3px; pointer-events: none; }
+.ticker div { align-self: flex-start; max-width: 100%; background: rgba(10,34,49,.72); border-radius: 8px; padding: 3px 8px; font-size: .78rem; font-weight: 700; color: #dbe9ee; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ticker div:first-child { opacity: .6; }
+.ticker i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+.toasts { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; width: min(92%, 380px); z-index: 25; }
+.toast { background: #fbf6ea; color: #23190d; font-weight: 800; border-radius: 12px; padding: 8px 14px; box-shadow: 0 6px 18px rgba(0,0,0,.35); animation: drop .25s ease-out; font-size: .9rem; text-align: center; border-left: 6px solid var(--tc, var(--gold)); }
+.toast.err { background: #ffe1db; }
+
+.dock { grid-area: dock; background: var(--panel); border-top: 1px solid var(--line); padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px)); padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 8px; position: relative; z-index: 3; }
+.prompt { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: .95rem; min-height: 24px; }
+.prompt i { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
+.prompt span { min-width: 0; flex: 1; }
+.prompt .thinking::after { content: ""; display: inline-block; width: 1.2em; text-align: left; animation: dots 1.2s steps(4) infinite; }
+.hand { display: flex; gap: 6px; align-items: stretch; }
+.rcard { flex: 1; min-width: 0; max-width: 64px; border-radius: 10px; overflow: hidden; background: #fbf6ea; color: #23190d; display: flex; flex-direction: column; box-shadow: 0 2px 0 rgba(0,0,0,.25); transition: transform .2s; }
+.rcard .art { height: 30px; display: grid; place-items: center; }
+.rcard .art svg { width: 26px; height: 26px; }
+.rcard .ct { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; text-align: center; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.rcard.zero { opacity: .45; }
+.rcard.bump { animation: bump .5s ease-out; }
+.devbtn { flex: 1.15; min-width: 0; max-width: 76px; border: 0; border-radius: 10px; background: linear-gradient(160deg, #6b3fa0, #432469); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-weight: 800; font-size: .7rem; }
+.devbtn b { font-family: var(--font-display); font-size: 1.15rem; }
+.devbtn.glow { box-shadow: 0 0 0 2px var(--gold); }
+.actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.act { border: 0; border-radius: 11px; background: var(--panel-2); padding: 6px 2px 5px; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.act .ic { height: 22px; display: grid; place-items: center; }
+.act .ic svg { height: 22px; width: 30px; }
+.act .lb { font-size: .72rem; font-weight: 800; }
+.act .cost { display: flex; gap: 2px; height: 8px; }
+.act .cost i { width: 8px; height: 8px; border-radius: 2px; }
+.act:disabled { opacity: .35; cursor: default; }
+.act.on { background: var(--gold); color: var(--gold-ink); }
+.row2 { display: flex; gap: 6px; }
+.row2 .btn { flex: 1; padding: 11px 8px; font-size: .98rem; min-width: 0; }
+.row2 .btn.narrow { flex: 0 0 auto; }
+
+/* modal sheet */
+.modal-back.still, .modal-back.still .sheet { animation: none; }
+.modal-back { position: fixed; inset: 0; background: rgba(4,14,20,.6); display: flex; align-items: flex-end; justify-content: center; z-index: 20; animation: fade .15s; }
+.sheet { width: 100%; max-width: 520px; max-height: 88%; overflow-y: auto; background: var(--panel); border-radius: 18px 18px 0 0; border: 1px solid var(--line); padding-block: 16px calc(18px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 14px; animation: up .22s ease-out; }
+@media (min-width: 700px) { .modal-back { align-items: center; } .sheet { border-radius: 18px; max-height: 84%; } }
+.sheet header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sheet h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1.35rem; text-wrap: balance; }
+.sheet p { margin: 0; color: var(--muted); line-height: 1.4; }
+.res-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.rpick { border: 2px solid transparent; border-radius: 12px; background: #fbf6ea; color: #23190d; padding: 0 0 4px; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 800; font-size: .72rem; }
+.rpick .art { width: 100%; height: 34px; display: grid; place-items: center; }
+.rpick .art svg { width: 26px; height: 26px; }
+.rpick[aria-pressed="true"] { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+.rpick:disabled { opacity: .35; }
+.rpick small { font-weight: 700; color: #6b5a40; font-size: .66rem; }
+.cnt { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.cnt .stepper { flex-direction: column; gap: 0; }
+.cnt .stepper button { height: 28px; }
+.tabs { display: flex; gap: 6px; }
+.tabs button { flex: 1; border: 0; border-radius: 10px; padding: 9px; background: var(--deep); color: var(--muted); font-weight: 800; }
+.tabs button[aria-pressed="true"] { background: var(--panel-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.who { display: flex; align-items: center; gap: 10px; background: var(--deep); border-radius: 12px; padding: 8px 10px; }
+.who i { flex: none; width: 14px; height: 14px; border-radius: 50%; }
+.who .n { flex: 1; min-width: 0; font-weight: 800; }
+.who .n small { display: block; color: var(--muted); font-weight: 700; }
+.who .btn { padding: 8px 12px; font-size: .9rem; }
+.devlist { display: flex; flex-direction: column; gap: 8px; }
+.devcard { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; background: var(--deep); border-radius: 12px; padding: 10px; }
+.devcard .pic { width: 44px; height: 56px; border-radius: 8px; background: linear-gradient(160deg, #6b3fa0, #432469); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; }
+.devcard b { font-family: var(--font-display); font-weight: 600; }
+.devcard small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.3; }
+.score-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.score-table td, .score-table th { padding: 7px 4px; white-space: nowrap; text-align: right; border-bottom: 1px solid var(--line); font-size: .88rem; }
+.score-table th { color: var(--muted); font-weight: 700; font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; }
+.score-table td:first-child, .score-table th:first-child { text-align: left; }
+.loglist { display: flex; flex-direction: column; gap: 4px; font-size: .86rem; max-height: 46vh; overflow-y: auto; }
+.loglist div { color: #cfe0e6; }
+.loglist i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.costs { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; font-weight: 700; font-size: .9rem; }
+.costs .pips { display: flex; gap: 3px; }
+.costs .pips i { width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+.menu-list { display: flex; flex-direction: column; gap: 8px; }
+.menu-list .btn { text-align: left; }
+.confirm-row { display: flex; gap: 8px; }
+.confirm-row .btn { flex: 1; }
+
+/* curtain for pass and play */
+.curtain { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: radial-gradient(80% 60% at 50% 40%, var(--pc) 0%, #08141c 85%); text-align: center; }
+.curtain h2 { font-family: var(--font-display); font-weight: 700; font-size: 2.2rem; margin: 0; text-shadow: 0 3px 12px rgba(0,0,0,.4); text-wrap: balance; }
+.curtain p { margin: 0; color: #e3eef2; font-weight: 700; }
+
+/* board svg classes */
+.spot { cursor: pointer; }
+.spot-v { animation: pulse 1.1s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.spot-e { animation: blink 1.1s ease-in-out infinite; }
+.hl-hex { cursor: pointer; animation: blink 1.2s ease-in-out infinite; }
+.flash { animation: flash 1.6s ease-out forwards; pointer-events: none; }
+.pop { animation: pop .45s cubic-bezier(.3,1.6,.5,1); transform-box: fill-box; transform-origin: center; }
+.num { font-family: var(--font-display); font-weight: 600; }
+
+@keyframes pulse { 0%,100% { transform: scale(.8); } 50% { transform: scale(1.12); } }
+@keyframes blink { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes flash { 0% { opacity: .85; } 100% { opacity: 0; } }
+@keyframes pop { 0% { transform: scale(.2); } 100% { transform: scale(1); } }
+@keyframes tumble { 0% { transform: rotate(-200deg) scale(.6); } 70% { transform: rotate(15deg) scale(1.1); } 100% { transform: none; } }
+@keyframes rise { 0% { opacity: 0; transform: translate(-50%, 6px); } 15% { opacity: 1; transform: translate(-50%, 0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -6px); } }
+@keyframes drop { from { opacity: 0; transform: translateY(-8px); } }
+@keyframes bump { 30% { transform: translateY(-6px) scale(1.06); } }
+@keyframes up { from { transform: translateY(30px); opacity: .4; } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; } }
+
+/* wide screens: board left, panel right */
+@media (min-width: 900px) and (min-aspect-ratio: 1/1) {
+  #game { grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "board top" "board dock"; }
+  .topbar { flex-direction: row; background: var(--panel); border-left: 1px solid var(--line); padding: 12px; }
+  .players { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: 1fr 1fr; }
+  .dock { border-top: 0; border-left: 1px solid var(--line); justify-content: flex-start; padding: 12px; }
+  .rcard { max-width: none; }
+  .rcard .art { height: 40px; }
+  .devbtn { max-width: none; }
+}
+</style>
+
+<div id="app">
+  <section id="home" class="screen"></section>
+  <section id="game" class="screen" hidden>
+    <header class="topbar">
+      <div class="players" id="players"></div>
+      <button class="menu-btn" data-act="menu" aria-label="Menu"><svg viewBox="0 0 20 20"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+    </header>
+    <main class="board-wrap">
+      <svg id="board" xmlns="http://www.w3.org/2000/svg"><g id="static"></g><g id="dynamic"></g></svg>
+      <div class="dice-box" id="dice"></div>
+      <div class="ticker" id="ticker"></div>
+      <div class="toasts" id="toasts"></div>
+      <div class="zoom">
+        <button data-act="zoom-in" aria-label="Zoom in">+</button>
+        <button data-act="zoom-out" aria-label="Zoom out">−</button>
+        <button data-act="zoom-fit" aria-label="Fit board"><svg viewBox="0 0 20 20" width="16" height="16"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+      </div>
+    </main>
+    <footer class="dock" id="dock"></footer>
+  </section>
+  <div id="modal" hidden></div>
+  <div id="curtain" class="curtain" hidden></div>
+</div>
+
+<script>
+const Engine = (() => {
+'use strict';
+/* ===== Game engine: board generation, rules, state transitions ===== */
+const RES = ['wood', 'brick', 'sheep', 'wheat', 'ore'];
+const RES_NAME = { wood: 'Lumber', brick: 'Brick', sheep: 'Wool', wheat: 'Grain', ore: 'Ore', gold: 'Gold' };
+const TERRAIN_NAME = { wood: 'Forest', brick: 'Hills', sheep: 'Pasture', wheat: 'Fields', ore: 'Mountains', gold: 'Gold field', desert: 'Desert', sea: 'Sea' };
+const COST = {
+  road: { wood: 1, brick: 1 },
+  ship: { wood: 1, sheep: 1 },
+  settlement: { wood: 1, brick: 1, sheep: 1, wheat: 1 },
+  city: { wheat: 2, ore: 3 },
+  dev: { sheep: 1, wheat: 1, ore: 1 },
+};
+const PIPS = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1 };
+const DEV_NAME = { knight: 'Knight', road: 'Road Building', plenty: 'Year of Plenty', mono: 'Monopoly', vp: 'Victory Point' };
+const BASE_NUMS = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
+const SQ3 = Math.sqrt(3);
+const AX_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+function emptyHand() { return { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 }; }
+function handCount(h) { return RES.reduce((s, r) => s + (h[r] || 0), 0); }
+function hasCost(h, c) { return Object.keys(c).every(r => (h[r] || 0) >= c[r]); }
+function isLandT(t) { return t !== 'sea'; }
+function repeat(arr, n) { const out = []; for (let i = 0; out.length < n; i++) out.push(arr[i % arr.length]); return out; }
+
+/* ---------- Board ---------- */
+function buildBoard(defs) {
+  const hexes = [], vertices = [], edges = [];
+  const vmap = new Map(), emap = new Map(), hmap = new Map();
+  defs.forEach((d, i) => {
+    const x = SQ3 * (d.q + d.r / 2), y = 1.5 * d.r;
+    const h = { id: i, q: d.q, r: d.r, x, y, terrain: d.terrain, number: null, island: null, home: false, v: [], e: [], n: [] };
+    hexes.push(h); hmap.set(d.q + ',' + d.r, i);
+    for (let k = 0; k < 6; k++) {
+      const ang = Math.PI / 180 * (60 * k - 30);
+      const vx = x + Math.cos(ang), vy = y + Math.sin(ang);
+      const key = Math.round(vx * 1000) + ',' + Math.round(vy * 1000);
+      let vid = vmap.get(key);
+      if (vid === undefined) {
+        vid = vertices.length; vmap.set(key, vid);
+        vertices.push({ id: vid, x: vx, y: vy, hexes: [], adj: [], e: [], port: null, land: false });
+      }
+      vertices[vid].hexes.push(i); h.v.push(vid);
+    }
+  });
+  hexes.forEach(h => {
+    for (let k = 0; k < 6; k++) {
+      const a = h.v[k], b = h.v[(k + 1) % 6];
+      const key = a < b ? a + '-' + b : b + '-' + a;
+      let eid = emap.get(key);
+      if (eid === undefined) {
+        eid = edges.length; emap.set(key, eid);
+        edges.push({ id: eid, v: [Math.min(a, b), Math.max(a, b)], hexes: [] });
+        vertices[a].adj.push(b); vertices[b].adj.push(a);
+        vertices[a].e.push(eid); vertices[b].e.push(eid);
+      }
+      edges[eid].hexes.push(h.id); h.e.push(eid);
+    }
+    h.n = AX_DIRS.map(([dq, dr]) => hmap.get((h.q + dq) + ',' + (h.r + dr))).filter(x => x !== undefined);
+  });
+  vertices.forEach(v => { v.land = v.hexes.some(i => isLandT(hexes[i].terrain)); });
+  edges.forEach(e => {
+    const a = vertices[e.v[0]], b = vertices[e.v[1]];
+    e.x = (a.x + b.x) / 2; e.y = (a.y + b.y) / 2;
+    e.land = e.hexes.some(i => isLandT(hexes[i].terrain));
+    e.sea = e.hexes.length === 2 && e.hexes.some(i => hexes[i].terrain === 'sea');
+  });
+  // islands by flood fill
+  let isl = 0;
+  hexes.forEach(h => {
+    if (!isLandT(h.terrain) || h.island !== null) return;
+    const stack = [h.id]; h.island = isl;
+    while (stack.length) {
+      const c = hexes[stack.pop()];
+      c.n.forEach(j => { const o = hexes[j]; if (isLandT(o.terrain) && o.island === null) { o.island = isl; stack.push(j); } });
+    }
+    isl++;
+  });
+  return { hexes, vertices, edges, ports: [], islands: isl, home: 0 };
+}
+
+function numbersOk(board) {
+  const red = n => n === 6 || n === 8;
+  return board.hexes.every(h => {
+    if (!h.number) return true;
+    return h.n.every(j => {
+      const o = board.hexes[j];
+      if (!o.number) return true;
+      if (red(h.number) && red(o.number)) return false;
+      if (o.number === h.number) return false;
+      return true;
+    });
+  });
+}
+function assignNumbers(board, pool) {
+  const land = board.hexes.filter(h => isLandT(h.terrain) && h.terrain !== 'desert');
+  for (let t = 0; t < 2000; t++) {
+    const p = shuffle(pool.slice());
+    land.forEach((h, i) => { h.number = p[i]; });
+    if (numbersOk(board)) return;
+  }
+}
+
+function placePorts(board, landPred, types) {
+  const H = board.hexes;
+  const cands = board.edges.filter(e => e.hexes.length === 2 &&
+    e.hexes.some(i => landPred(H[i])) && e.hexes.some(i => H[i].terrain === 'sea'));
+  const L = H.filter(landPred);
+  const cx = L.reduce((s, h) => s + h.x, 0) / L.length, cy = L.reduce((s, h) => s + h.y, 0) / L.length;
+  cands.sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
+  const m = cands.length, n = types.length, off = Math.floor(Math.random() * m);
+  const used = new Set(), chosen = [];
+  for (let i = 0; i < n; i++) {
+    const base = off + Math.round(i * m / n);
+    for (const d of [0, 1, -1, 2, -2]) {
+      const e = cands[((base + d) % m + m) % m];
+      if (chosen.includes(e) || e.v.some(v => used.has(v) || board.vertices[v].adj.some(a => used.has(a)))) continue;
+      chosen.push(e); e.v.forEach(v => used.add(v)); break;
+    }
+  }
+  const ts = shuffle(types.slice());
+  chosen.forEach((e, i) => {
+    const sea = e.hexes.find(j => H[j].terrain === 'sea');
+    board.ports.push({ edge: e.id, type: ts[i], hex: sea, v: e.v.slice() });
+    e.v.forEach(v => { board.vertices[v].port = ts[i]; });
+  });
+}
+
+function genBase() {
+  const defs = [];
+  for (let r = -3; r <= 3; r++) for (let q = -3; q <= 3; q++) {
+    const d = Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+    if (d <= 3) defs.push({ q, r, terrain: d <= 2 ? 'land' : 'sea' });
+  }
+  const terr = shuffle([
+    'wood', 'wood', 'wood', 'wood', 'sheep', 'sheep', 'sheep', 'sheep', 'wheat', 'wheat', 'wheat', 'wheat',
+    'brick', 'brick', 'brick', 'ore', 'ore', 'ore', 'desert']);
+  let k = 0; defs.forEach(d => { if (d.terrain === 'land') d.terrain = terr[k++]; });
+  const b = buildBoard(defs);
+  b.home = 0; b.hexes.forEach(h => { h.home = isLandT(h.terrain); });
+  assignNumbers(b, BASE_NUMS);
+  placePorts(b, h => isLandT(h.terrain), ['any', 'any', 'any', 'any', 'wood', 'brick', 'sheep', 'wheat', 'ore']);
+  return b;
+}
+
+/* Archipelago: a home island plus small islands across the water ("new shores"). odd-r offset rows. */
+const SEA_TEMPLATES = [
+  [
+    '.........',
+    '..aa...b.',
+    '..a...bb.',
+    '.........',
+    '..MMMM...',
+    '.MMMMM.c.',
+    '.MMMMM.c.',
+    '..MMM..c.',
+    '.........',
+    '.dd...ee.',
+    '.........',
+  ],
+  [
+    '.........',
+    '.aaa..bb.',
+    '.......b.',
+    '.c.......',
+    '.c.MMMM..',
+    '.c.MMMMM.',
+    '...MMMMM.',
+    '....MMM..',
+    '.........',
+    '..dd..ee.',
+    '.........',
+  ],
+];
+function genSeafarers() {
+  const tpl = SEA_TEMPLATES[Math.floor(Math.random() * SEA_TEMPLATES.length)];
+  const flip = Math.random() < 0.5;
+  const defs = [];
+  tpl.forEach((row, r) => {
+    for (let c = 0; c < row.length; c++) {
+      const ch = row[c];
+      let q = c - (r - (r & 1)) / 2;
+      if (flip) q = -q - r; // mirror left-right in axial coordinates
+      defs.push({ q, r, terrain: ch === '.' ? 'sea' : (ch === 'M' ? 'main' : 'isle') });
+    }
+  });
+  const main = defs.filter(d => d.terrain === 'main');
+  const isle = defs.filter(d => d.terrain === 'isle');
+  const mainT = shuffle(['desert'].concat(repeat(shuffle(RES.slice()).concat(shuffle(RES.slice())).concat(shuffle(RES.slice())).concat(shuffle(RES.slice())), main.length - 1)));
+  main.forEach((d, i) => { d.terrain = mainT[i]; });
+  const isleT = shuffle(['gold', 'gold'].concat(repeat(shuffle(['ore', 'wheat', 'sheep', 'wood', 'brick', 'ore', 'wheat', 'brick', 'wood', 'sheep']), isle.length - 2)));
+  isle.forEach((d, i) => { d.terrain = isleT[i]; });
+  const b = buildBoard(defs);
+  // home island = the biggest one
+  const sizes = Array(b.islands).fill(0);
+  b.hexes.forEach(h => { if (h.island !== null) sizes[h.island]++; });
+  b.home = sizes.indexOf(Math.max(...sizes));
+  b.hexes.forEach(h => { h.home = h.island === b.home; });
+  assignNumbers(b, BASE_NUMS.concat(shuffle([2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 3, 4, 5, 6, 8, 9, 10, 11])));
+  placePorts(b, h => h.home, ['any', 'any', 'wood', 'brick', 'sheep', 'wheat', 'ore']);
+  return b;
+}
+
+/* ---------- State ---------- */
+function newGame(opts) {
+  const mode = opts.mode === 'seafarers' ? 'seafarers' : 'base';
+  const board = mode === 'seafarers' ? genSeafarers() : genBase();
+  const n = opts.players.length;
+  const players = opts.players.map((p, i) => ({
+    id: i, name: p.name, color: p.color, bot: !!p.bot, hand: emptyHand(), dev: [], knights: 0,
+    pieces: { road: 15, settlement: 5, city: 4, ship: mode === 'seafarers' ? 15 : 0 }, islands: [], bonusVP: 0,
+  }));
+  const desert = board.hexes.find(h => h.terrain === 'desert');
+  const order = [];
+  for (let i = 0; i < n; i++) order.push(i);
+  for (let i = n - 1; i >= 0; i--) order.push(i);
+  const deck = shuffle([].concat(Array(14).fill('knight'), Array(5).fill('vp'), Array(2).fill('road'), Array(2).fill('plenty'), Array(2).fill('mono')));
+  const s = {
+    v: 1, mode, target: opts.target || (mode === 'seafarers' ? 13 : 10), friendly: !!opts.friendly, level: ['easy', 'normal', 'hard'].includes(opts.level) ? opts.level : 'normal',
+    board, players,
+    vb: Array(board.vertices.length).fill(null),
+    eb: Array(board.edges.length).fill(null),
+    robber: desert ? desert.id : null, pirate: null,
+    bank: { wood: 19, brick: 19, sheep: 19, wheat: 19, ore: 19 },
+    deck, current: 0, turnNo: 0,
+    phase: 'setup', setup: { idx: 0, order, step: 'settlement', vertex: null },
+    dice: null, log: [], fx: [],
+    longest: { p: null, len: 0 }, army: { p: null, size: 0 },
+    devPlayed: false, shipMoved: false, offerMade: 0, talk: { accepts: {}, declines: {} },
+    discardQ: [], goldQ: [], after: null, stealFrom: [], freeRoads: 0, offer: null,
+    winner: null, rollCounts: Array(13).fill(0),
+  };
+  log(s, 'New game. Place your first settlement and road.');
+  return s;
+}
+
+function log(s, text, p) { s.log.push({ t: text, p: p === undefined ? null : p }); if (s.log.length > 250) s.log.shift(); }
+function fx(s, e) { s.fx.push(e); }
+function P(s, i) { return s.players[i]; }
+function nm(s, i) { return s.players[i].name; }
+
+function actor(s) {
+  if (s.phase === 'discard') return s.discardQ[0].p;
+  if (s.phase === 'gold') return s.goldQ[0].p;
+  if (s.phase === 'offer') return s.offer.to;
+  return s.current;
+}
+
+function publicVP(s, p) {
+  let vp = 0;
+  s.vb.forEach(b => { if (b && b.p === p) vp += b.t === 'city' ? 2 : 1; });
+  if (s.longest.p === p) vp += 2;
+  if (s.army.p === p) vp += 2;
+  return vp + s.players[p].bonusVP;
+}
+function hiddenVP(s, p) { return s.players[p].dev.filter(d => d.type === 'vp').length; }
+function totalVP(s, p) { return publicVP(s, p) + hiddenVP(s, p); }
+
+function portsOf(s, p) {
+  const set = new Set();
+  s.vb.forEach((b, v) => { if (b && b.p === p && s.board.vertices[v].port) set.add(s.board.vertices[v].port); });
+  return set;
+}
+function tradeRatio(s, p, r) {
+  const ports = portsOf(s, p);
+  if (ports.has(r)) return 2;
+  if (ports.has('any')) return 3;
+  return 4;
+}
+
+/* ---------- Placement rules ---------- */
+function islandOfVertex(s, v) {
+  for (const h of s.board.vertices[v].hexes) { const hx = s.board.hexes[h]; if (hx.island !== null) return hx.island; }
+  return null;
+}
+function canSettle(s, p, v, setup) {
+  const vx = s.board.vertices[v];
+  if (!vx || !vx.land || s.vb[v]) return false;
+  if (vx.adj.some(a => s.vb[a])) return false;
+  if (setup) return vx.hexes.some(h => s.board.hexes[h].home);
+  return vx.e.some(e => s.eb[e] && s.eb[e].p === p);
+}
+function connects(s, p, e, kind) {
+  return s.board.edges[e].v.some(v => {
+    const b = s.vb[v];
+    if (b) return b.p === p;
+    return s.board.vertices[v].e.some(x => x !== e && s.eb[x] && s.eb[x].p === p && s.eb[x].t === kind);
+  });
+}
+function pirateAdj(s, e) { return s.pirate !== null && s.board.edges[e].hexes.includes(s.pirate); }
+function canRoad(s, p, e, setupV) {
+  const ed = s.board.edges[e];
+  if (!ed || !ed.land || s.eb[e]) return false;
+  if (setupV !== undefined && setupV !== null) return ed.v.includes(setupV);
+  return connects(s, p, e, 'road');
+}
+function canShip(s, p, e, setupV) {
+  if (s.mode !== 'seafarers') return false;
+  const ed = s.board.edges[e];
+  if (!ed || !ed.sea || s.eb[e] || pirateAdj(s, e)) return false;
+  if (setupV !== undefined && setupV !== null) return ed.v.includes(setupV);
+  return connects(s, p, e, 'ship');
+}
+function validSettlements(s, p, setup) { return s.board.vertices.filter(v => canSettle(s, p, v.id, setup)).map(v => v.id); }
+function validCities(s, p) { return s.vb.map((b, v) => (b && b.p === p && b.t === 'settlement') ? v : -1).filter(v => v >= 0); }
+function validRoads(s, p, setupV) { return s.board.edges.filter(e => canRoad(s, p, e.id, setupV)).map(e => e.id); }
+function validShips(s, p, setupV) { return s.board.edges.filter(e => canShip(s, p, e.id, setupV)).map(e => e.id); }
+
+function isOpenShip(s, p, e) {
+  const o = s.eb[e];
+  if (!o || o.p !== p || o.t !== 'ship') return false;
+  return s.board.edges[e].v.some(v => {
+    const b = s.vb[v];
+    if (b && b.p === p) return false;
+    return !s.board.vertices[v].e.some(x => x !== e && s.eb[x] && s.eb[x].p === p && s.eb[x].t === 'ship');
+  });
+}
+function movableShips(s, p) {
+  if (s.mode !== 'seafarers' || s.shipMoved || s.phase !== 'main' || s.current !== p) return [];
+  return s.eb.map((o, e) => (o && o.p === p && o.t === 'ship' && o.turn !== s.turnNo && !pirateAdj(s, e) && isOpenShip(s, p, e)) ? e : -1).filter(e => e >= 0);
+}
+function shipTargets(s, p, from) {
+  const saved = s.eb[from]; s.eb[from] = null;
+  const out = validShips(s, p).filter(e => e !== from);
+  s.eb[from] = saved;
+  return out;
+}
+
+function robberTargets(s) {
+  const out = [];
+  s.board.hexes.forEach(h => {
+    if (h.terrain === 'sea') { if (s.mode === 'seafarers' && h.id !== s.pirate) out.push(h.id); return; }
+    if (h.id === s.robber) return;
+    out.push(h.id);
+  });
+  if (!s.friendly) return out;
+  const f = out.filter(id => {
+    const h = s.board.hexes[id];
+    if (h.terrain === 'sea') return true;
+    return !h.v.some(v => s.vb[v] && s.vb[v].p !== s.current && publicVP(s, s.vb[v].p) <= 2);
+  });
+  return f.length ? f : out;
+}
+function victimsAt(s, hexId) {
+  const h = s.board.hexes[hexId], set = new Set();
+  if (h.terrain === 'sea') {
+    h.e.forEach(e => { const o = s.eb[e]; if (o && o.t === 'ship' && o.p !== s.current) set.add(o.p); });
+  } else {
+    h.v.forEach(v => { const b = s.vb[v]; if (b && b.p !== s.current) set.add(b.p); });
+  }
+  return [...set].filter(p => handCount(s.players[p].hand) > 0 && !(s.friendly && publicVP(s, p) <= 2));
+}
+
+/* ---------- Longest road / largest army ---------- */
+function roadLength(s, p) {
+  const B = s.board;
+  const mine = [];
+  s.eb.forEach((o, e) => { if (o && o.p === p) mine.push(e); });
+  if (!mine.length) return 0;
+  const used = new Set();
+  let best = 0;
+  const ownB = v => s.vb[v] && s.vb[v].p === p;
+  const blocked = v => s.vb[v] && s.vb[v].p !== p;
+  function dfs(v, len, lastT, start) {
+    if (len > best) best = len;
+    if (!start && blocked(v)) return;
+    for (const e of B.vertices[v].e) {
+      const o = s.eb[e];
+      if (!o || o.p !== p || used.has(e)) continue;
+      if (lastT && o.t !== lastT && !ownB(v)) continue;
+      used.add(e);
+      const w = B.edges[e].v[0] === v ? B.edges[e].v[1] : B.edges[e].v[0];
+      dfs(w, len + 1, o.t, false);
+      used.delete(e);
+    }
+  }
+  const starts = new Set();
+  mine.forEach(e => B.edges[e].v.forEach(v => starts.add(v)));
+  starts.forEach(v => dfs(v, 0, null, true));
+  return best;
+}
+function updateLongest(s) {
+  const lens = s.players.map(pl => roadLength(s, pl.id));
+  const max = Math.max(...lens);
+  const old = s.longest.p;
+  let holder = old;
+  if (max < 5) holder = null;
+  else if (old !== null && lens[old] === max) holder = old;
+  else {
+    const top = lens.map((l, i) => l === max ? i : -1).filter(i => i >= 0);
+    holder = top.length === 1 ? top[0] : null;
+  }
+  s.longest = { p: holder, len: holder === null ? max : lens[holder], lens };
+  if (holder !== old) {
+    if (holder !== null) { log(s, `${nm(s, holder)} takes Longest Road (${lens[holder]}).`, holder); fx(s, { type: 'award', what: 'Longest Road', p: holder }); }
+    else if (old !== null) log(s, `${nm(s, old)} loses Longest Road.`, old);
+  }
+}
+function updateArmy(s, p) {
+  const k = s.players[p].knights;
+  if (k >= 3 && (s.army.p === null ? true : (s.army.p !== p && k > s.army.size))) {
+    s.army = { p, size: k };
+    log(s, `${nm(s, p)} takes Largest Army (${k}).`, p); fx(s, { type: 'award', what: 'Largest Army', p });
+  } else if (s.army.p === p) s.army.size = k;
+}
+
+function checkWin(s) {
+  if (s.phase === 'setup' || s.phase === 'gameover') return;
+  const p = s.current;
+  if (totalVP(s, p) >= s.target) {
+    s.phase = 'gameover'; s.winner = p;
+    log(s, `${nm(s, p)} wins with ${totalVP(s, p)} points!`, p);
+    fx(s, { type: 'win', p });
+  }
+}
+
+/* ---------- Bank helpers ---------- */
+function pay(s, p, cost) { const h = s.players[p].hand; for (const r in cost) { h[r] -= cost[r]; s.bank[r] += cost[r]; } }
+function giveFromBank(s, p, r, n) { const k = Math.min(n, s.bank[r]); s.bank[r] -= k; s.players[p].hand[r] += k; return k; }
+
+/* ---------- Placement ---------- */
+function placeSettlement(s, p, v) {
+  s.vb[v] = { p, t: 'settlement' };
+  s.players[p].pieces.settlement--;
+  if (s.mode === 'seafarers') {
+    const isl = islandOfVertex(s, v);
+    const pl = s.players[p];
+    if (isl !== null && isl !== s.board.home && !pl.islands.includes(isl)) {
+      pl.islands.push(isl); pl.bonusVP += 2;
+      log(s, `${pl.name} settles a new island: +2 points!`, p);
+      fx(s, { type: 'award', what: 'New island +2', p });
+    }
+  }
+}
+
+/* ---------- Actions ---------- */
+function err(m) { return { ok: false, err: m }; }
+const OK = { ok: true };
+
+function doSetupSettlement(s, v) {
+  if (s.phase !== 'setup' || s.setup.step !== 'settlement') return err('Not now');
+  const p = s.current;
+  if (!canSettle(s, p, v, true)) return err('You can’t build there');
+  placeSettlement(s, p, v);
+  fx(s, { type: 'build', kind: 'settlement', id: v, p });
+  s.setup.vertex = v; s.setup.step = 'road';
+  const n = s.players.length;
+  if (s.setup.idx >= n) {
+    let gold = 0; const got = [];
+    s.board.vertices[v].hexes.forEach(h => {
+      const t = s.board.hexes[h].terrain;
+      if (RES.includes(t)) { if (giveFromBank(s, p, t, 1)) got.push(RES_NAME[t]); }
+      else if (t === 'gold') gold++;
+    });
+    if (got.length) log(s, `${nm(s, p)} collects ${got.join(', ')}.`, p);
+    if (gold) { s.goldQ = [{ p, n: gold }]; s.after = 'setup'; s.phase = 'gold'; }
+  }
+  log(s, `${nm(s, p)} placed a settlement.`, p);
+  return OK;
+}
+function doSetupEdge(s, e, kind) {
+  if (s.phase !== 'setup' || s.setup.step !== 'road') return err('Not now');
+  const p = s.current, sv = s.setup.vertex;
+  const ok = kind === 'ship' ? canShip(s, p, e, sv) : canRoad(s, p, e, sv);
+  if (!ok) return err('You can’t build there');
+  s.eb[e] = { p, t: kind, turn: s.turnNo };
+  s.players[p].pieces[kind]--;
+  fx(s, { type: 'build', kind, id: e, p });
+  s.setup.idx++;
+  if (s.setup.idx >= s.setup.order.length) {
+    s.phase = 'roll'; s.current = s.setup.order[0]; s.turnNo = 1;
+    s.setup.step = 'done';
+    log(s, `Setup done. ${nm(s, s.current)} rolls first.`);
+    fx(s, { type: 'turn', p: s.current });
+  } else {
+    s.current = s.setup.order[s.setup.idx];
+    s.setup.step = 'settlement'; s.setup.vertex = null;
+    fx(s, { type: 'turn', p: s.current });
+  }
+  return OK;
+}
+
+function doRoll(s, forced) {
+  if (s.phase !== 'roll') return err('Not now');
+  const d1 = forced ? forced[0] : 1 + Math.floor(Math.random() * 6);
+  const d2 = forced ? forced[1] : 1 + Math.floor(Math.random() * 6);
+  const sum = d1 + d2;
+  s.dice = [d1, d2]; s.rollCounts[sum]++;
+  log(s, `${nm(s, s.current)} rolled ${sum}.`, s.current);
+  fx(s, { type: 'roll', dice: [d1, d2], p: s.current });
+  if (sum === 7) {
+    s.discardQ = [];
+    const n = s.players.length;
+    for (let k = 0; k < n; k++) {
+      const p = (s.current + k) % n, c = handCount(s.players[p].hand);
+      if (c > 7) s.discardQ.push({ p, n: Math.floor(c / 2) });
+    }
+    s.after = 'main';
+    s.phase = s.discardQ.length ? 'discard' : 'robber';
+  } else {
+    produce(s, sum);
+    s.after = 'main';
+    s.phase = s.goldQ.length ? 'gold' : 'main';
+  }
+  return OK;
+}
+
+function produce(s, sum) {
+  const demand = {}; RES.forEach(r => { demand[r] = {}; });
+  const gold = {};
+  const hexes = [];
+  s.board.hexes.forEach(h => {
+    if (h.number !== sum || h.id === s.robber || !isLandT(h.terrain)) return;
+    hexes.push(h.id);
+    h.v.forEach(v => {
+      const b = s.vb[v]; if (!b) return;
+      const amt = b.t === 'city' ? 2 : 1;
+      if (h.terrain === 'gold') gold[b.p] = (gold[b.p] || 0) + amt;
+      else if (RES.includes(h.terrain)) demand[h.terrain][b.p] = (demand[h.terrain][b.p] || 0) + amt;
+    });
+  });
+  const gains = {};
+  RES.forEach(r => {
+    const rec = Object.keys(demand[r]);
+    if (!rec.length) return;
+    const total = rec.reduce((a, p) => a + demand[r][p], 0);
+    if (total <= s.bank[r]) rec.forEach(p => { giveFromBank(s, +p, r, demand[r][p]); (gains[p] = gains[p] || {})[r] = demand[r][p]; });
+    else if (rec.length === 1) { const k = giveFromBank(s, +rec[0], r, total); if (k) (gains[rec[0]] = gains[rec[0]] || {})[r] = k; }
+    else log(s, `The bank is short on ${RES_NAME[r]}; nobody gets any.`);
+  });
+  Object.keys(gains).forEach(p => {
+    const parts = Object.keys(gains[p]).map(r => `${gains[p][r]} ${RES_NAME[r]}`);
+    log(s, `${nm(s, +p)} gets ${parts.join(', ')}.`, +p);
+  });
+  s.goldQ = [];
+  const n = s.players.length;
+  for (let k = 0; k < n; k++) { const p = (s.current + k) % n; if (gold[p]) s.goldQ.push({ p, n: gold[p] }); }
+  if (!hexes.length) log(s, 'No one produces anything.');
+  fx(s, { type: 'produce', hexes, gains, gold });
+}
+
+function doDiscard(s, p, cards) {
+  if (s.phase !== 'discard' || s.discardQ[0].p !== p) return err('Not now');
+  const need = s.discardQ[0].n;
+  const h = s.players[p].hand;
+  let tot = 0;
+  for (const r of RES) { const k = cards[r] || 0; if (k < 0 || k > h[r]) return err('You don’t have those'); tot += k; }
+  if (tot !== need) return err(`Discard exactly ${need}`);
+  RES.forEach(r => { const k = cards[r] || 0; h[r] -= k; s.bank[r] += k; });
+  log(s, `${nm(s, p)} discards ${need} cards.`, p);
+  s.discardQ.shift();
+  if (!s.discardQ.length) s.phase = 'robber';
+  return OK;
+}
+
+function doMoveRobber(s, hexId) {
+  if (s.phase !== 'robber') return err('Not now');
+  if (!robberTargets(s).includes(hexId)) return err('Pick another tile');
+  const h = s.board.hexes[hexId];
+  if (h.terrain === 'sea') { s.pirate = hexId; log(s, `${nm(s, s.current)} moves the pirate.`, s.current); }
+  else { s.robber = hexId; log(s, `${nm(s, s.current)} moves the robber to a ${TERRAIN_NAME[h.terrain]}${h.number ? ' (' + h.number + ')' : ''}.`, s.current); }
+  fx(s, { type: 'robber', hex: hexId, pirate: h.terrain === 'sea' });
+  const vics = victimsAt(s, hexId);
+  if (!vics.length) { s.phase = s.after; return OK; }
+  if (vics.length === 1) return doSteal(s, vics[0], true);
+  s.stealFrom = vics; s.phase = 'steal';
+  return OK;
+}
+function doSteal(s, target, auto) {
+  if (!auto && (s.phase !== 'steal' || !s.stealFrom.includes(target))) return err('Not now');
+  const h = s.players[target].hand;
+  const pool = [];
+  RES.forEach(r => { for (let i = 0; i < h[r]; i++) pool.push(r); });
+  if (pool.length) {
+    const r = pool[Math.floor(Math.random() * pool.length)];
+    h[r]--; s.players[s.current].hand[r]++;
+    log(s, `${nm(s, s.current)} steals a card from ${nm(s, target)}.`, s.current);
+    fx(s, { type: 'steal', from: target, to: s.current, res: r });
+  }
+  s.stealFrom = [];
+  s.phase = s.after;
+  checkWin(s);
+  return OK;
+}
+
+function doGold(s, p, picks) {
+  if (s.phase !== 'gold' || s.goldQ[0].p !== p) return err('Not now');
+  const avail = RES.reduce((a, r) => a + s.bank[r], 0);
+  const need = Math.min(s.goldQ[0].n, avail);
+  let tot = 0;
+  for (const r of RES) { const k = picks[r] || 0; if (k < 0 || k > s.bank[r]) return err('The bank is out of that'); tot += k; }
+  if (tot !== need) return err(`Pick ${need}`);
+  const parts = [];
+  RES.forEach(r => { const k = picks[r] || 0; if (k) { giveFromBank(s, p, r, k); parts.push(`${k} ${RES_NAME[r]}`); } });
+  if (parts.length) log(s, `${nm(s, p)} takes ${parts.join(', ')} from the gold field.`, p);
+  s.goldQ.shift();
+  if (!s.goldQ.length) s.phase = s.after;
+  return OK;
+}
+
+function buildSpots(s, p, kind) {
+  if (kind === 'settlement') return validSettlements(s, p, false);
+  if (kind === 'city') return validCities(s, p);
+  if (kind === 'road') return validRoads(s, p);
+  if (kind === 'ship') return validShips(s, p);
+  return [];
+}
+function canAfford(s, p, kind) { return hasCost(s.players[p].hand, COST[kind]); }
+function canBuildKind(s, p, kind) {
+  if (s.current !== p) return false;
+  const free = s.phase === 'roadBuilding' && (kind === 'road' || kind === 'ship');
+  if (!free && s.phase !== 'main') return false;
+  if (kind === 'ship' && s.mode !== 'seafarers') return false;
+  if (s.players[p].pieces[kind] <= 0) return false;
+  if (!free && !canAfford(s, p, kind)) return false;
+  return buildSpots(s, p, kind).length > 0;
+}
+function doBuild(s, kind, id) {
+  const p = s.current;
+  const free = s.phase === 'roadBuilding' && (kind === 'road' || kind === 'ship');
+  if (!free && s.phase !== 'main') return err('Not now');
+  if (s.players[p].pieces[kind] <= 0) return err('No pieces left');
+  if (!free && !canAfford(s, p, kind)) return err('Not enough resources');
+  if (!buildSpots(s, p, kind).includes(id)) return err('You can’t build there');
+  if (!free) pay(s, p, COST[kind]);
+  if (kind === 'settlement') placeSettlement(s, p, id);
+  else if (kind === 'city') { s.vb[id] = { p, t: 'city' }; s.players[p].pieces.city--; s.players[p].pieces.settlement++; }
+  else { s.eb[id] = { p, t: kind, turn: s.turnNo }; s.players[p].pieces[kind]--; }
+  const label = { road: 'a road', ship: 'a ship', settlement: 'a settlement', city: 'a city' }[kind];
+  log(s, `${nm(s, p)} builds ${label}.`, p);
+  fx(s, { type: 'build', kind, id, p });
+  if (kind !== 'city') updateLongest(s);
+  if (free) {
+    s.freeRoads--;
+    if (s.freeRoads <= 0 || !freeBuildPossible(s, p)) { s.freeRoads = 0; s.phase = s.after; }
+  }
+  checkWin(s);
+  return OK;
+}
+function freeBuildPossible(s, p) {
+  const pl = s.players[p];
+  return (pl.pieces.road > 0 && validRoads(s, p).length > 0) || (s.mode === 'seafarers' && pl.pieces.ship > 0 && validShips(s, p).length > 0);
+}
+function doEndFreeRoads(s) {
+  if (s.phase !== 'roadBuilding') return err('Not now');
+  s.freeRoads = 0; s.phase = s.after; return OK;
+}
+
+function doBuyDev(s) {
+  const p = s.current;
+  if (s.phase !== 'main') return err('Not now');
+  if (!s.deck.length) return err('No development cards left');
+  if (!canAfford(s, p, 'dev')) return err('Not enough resources');
+  pay(s, p, COST.dev);
+  const type = s.deck.pop();
+  s.players[p].dev.push({ type, turn: s.turnNo });
+  log(s, `${nm(s, p)} buys a development card.`, p);
+  fx(s, { type: 'dev', p, card: type });
+  checkWin(s);
+  return OK;
+}
+function playableDev(s, p, type) {
+  if (s.current !== p || s.devPlayed || type === 'vp') return false;
+  if (s.phase !== 'roll' && s.phase !== 'main') return false;
+  return s.players[p].dev.some(d => d.type === type && d.turn < s.turnNo);
+}
+function doPlayDev(s, type, args) {
+  const p = s.current;
+  if (!playableDev(s, p, type)) return err('You can’t play that now');
+  args = args || {};
+  const pl = s.players[p];
+  if (type === 'plenty') {
+    const rs = args.res || [];
+    if (rs.length !== 2 || !rs.every(r => RES.includes(r))) return err('Pick two resources');
+    const need = {}; rs.forEach(r => { need[r] = (need[r] || 0) + 1; });
+    if (!Object.keys(need).every(r => s.bank[r] >= need[r])) return err('The bank is out of that');
+  }
+  if (type === 'mono' && !RES.includes(args.res)) return err('Pick a resource');
+  const idx = pl.dev.findIndex(d => d.type === type && d.turn < s.turnNo);
+  pl.dev.splice(idx, 1);
+  s.devPlayed = true;
+  log(s, `${pl.name} plays ${DEV_NAME[type]}.`, p);
+  fx(s, { type: 'play', p, card: type });
+  if (type === 'knight') {
+    pl.knights++; updateArmy(s, p);
+    s.after = s.phase; s.phase = 'robber';
+  } else if (type === 'road') {
+    s.after = s.phase;
+    s.freeRoads = Math.min(2, pl.pieces.road + pl.pieces.ship);
+    if (s.freeRoads > 0 && freeBuildPossible(s, p)) s.phase = 'roadBuilding';
+    else s.freeRoads = 0;
+  } else if (type === 'plenty') {
+    args.res.forEach(r => giveFromBank(s, p, r, 1));
+    log(s, `${pl.name} takes ${args.res.map(r => RES_NAME[r]).join(' and ')}.`, p);
+  } else if (type === 'mono') {
+    let total = 0;
+    s.players.forEach(o => { if (o.id !== p) { total += o.hand[args.res]; pl.hand[args.res] += o.hand[args.res]; o.hand[args.res] = 0; } });
+    log(s, `${pl.name} collects ${total} ${RES_NAME[args.res]} from everyone.`, p);
+    fx(s, { type: 'mono', p, res: args.res, n: total });
+  }
+  checkWin(s);
+  return OK;
+}
+
+function doBankTrade(s, give, get) {
+  const p = s.current;
+  if (s.phase !== 'main') return err('Not now');
+  if (!RES.includes(give) || !RES.includes(get) || give === get) return err('Pick two different resources');
+  const ratio = tradeRatio(s, p, give);
+  if (s.players[p].hand[give] < ratio) return err(`You need ${ratio} ${RES_NAME[give]}`);
+  if (s.bank[get] < 1) return err('The bank is out of that');
+  s.players[p].hand[give] -= ratio; s.bank[give] += ratio;
+  giveFromBank(s, p, get, 1);
+  log(s, `${nm(s, p)} trades ${ratio} ${RES_NAME[give]} for 1 ${RES_NAME[get]}.`, p);
+  return OK;
+}
+function validTrade(s, a, b, give, get) {
+  const ha = s.players[a].hand, hb = s.players[b].hand;
+  if (handCount(give) === 0 || handCount(get) === 0) return false;
+  return RES.every(r => (give[r] || 0) <= ha[r] && (get[r] || 0) <= hb[r]) && RES.every(r => !((give[r] || 0) && (get[r] || 0)));
+}
+function transfer(s, a, b, give, get) {
+  const ha = s.players[a].hand, hb = s.players[b].hand;
+  RES.forEach(r => { const g = give[r] || 0, t = get[r] || 0; ha[r] += t - g; hb[r] += g - t; });
+}
+function describe(c) { return RES.filter(r => c[r]).map(r => `${c[r]} ${RES_NAME[r]}`).join(', '); }
+function doTrade(s, other, give, get) {
+  const p = s.current;
+  if (s.phase !== 'main' || other === p) return err('Not now');
+  if (!validTrade(s, p, other, give, get)) return err('That trade isn’t possible');
+  transfer(s, p, other, give, get);
+  log(s, `${nm(s, p)} trades ${describe(give)} to ${nm(s, other)} for ${describe(get)}.`, p);
+  fx(s, { type: 'trade', a: p, b: other });
+  return OK;
+}
+function doOffer(s, to, give, get) { // current (bot) offers to a human
+  if (s.phase !== 'main' || to === s.current) return err('Not now');
+  // only the offerer's cards are checked; the receiver may simply decline
+  const ha = s.players[s.current].hand;
+  if (handCount(give) === 0 || handCount(get) === 0 || !RES.every(r => (give[r] || 0) <= ha[r])) return err('That trade isn’t possible');
+  s.offer = { from: s.current, to, give, get };
+  s.offerMade++;
+  s.phase = 'offer';
+  return OK;
+}
+function doRespond(s, accept) {
+  if (s.phase !== 'offer') return err('Not now');
+  const o = s.offer;
+  if (accept && validTrade(s, o.from, o.to, o.give, o.get)) {
+    transfer(s, o.from, o.to, o.give, o.get);
+    log(s, `${nm(s, o.to)} accepts ${nm(s, o.from)}’s trade.`, o.to);
+  } else log(s, `${nm(s, o.to)} declines ${nm(s, o.from)}’s trade.`, o.to);
+  s.offer = null; s.phase = 'main';
+  return OK;
+}
+
+function doMoveShip(s, from, to) {
+  const p = s.current;
+  if (!movableShips(s, p).includes(from)) return err('That ship can’t move');
+  if (!shipTargets(s, p, from).includes(to)) return err('It can’t sail there');
+  const o = s.eb[from];
+  s.eb[from] = null; s.eb[to] = { p, t: 'ship', turn: o.turn };
+  s.shipMoved = true;
+  log(s, `${nm(s, p)} moves a ship.`, p);
+  fx(s, { type: 'build', kind: 'ship', id: to, p });
+  updateLongest(s);
+  checkWin(s);
+  return OK;
+}
+
+function doEndTurn(s) {
+  if (s.phase !== 'main') return err('Not now');
+  s.current = (s.current + 1) % s.players.length;
+  s.turnNo++;
+  s.phase = 'roll'; s.devPlayed = false; s.shipMoved = false; s.offerMade = 0; s.talk = { accepts: {}, declines: {} };
+  fx(s, { type: 'turn', p: s.current });
+  checkWin(s);
+  return OK;
+}
+
+return {
+  RES, RES_NAME, TERRAIN_NAME, COST, PIPS, DEV_NAME, shuffle, emptyHand, handCount, hasCost,
+  newGame, actor, publicVP, hiddenVP, totalVP, tradeRatio, portsOf,
+  canSettle, canRoad, canShip, validSettlements, validCities, validRoads, validShips, movableShips, shipTargets,
+  robberTargets, victimsAt, roadLength, buildSpots, canAfford, canBuildKind, playableDev, validTrade, describe,
+  islandOfVertex, freeBuildPossible,
+  doSetupSettlement, doSetupEdge, doRoll, doDiscard, doMoveRobber, doSteal, doGold, doBuild, doEndFreeRoads,
+  doBuyDev, doPlayDev, doBankTrade, doTrade, doOffer, doRespond, doMoveShip, doEndTurn,
+};
+
+
+})();
+
+</script>
+<script>
+'use strict';
+/* ===== Bots: heuristic players ===== */
+const Bot = (() => {
+  const E = (typeof Engine !== 'undefined') ? Engine : require('./engine.js');
+  const { RES, COST, PIPS } = E;
+  const RW = { wood: 1.1, brick: 1.1, sheep: 0.9, wheat: 1.05, ore: 1.0 };
+  /* Difficulty profiles.
+     noise: randomness in placement choices · margin: how much better a trade must be for the bot
+     leaderGap: won't trade with someone this close to winning · maxAccepts/maxDeclines: per turn, per bot
+     mood: chance the bot just isn't trading this turn · bankSkip: chance to skip a useful bank trade */
+  const LEVELS = {
+    easy: { plan: false, noise: 6, margin: 0.2, leaderGap: 2, maxAccepts: 3, maxDeclines: 6, mood: 0.1, bankSkip: 0.45, knight: 0.1, leaderW: 1, robNoise: 5, rarity: false, offerRate: 0.5, needHelp: false },
+    normal: { plan: false, noise: 0.7, margin: 0.7, leaderGap: 3, maxAccepts: 2, maxDeclines: 3, mood: 0.2, bankSkip: 0, knight: 0.25, leaderW: 1.5, robNoise: 0.5, rarity: false, offerRate: 0.6, needHelp: true },
+    hard: { plan: true, noise: 0.1, margin: 1.1, leaderGap: 4, maxAccepts: 1, maxDeclines: 2, mood: 0.15, bankSkip: 0, knight: 0.35, leaderW: 2.5, robNoise: 0.2, rarity: true, offerRate: 0.7, needHelp: true },
+  };
+  function lv(s) { return LEVELS[s.level] || LEVELS.normal; }
+  const rarityCache = new WeakMap();
+  function rarity(s) {
+    let r = rarityCache.get(s.board);
+    if (r) return r;
+    const tot = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+    s.board.hexes.forEach(h => { if (h.number && h.terrain in tot) tot[h.terrain] += PIPS[h.number]; });
+    const avg = RES.reduce((a, k) => a + tot[k], 0) / 5;
+    r = {}; RES.forEach(k => { r[k] = Math.max(0.75, Math.min(1.4, Math.sqrt(avg / Math.max(1, tot[k])))); });
+    rarityCache.set(s.board, r);
+    return r;
+  }
+
+  function production(s, p) {
+    const out = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0, gold: 0 };
+    s.vb.forEach((b, v) => {
+      if (!b || b.p !== p) return;
+      s.board.vertices[v].hexes.forEach(h => {
+        const hx = s.board.hexes[h];
+        if (!hx.number) return;
+        const k = PIPS[hx.number] * (b.t === 'city' ? 2 : 1);
+        if (hx.terrain in out) out[hx.terrain] += k;
+      });
+    });
+    return out;
+  }
+
+  function vertexValue(s, p, v, prod) {
+    prod = prod || production(s, p);
+    const vx = s.board.vertices[v];
+    let val = 0; const kinds = new Set();
+    vx.hexes.forEach(h => {
+      const hx = s.board.hexes[h];
+      if (!hx.number) return;
+      let pip = PIPS[hx.number];
+      if (h === s.robber) pip *= 0.6;
+      if (hx.terrain === 'gold') { val += pip * 1.35; kinds.add('gold'); return; }
+      const have = prod[hx.terrain] || 0;
+      val += pip * RW[hx.terrain] * (lv(s).rarity ? rarity(s)[hx.terrain] : 1) / (1 + have / 9);
+      kinds.add(hx.terrain);
+    });
+    val += kinds.size * (lv(s).plan ? 1.0 : 0.7);
+    if (lv(s).plan && s.phase === 'setup') {
+      // early game: brick + wood to expand, wheat + ore for cities
+      const have = new Set(Object.keys(prod).filter(k => prod[k] > 0));
+      vx.hexes.forEach(h => { const t = s.board.hexes[h].terrain; if (s.board.hexes[h].number && !have.has(t) && RES.includes(t)) val += 0.9; });
+    }
+    if (vx.port) {
+      if (vx.port === 'any') val += 1.2;
+      else val += (prod[vx.port] || 0) >= 5 ? 2.2 : 0.6;
+    }
+    if (s.mode === 'seafarers') {
+      const isl = E.islandOfVertex(s, v);
+      if (isl !== null && isl !== s.board.home && !s.players[p].islands.includes(isl)) val += 7;
+    }
+    return val;
+  }
+
+  /* BFS from my network to the best open settlement spot. Returns {target, first:{e,kind}, dist, score} */
+  function expansion(s, p, maxDist) {
+    maxDist = maxDist || 4;
+    const B = s.board;
+    const kinds = s.mode === 'seafarers' ? ['road', 'ship'] : ['road'];
+    const pl = s.players[p];
+    const seen = new Map(); // key v|kind -> {dist, first}
+    const q = [];
+    const push = (v, kind, dist, first) => {
+      const k = v + '|' + kind;
+      if (seen.has(k)) return;
+      seen.set(k, { dist, first }); q.push({ v, kind, dist, first });
+    };
+    // starting points
+    s.vb.forEach((b, v) => { if (b && b.p === p) kinds.forEach(k => push(v, k, 0, null)); });
+    s.eb.forEach((o, e) => {
+      if (!o || o.p !== p) return;
+      B.edges[e].v.forEach(v => { if (!s.vb[v] || s.vb[v].p === p) push(v, o.t, 0, null); });
+    });
+    let best = null;
+    const prod = production(s, p);
+    while (q.length) {
+      const cur = q.shift();
+      if (cur.dist > 0 && E.canSettle(s, p, cur.v, false) === false && !s.vb[cur.v] &&
+        B.vertices[cur.v].land && !B.vertices[cur.v].adj.some(a => s.vb[a])) {
+        // reachable but not yet connected: a candidate
+        const val = vertexValue(s, p, cur.v, prod);
+        const score = val / (0.8 + cur.dist * 0.55);
+        if (!best || score > best.score) best = { target: cur.v, first: cur.first, dist: cur.dist, score, val };
+      }
+      if (cur.dist >= maxDist) continue;
+      if (cur.dist > 0 && s.vb[cur.v] && s.vb[cur.v].p !== p) continue;
+      for (const e of B.vertices[cur.v].e) {
+        if (s.eb[e]) continue;
+        const ed = B.edges[e];
+        if (cur.kind === 'road' && !ed.land) continue;
+        if (cur.kind === 'ship' && (!ed.sea || (s.pirate !== null && ed.hexes.includes(s.pirate)))) continue;
+        if (cur.kind === 'road' && pl.pieces.road <= 0) continue;
+        if (cur.kind === 'ship' && pl.pieces.ship <= 0) continue;
+        const w = ed.v[0] === cur.v ? ed.v[1] : ed.v[0];
+        push(w, cur.kind, cur.dist + 1, cur.first || { e, kind: cur.kind });
+      }
+    }
+    return best;
+  }
+
+  function bestSettlement(s, p, setup) {
+    const spots = E.validSettlements(s, p, setup);
+    if (!spots.length) return null;
+    const prod = production(s, p);
+    let best = null, bv = -1e9;
+    spots.forEach(v => { const val = vertexValue(s, p, v, prod) + Math.random() * lv(s).noise; if (val > bv) { bv = val; best = v; } });
+    return best;
+  }
+
+  function goals(s, p) {
+    const pl = s.players[p];
+    const out = [];
+    if (pl.pieces.city > 0 && E.validCities(s, p).length) out.push({ kind: 'city', w: lv(s).plan ? -0.6 : 0 });
+    if (pl.pieces.settlement > 0 && E.validSettlements(s, p, false).length) out.push({ kind: 'settlement', w: 0 });
+    else if (pl.pieces.settlement > 0) {
+      const ex = expansion(s, p);
+      if (ex) out.push({ kind: ex.first.kind, w: 0.5, ex });
+    }
+    if (s.deck.length) out.push({ kind: 'dev', w: lv(s).plan ? 1.7 : 1.2 });
+    return out;
+  }
+  function missing(hand, cost) { return Object.keys(cost).reduce((a, r) => a + Math.max(0, cost[r] - hand[r]), 0); }
+  function pickGoal(s, p) {
+    const h = s.players[p].hand;
+    const gs = goals(s, p);
+    let best = null, bs = 1e9;
+    gs.forEach(g => { const sc = missing(h, COST[g.kind]) + g.w; if (sc < bs) { bs = sc; best = g; } });
+    return best;
+  }
+  function need(s, p, goal) {
+    const h = s.players[p].hand, c = goal ? COST[goal.kind] : {};
+    const out = {};
+    RES.forEach(r => { out[r] = Math.max(0, (c[r] || 0) - h[r]); });
+    return out;
+  }
+
+  // Value of a resource card to p right now
+  function resValue(s, p, r, goal) {
+    const h = s.players[p].hand;
+    const c = goal ? COST[goal.kind] : {};
+    let v = 1;
+    if ((c[r] || 0) > h[r]) v += 1.2;
+    if (h[r] === 0) v += 0.3;
+    if (h[r] >= 4) v -= 0.4;
+    const prod = production(s, p);
+    v -= Math.min(0.5, (prod[r] || 0) / 20);
+    return v;
+  }
+
+  function leader(s, exclude) {
+    let best = null, bv = -1;
+    s.players.forEach(pl => { if (pl.id === exclude) return; const v = E.publicVP(s, pl.id) + E.handCount(pl.hand) * 0.05; if (v > bv) { bv = v; best = pl.id; } });
+    return best;
+  }
+
+  /* ---------- decisions ---------- */
+  function setupStep(s, p) {
+    if (s.setup.step === 'settlement') return E.doSetupSettlement(s, bestSettlement(s, p, true));
+    const sv = s.setup.vertex;
+    const opts = [];
+    E.validRoads(s, p, sv).forEach(e => opts.push({ e, kind: 'road' }));
+    if (s.mode === 'seafarers') E.validShips(s, p, sv).forEach(e => opts.push({ e, kind: 'ship' }));
+    let best = opts[0], bv = -1e9;
+    opts.forEach(o => {
+      const ed = s.board.edges[o.e];
+      const w = ed.v[0] === sv ? ed.v[1] : ed.v[0];
+      let val = 0;
+      s.board.vertices[w].adj.forEach(x => {
+        if (x === sv || s.vb[x] || !s.board.vertices[x].land || s.board.vertices[x].adj.some(a => s.vb[a])) return;
+        val = Math.max(val, vertexValue(s, p, x));
+      });
+      if (o.kind === 'ship') val *= 0.8;
+      val += Math.random() * lv(s).noise;
+      if (val > bv) { bv = val; best = o; }
+    });
+    return E.doSetupEdge(s, best.e, best.kind);
+  }
+
+  function discard(s, p) {
+    const n = s.discardQ[0].n;
+    const h = Object.assign({}, s.players[p].hand);
+    const goal = pickGoal(s, p);
+    const out = E.emptyHand();
+    for (let i = 0; i < n; i++) {
+      let best = null, bv = 1e9;
+      RES.forEach(r => {
+        if (h[r] - out[r] <= 0) return;
+        const keep = goal ? (COST[goal.kind][r] || 0) : 0;
+        const v = (h[r] - out[r] <= keep ? 3 : 0) - (h[r] - out[r]) * 0.3 + Math.random() * 0.1;
+        if (v < bv) { bv = v; best = r; }
+      });
+      out[best]++;
+    }
+    return E.doDiscard(s, p, out);
+  }
+
+  function gold(s, p) {
+    let n = Math.min(s.goldQ[0].n, RES.reduce((a, r) => a + s.bank[r], 0));
+    const goal = pickGoal(s, p);
+    const nd = need(s, p, goal);
+    const picks = E.emptyHand();
+    const prod = production(s, p);
+    while (n > 0) {
+      let r = RES.find(x => nd[x] > picks[x] && s.bank[x] > picks[x]);
+      if (!r) r = RES.filter(x => s.bank[x] > picks[x]).sort((a, b) => (prod[a] - prod[b]) || (Math.random() - 0.5))[0];
+      picks[r]++; n--;
+    }
+    return E.doGold(s, p, picks);
+  }
+
+  function robber(s, p) {
+    const lead = leader(s, p);
+    let best = null, bv = -1e9;
+    E.robberTargets(s).forEach(id => {
+      const h = s.board.hexes[id];
+      let v = 0;
+      if (h.terrain === 'sea') {
+        h.e.forEach(e => { const o = s.eb[e]; if (o && o.t === 'ship') v += o.p === p ? -2 : 0.6; });
+        v -= 0.5;
+      } else {
+        const pip = h.number ? PIPS[h.number] : 0;
+        h.v.forEach(x => {
+          const b = s.vb[x]; if (!b) return;
+          const k = b.t === 'city' ? 2 : 1;
+          if (b.p === p) v -= pip * k * 2.5;
+          else v += pip * k * (b.p === lead ? lv(s).leaderW : 1) + (E.handCount(s.players[b.p].hand) > 0 ? 1 : 0);
+        });
+      }
+      v += Math.random() * lv(s).robNoise;
+      if (v > bv) { bv = v; best = id; }
+    });
+    return E.doMoveRobber(s, best);
+  }
+  function steal(s, p) {
+    const c = s.stealFrom.slice().sort((a, b) => (E.publicVP(s, b) - E.publicVP(s, a)) || (E.handCount(s.players[b].hand) - E.handCount(s.players[a].hand)));
+    return E.doSteal(s, c[0]);
+  }
+
+  function robberOnMe(s, p) {
+    if (s.robber === null) return false;
+    return s.board.hexes[s.robber].v.some(v => s.vb[v] && s.vb[v].p === p);
+  }
+
+  function tryDev(s, p, before) {
+    if (s.devPlayed) return null;
+    const pl = s.players[p];
+    if (E.playableDev(s, p, 'knight')) {
+      const armyChase = pl.knights + 1 >= 3 && s.army.p !== p && (s.army.p === null || pl.knights + 1 > s.army.size);
+      if (robberOnMe(s, p) || armyChase || (!before && Math.random() < lv(s).knight)) return E.doPlayDev(s, 'knight');
+    }
+    if (before) return null;
+    if (E.playableDev(s, p, 'mono')) {
+      let best = null, bv = 0;
+      RES.forEach(r => {
+        const t = s.players.reduce((a, o) => {
+          if (o.id === p) return a;
+          const pr = production(s, o.id), tot = RES.reduce((x, k) => x + pr[k], 0) || 1;
+          return a + E.handCount(o.hand) * pr[r] / tot;
+        }, 0);
+        if (t > bv) { bv = t; best = r; }
+      });
+      if (bv >= 3) return E.doPlayDev(s, 'mono', { res: best });
+    }
+    if (E.playableDev(s, p, 'plenty')) {
+      const goal = pickGoal(s, p);
+      if (goal) {
+        const nd = need(s, p, goal);
+        const tot = RES.reduce((a, r) => a + nd[r], 0);
+        if (tot >= 1 && tot <= 2) {
+          const picks = [];
+          RES.forEach(r => { for (let i = 0; i < nd[r]; i++) picks.push(r); });
+          while (picks.length < 2) picks.push(RES.slice().sort((a, b) => pl.hand[a] - pl.hand[b])[0]);
+          if (picks.every(r => s.bank[r] >= picks.filter(x => x === r).length)) return E.doPlayDev(s, 'plenty', { res: picks });
+        }
+      }
+    }
+    if (E.playableDev(s, p, 'road') && pl.pieces.settlement > 0 && expansion(s, p)) return E.doPlayDev(s, 'road');
+    return null;
+  }
+
+  function freeRoad(s, p) {
+    const ex = expansion(s, p);
+    if (ex && ex.first && E.buildSpots(s, p, ex.first.kind).includes(ex.first.e)) return E.doBuild(s, ex.first.kind, ex.first.e);
+    const roads = E.validRoads(s, p);
+    if (roads.length && s.players[p].pieces.road > 0) return E.doBuild(s, 'road', roads[Math.floor(Math.random() * roads.length)]);
+    const ships = E.validShips(s, p);
+    if (ships.length && s.players[p].pieces.ship > 0) return E.doBuild(s, 'ship', ships[Math.floor(Math.random() * ships.length)]);
+    return E.doEndFreeRoads(s);
+  }
+
+  function bestCity(s, p) {
+    const prod = production(s, p);
+    let best = null, bv = -1;
+    E.validCities(s, p).forEach(v => { const val = vertexValue(s, p, v, prod); if (val > bv) { bv = val; best = v; } });
+    return best;
+  }
+
+  /* Would bot p accept: p receives `give`, pays `get`, from player `from`? Pure check, no side effects.
+     Uses only public info about the other player (points), never their hand. */
+  function judgeOffer(s, p, from, give, get) {
+    const L = lv(s), me = s.players[p];
+    if (!RES.every(r => (get[r] || 0) <= me.hand[r])) return { ok: false, why: 'no' };
+    if (E.handCount(give) === 0 || E.handCount(get) === 0) return { ok: false, why: 'no' };
+    if (E.publicVP(s, from) >= s.target - L.leaderGap) return { ok: false, why: 'leader' };
+    const t = s.talk || { accepts: {}, declines: {} };
+    if ((t.accepts[p] || 0) >= L.maxAccepts || (t.declines[p] || 0) >= L.maxDeclines) return { ok: false, why: 'done' };
+    if (((s.turnNo * 37 + p * 11 + from * 5) % 100) / 100 < L.mood) return { ok: false, why: 'mood' };
+    const goal = pickGoal(s, p);
+    const c = goal ? COST[goal.kind] : {};
+    const nd = need(s, p, goal);
+    // must receive something it actually needs
+    if (L.needHelp && !RES.some(r => (give[r] || 0) > 0 && nd[r] > 0)) return { ok: false, why: 'no' };
+    // never gives away cards its current plan needs
+    if (RES.some(r => (get[r] || 0) > 0 && me.hand[r] - get[r] < (c[r] || 0))) return { ok: false, why: 'no' };
+    let gain = 0, loss = 0;
+    RES.forEach(r => { gain += (give[r] || 0) * resValue(s, p, r, goal); loss += (get[r] || 0) * resValue(s, p, r, goal); });
+    let margin = L.margin;
+    // tougher with whoever is ahead of the bot
+    if (E.publicVP(s, from) > E.publicVP(s, p)) margin += s.level === 'hard' ? 0.8 : 0.3;
+    return { ok: gain > loss + margin, why: 'no' };
+  }
+  function considerOffer(s, p, from, give, get) { return judgeOffer(s, p, from, give, get).ok; }
+  /* A real proposal: records the answer so bots tire of haggling. */
+  function respond(s, p, from, give, get) {
+    const j = judgeOffer(s, p, from, give, get);
+    s.talk = s.talk || { accepts: {}, declines: {} };
+    if (j.ok) s.talk.accepts[p] = (s.talk.accepts[p] || 0) + 1;
+    else s.talk.declines[p] = (s.talk.declines[p] || 0) + 1;
+    return j;
+  }
+
+  function mainStep(s, p) {
+    const pl = s.players[p];
+    s._botActions = (s._botActions || 0) + 1;
+    if (s._botActions > 40) return E.doEndTurn(s);
+    const d = tryDev(s, p, false); if (d) return d;
+    // build what we can, best first
+    if (E.canBuildKind(s, p, 'city')) return E.doBuild(s, 'city', bestCity(s, p));
+    if (E.canBuildKind(s, p, 'settlement')) return E.doBuild(s, 'settlement', bestSettlement(s, p, false));
+    const goal = pickGoal(s, p);
+    const spotsOpen = E.validSettlements(s, p, false).length > 0;
+    if (!spotsOpen && pl.pieces.settlement > 0) {
+      const ex = expansion(s, p);
+      if (ex && E.canAfford(s, p, ex.first.kind) && pl.pieces[ex.first.kind] > 0 && E.buildSpots(s, p, ex.first.kind).includes(ex.first.e)) {
+        return E.doBuild(s, ex.first.kind, ex.first.e);
+      }
+    }
+    if (goal && goal.kind === 'dev' && E.canAfford(s, p, 'dev') && s.deck.length) return E.doBuyDev(s);
+    // bank trades toward the goal
+    if (goal) {
+      const c = COST[goal.kind];
+      const nd = need(s, p, goal);
+      const want = RES.filter(r => nd[r] > 0 && s.bank[r] > 0);
+      if (want.length) {
+        for (const r of RES) {
+          const ratio = E.tradeRatio(s, p, r);
+          const spare = pl.hand[r] - (c[r] || 0);
+          if (spare >= ratio && !(lv(s).bankSkip && Math.random() < lv(s).bankSkip)) return E.doBankTrade(s, r, want[0]);
+        }
+        // propose a 1:1 to a human (once per turn)
+        if (s.offerMade < 1) {
+          const spare = RES.filter(r => pl.hand[r] - (c[r] || 0) >= 1).sort((a, b) => pl.hand[b] - pl.hand[a]);
+          if (spare.length) {
+            const humans = s.players.filter(o => !o.bot && o.id !== p && E.publicVP(s, o.id) < s.target - lv(s).leaderGap);
+            if (humans.length) {
+              const to = humans[Math.floor(Math.random() * humans.length)].id;
+              const give = {}; give[spare[0]] = 1; const get = {}; get[want[0]] = 1;
+              if (Math.random() < lv(s).offerRate) return E.doOffer(s, to, give, get);
+              s.offerMade++;
+            }
+            // trade with another bot
+            const g = {}; g[spare[0]] = 1; const w = {}; w[want[0]] = 1;
+            s.offerMade++;
+            const bots = s.players.filter(o => o.bot && o.id !== p);
+            for (const o of bots) { if (respond(s, o.id, p, g, w).ok) return E.doTrade(s, o.id, g, w); }
+          }
+        }
+      }
+    }
+    if (lv(s).plan) {
+      // keep a road heading toward the next spot so settlements don't stall
+      if (pl.pieces.settlement > 0 && E.validSettlements(s, p, false).length <= 1) {
+        const ex = expansion(s, p);
+        if (ex && ex.first && E.canAfford(s, p, ex.first.kind) && pl.pieces[ex.first.kind] > 0 && E.buildSpots(s, p, ex.first.kind).includes(ex.first.e)) {
+          const h = pl.hand, c = COST[ex.first.kind];
+          const spare = RES.every(r => h[r] - (c[r] || 0) >= 0) && (E.handCount(h) >= 6 || !E.validSettlements(s, p, false).length);
+          if (spare) return E.doBuild(s, ex.first.kind, ex.first.e);
+        }
+      }
+      // don't sit on more than 7 cards: dump surplus into the bank toward anything useful
+      if (E.handCount(pl.hand) > 7) {
+        const g2 = pickGoal(s, p), c2 = g2 ? COST[g2.kind] : {};
+        const want2 = RES.filter(r => s.bank[r] > 0).sort((a, b) => ((c2[b] || 0) - pl.hand[b]) - ((c2[a] || 0) - pl.hand[a]));
+        for (const r of RES) {
+          const ratio = E.tradeRatio(s, p, r);
+          if (pl.hand[r] - (c2[r] || 0) >= ratio && want2[0] && want2[0] !== r) return E.doBankTrade(s, r, want2[0]);
+        }
+      }
+    }
+    // Spend surplus on dev cards if rich
+    if (E.handCount(pl.hand) >= 7 && E.canAfford(s, p, 'dev') && s.deck.length) return E.doBuyDev(s);
+    if (E.handCount(pl.hand) >= 8 && spotsOpen === false) {
+      const ex = expansion(s, p);
+      if (ex && E.canAfford(s, p, ex.first.kind) && E.buildSpots(s, p, ex.first.kind).includes(ex.first.e)) return E.doBuild(s, ex.first.kind, ex.first.e);
+    }
+    s._botActions = 0;
+    return E.doEndTurn(s);
+  }
+
+  function step(s) {
+    const p = E.actor(s);
+    switch (s.phase) {
+      case 'setup': return setupStep(s, p);
+      case 'discard': return discard(s, p);
+      case 'gold': return gold(s, p);
+      case 'robber': return robber(s, p);
+      case 'steal': return steal(s, p);
+      case 'roll': { const d = tryDev(s, p, true); if (d) return d; s._botActions = 0; return E.doRoll(s); }
+      case 'main': return mainStep(s, p);
+      case 'roadBuilding': return freeRoad(s, p);
+      case 'offer': return E.doRespond(s, considerOffer(s, p, s.offer.from, s.offer.give, s.offer.get));
+    }
+    return { ok: false, err: 'idle' };
+  }
+
+  return { step, considerOffer, respond, vertexValue, expansion, production, LEVELS };
+})();
+
+
+</script>
+<script>
+'use strict';
+/* ===== UI ===== */
+const E = Engine;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const COLORS = [
+  { id: 'red', hex: '#d8432f' }, { id: 'blue', hex: '#2f64c9' }, { id: 'orange', hex: '#ee8a1e' },
+  { id: 'white', hex: '#f1ede2' }, { id: 'green', hex: '#3d9a4b' }, { id: 'purple', hex: '#8a55cf' },
+];
+const BOT_NAMES = ['Ada', 'Bram', 'Cleo', 'Dmitri', 'Esme', 'Finn', 'Greta', 'Hugo'];
+const FILL = { wood: '#3f8a3c', brick: '#c8623a', sheep: '#9dcf55', wheat: '#e9bf3c', ore: '#8e94a3', gold: '#f2c230', desert: '#e3cd96', sea: '#2a7ca3' };
+const RES_DOT = { wood: '#2f6e2d', brick: '#b24f2a', sheep: '#8cc63f', wheat: '#e2b028', ore: '#7f8594' };
+const DEV_TEXT = {
+  knight: 'Move the robber and steal a card. Three or more knights can win Largest Army (+2).',
+  road: 'Build two roads (or ships) for free.',
+  plenty: 'Take any two resources from the bank.',
+  mono: 'Name a resource. Everyone gives you all of theirs.',
+  vp: 'Worth 1 point. Stays hidden until the game ends.',
+};
+const DEV_SHORT = { knight: 'K', road: 'RB', plenty: 'YP', mono: 'M', vp: '1' };
+const SAVE_KEY = 'sti.save.v1', CFG_KEY = 'sti.cfg.v1';
+
+/* ---------- glyphs (drawn in a ±10 box) ---------- */
+const GLYPH = {
+  wood: '<path d="M0,-10 L7,0 L3.5,0 L9,7 L-9,7 L-3.5,0 L-7,0 Z" fill="#1d5527"/><rect x="-1.6" y="7" width="3.2" height="3.4" fill="#5b3a1e"/>',
+  brick: '<g fill="#8e3418" stroke="#f0b090" stroke-width=".9"><rect x="-10" y="3" width="6.6" height="4.6"/><rect x="-3.3" y="3" width="6.6" height="4.6"/><rect x="3.4" y="3" width="6.6" height="4.6"/><rect x="-6.6" y="-1.6" width="6.6" height="4.6"/><rect x="0" y="-1.6" width="6.6" height="4.6"/><rect x="-3.3" y="-6.2" width="6.6" height="4.6"/></g>',
+  sheep: '<g stroke="#3a3a3a" stroke-width="1.4"><line x1="-4" y1="3" x2="-4" y2="8"/><line x1="3" y1="3" x2="3" y2="8"/></g><path d="M-8,1 a3,3 0 0 1 2,-6 a3.5,3.5 0 0 1 6,-1.5 a3.5,3.5 0 0 1 6,2 a3,3 0 0 1 0,6 a3.5,3.5 0 0 1 -6,1 a3.5,3.5 0 0 1 -6,0 a3,3 0 0 1 -2,-1.5 Z" fill="#fbf8ef" stroke="#cfc6b0" stroke-width=".8"/><ellipse cx="8" cy="-2" rx="2.8" ry="2.3" fill="#3a3a3a"/>',
+  wheat: '<g stroke="#9a6a0c" stroke-width="1.1" fill="#fbe07e"><line x1="0" y1="10" x2="0" y2="-4"/><line x1="0" y1="10" x2="-5" y2="-2"/><line x1="0" y1="10" x2="5" y2="-2"/><ellipse cx="0" cy="-7" rx="2" ry="3.4"/><ellipse cx="-5.6" cy="-5" rx="2" ry="3.4" transform="rotate(-22 -5.6 -5)"/><ellipse cx="5.6" cy="-5" rx="2" ry="3.4" transform="rotate(22 5.6 -5)"/></g>',
+  ore: '<path d="M-10,8 L-3,-7 L1,-1 L4,-5 L10,8 Z" fill="#4f5562"/><path d="M-3,-7 L-5.4,-2 L-3,-3.2 L-1,-2.2 Z" fill="#f2f4f8"/><path d="M4,-5 L2.6,-2.2 L4.2,-2.8 L5.6,-2 Z" fill="#f2f4f8"/>',
+  gold: '<path d="M-8,6 L-5,-1 L1,-3 L7,1 L8,6 Z" fill="#ffd84d" stroke="#a87808" stroke-width="1"/><path d="M-5,-1 L-1,2 L1,-3 M-1,2 L2,6" stroke="#a87808" stroke-width=".8" fill="none"/><path d="M5,-9 L6,-6 L9,-5 L6,-4 L5,-1 L4,-4 L1,-5 L4,-6 Z" fill="#fff"/>',
+  desert: '<path d="M-10,6 Q-5,1 0,6 T10,6" fill="none" stroke="#b89150" stroke-width="1.4"/><path d="M-1,6 L-1,-6 M-1,-1 L-4,-1 L-4,-4 M-1,1 L2,1 L2,-3" stroke="#5a8a3c" stroke-width="2" fill="none" stroke-linecap="round"/>',
+};
+const ICON = {
+  road: '<svg viewBox="0 0 30 22"><path d="M4 18 L26 4" stroke="#1a1a1a" stroke-width="7" stroke-linecap="round"/><path d="M4 18 L26 4" stroke="var(--ic, #e9e2cf)" stroke-width="4.5" stroke-linecap="round"/></svg>',
+  settlement: '<svg viewBox="0 0 30 22"><path d="M8 20 V10 L15 3 L22 10 V20 Z" fill="var(--ic, #e9e2cf)" stroke="#1a1a1a" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+  city: '<svg viewBox="0 0 30 22"><path d="M3 20 V11 H13 V7 L18.5 2 L24 7 V20 Z" fill="var(--ic, #e9e2cf)" stroke="#1a1a1a" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+  ship: '<svg viewBox="0 0 30 22"><path d="M15 2 V14 M15 3 L24 13 H15" fill="var(--ic, #e9e2cf)" stroke="#1a1a1a" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 15 H26 L22 20 H8 Z" fill="#7a4b26" stroke="#1a1a1a" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+  dev: '<svg viewBox="0 0 30 22"><rect x="8" y="1.5" width="14" height="19" rx="2.5" fill="#6b3fa0" stroke="#1a1a1a" stroke-width="1.6"/><path d="M15 6 l1.4 3 3.1.3-2.4 2 .8 3-2.9-1.6-2.9 1.6.8-3-2.4-2 3.1-.3Z" fill="#ffc94a"/></svg>',
+  trade: '<svg viewBox="0 0 30 22"><path d="M5 7 H22 M18 3 L22 7 L18 11 M25 15 H8 M12 11 L8 15 L12 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  card: '<svg viewBox="0 0 12 12"><rect x="2" y="1" width="8" height="10" rx="1.5" fill="currentColor"/></svg>',
+  sword: '<svg viewBox="0 0 12 12"><path d="M9.5 1.5 L10.5 2.5 L4.5 8.5 L3.5 7.5 Z M2.5 7 L5 9.5 M2 10 L3.3 8.7" stroke="currentColor" stroke-width="1.5" fill="currentColor"/></svg>',
+  roadsm: '<svg viewBox="0 0 12 12"><path d="M2 10 L10 2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
+};
+function glyphSvg(t, size) { return `<svg viewBox="-11 -11 22 22" width="${size || 26}" height="${size || 26}">${GLYPH[t] || ''}</svg>`; }
+
+/* ---------- state ---------- */
+let G = null;
+const ui = {
+  mode: null, revealed: null, undo: [], view: null, base: null, timer: null,
+  edgeKind: 'road', trade: { tab: 'bank', give: null, get: null, pg: {}, pw: {} },
+  flashHexes: [], newKeys: new Set(), gains: {}, modal: null, modalKey: null, picks: {}, sel: [], confirm: null,
+  cfg: null, homeConfirm: false,
+};
+
+function defaultCfg() {
+  return {
+    mode: 'base', target: { base: 10, seafarers: 13 }, friendly: false, hideHands: true, speed: 'normal', level: 'normal', confirm: true,
+    players: [
+      { name: 'Player 1', color: 'red', bot: false },
+      { name: 'Player 2', color: 'blue', bot: false },
+      { name: 'Ada', color: 'orange', bot: true },
+    ],
+  };
+}
+function loadCfg() {
+  try { const c = JSON.parse(localStorage.getItem(CFG_KEY)); if (c && c.players) return Object.assign(defaultCfg(), c); } catch (e) { }
+  return defaultCfg();
+}
+function saveCfg() { try { localStorage.setItem(CFG_KEY, JSON.stringify(ui.cfg)); } catch (e) { } }
+function saveGame() {
+  try { if (G && G.phase !== 'gameover') localStorage.setItem(SAVE_KEY, JSON.stringify({ G, opts: { hideHands: ui.cfg.hideHands, speed: ui.cfg.speed } })); else localStorage.removeItem(SAVE_KEY); } catch (e) { }
+}
+function loadSave() { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d && d.G && d.G.v === 1) return d; } catch (e) { } return null; }
+function colorHex(id) { return (COLORS.find(c => c.id === id) || COLORS[0]).hex; }
+function pcol(p) { return colorHex(G.players[p].color); }
+function humans() { return G.players.filter(p => !p.bot); }
+function privacyOn() { return ui.cfg.hideHands && humans().length > 1; }
+
+/* ================= HOME ================= */
+function miniBoard(mode) {
+  const cells = mode === 'base'
+    ? [[0, 0, 'wheat'], [1, 0, 'wood'], [-1, 0, 'sheep'], [0.5, -1, 'ore'], [-0.5, -1, 'brick'], [0.5, 1, 'wood'], [-0.5, 1, 'wheat']]
+    : [[-1.2, 0, 'wood'], [-0.2, 0, 'wheat'], [-0.7, -1, 'brick'], [-0.7, 1, 'sheep'], [1.8, -0.6, 'gold'], [2.3, 0.4, 'ore']];
+  const hex = (cx, cy, r) => Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 180 * (60 * k - 30); return (cx + r * Math.cos(a)).toFixed(2) + ',' + (cy + r * Math.sin(a)).toFixed(2); }).join(' ');
+  let s = '';
+  if (mode !== 'base') s += `<path d="M1.6 1.4 L2.4 1.5 L2.2 1.8 L1.75 1.8 Z" fill="#7a4b26"/><path d="M2 1.4 V0.9 L2.35 1.35 Z" fill="#fff"/>`;
+  cells.forEach(([q, r, t]) => { const cx = q * 1.732 * 0.5 * 2 * 0.5 + q * 0.0, cy = r * 1.5 * 0.5; s += `<polygon points="${hex(q * 0.866, cy, 0.48)}" fill="${FILL[t]}" stroke="#e8d8a8" stroke-width=".08"/>`; });
+  return `<svg viewBox="-2.4 -1.3 5.4 2.6">${s}</svg>`;
+}
+
+function renderHome() {
+  const cfg = ui.cfg;
+  const save = loadSave();
+  const sv = save && save.G;
+  const contHtml = sv ? `<div class="card continue">
+      <div><b>Continue game</b><small>${esc(sv.mode === 'seafarers' ? 'Archipelago' : 'Classic')} · ${sv.players.map(p => esc(p.name)).join(', ')} · turn ${Math.max(1, sv.turnNo)}</small></div>
+      <button class="btn primary" data-act="continue">Resume</button></div>` : '';
+  const rows = cfg.players.map((p, i) => `
+    <div class="prow">
+      <button class="swatch" style="background:${colorHex(p.color)}" data-act="cycle-color" data-i="${i}" aria-label="Change color"></button>
+      <input id="pname-${i}" value="${esc(p.name)}" maxlength="14" data-i="${i}" aria-label="Player ${i + 1} name">
+      <div class="seg" role="group"><button aria-pressed="${!p.bot}" data-act="set-human" data-i="${i}">Human</button><button aria-pressed="${p.bot}" data-act="set-bot" data-i="${i}">Bot</button></div>
+      <button class="icon-btn" data-act="remove-player" data-i="${i}" ${cfg.players.length <= 2 ? 'disabled' : ''} aria-label="Remove player">✕</button>
+    </div>`).join('');
+  const nHum = cfg.players.filter(p => !p.bot).length;
+  $('#home').innerHTML = `<div class="home-inner">
+    <div class="hero">
+      <svg viewBox="-1.9 -1.9 3.8 3.8">${[[0, 0, 'wheat'], [1.5, -0.87, 'wood'], [1.5, 0.87, 'ore'], [0, 1.73, 'sheep'], [-1.5, 0.87, 'brick'], [-1.5, -0.87, 'gold'], [0, -1.73, 'wood']].map(([x, y, t]) => `<polygon points="${Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 3 * k; return (x * .55 + .55 * Math.cos(a)).toFixed(2) + ',' + (y * .55 + .55 * Math.sin(a)).toFixed(2); }).join(' ')}" fill="${FILL[t]}" stroke="#0a2231" stroke-width=".07"/>`).join('')}<circle r=".3" fill="#fbf0d2"/><text y=".11" text-anchor="middle" font-size=".34" font-family="Fredoka, sans-serif" font-weight="700" fill="#c0261b">8</text></svg>
+      <div><h1>Settle the Isles</h1><p>Build, trade and race to ${cfg.target[cfg.mode]} points. Play together on one device or against bots.</p></div>
+    </div>
+    ${contHtml}
+    <div class="card">
+      <div class="label">Map</div>
+      <div class="modes">
+        <button class="mode" aria-pressed="${cfg.mode === 'base'}" data-act="mode" data-m="base">${miniBoard('base')}<b>Classic</b><span>One island, 19 tiles. Roads, settlements, cities, cards.</span></button>
+        <button class="mode" aria-pressed="${cfg.mode === 'seafarers'}" data-act="mode" data-m="seafarers">${miniBoard('seafarers')}<b>Archipelago</b><span>Sail ships to small islands. +2 points per new island. Gold fields and a pirate.</span></button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Players</div>
+      <div class="presets">
+        <button class="chip" data-act="preset" data-p="couple">Two of us</button>
+        <button class="chip" data-act="preset" data-p="couple-bot">Two of us + bot</button>
+        <button class="chip" data-act="preset" data-p="solo2">Me vs 2 bots</button>
+        <button class="chip" data-act="preset" data-p="solo3">Me vs 3 bots</button>
+      </div>
+      ${rows}
+      ${cfg.players.length < 4 ? '<button class="addp" data-act="add-player">+ Add player</button>' : ''}
+    </div>
+    <div class="card">
+      <div class="label">Options</div>
+      <div class="opt"><div>Points to win<small>${cfg.mode === 'seafarers' ? 'Archipelago usually plays to 13' : 'Classic plays to 10'}</small></div>
+        <div class="stepper"><button data-act="target" data-d="-1" ${cfg.target[cfg.mode] <= 5 ? 'disabled' : ''} aria-label="Fewer points">−</button><output>${cfg.target[cfg.mode]}</output><button data-act="target" data-d="1" ${cfg.target[cfg.mode] >= 20 ? 'disabled' : ''} aria-label="More points">+</button></div></div>
+      <div class="opt"><div>Hide hands between turns<small>${nHum > 1 ? 'Shows a “pass the device” screen so nobody peeks' : 'Only matters with two or more humans'}</small></div><button class="toggle" aria-pressed="${cfg.hideHands}" data-act="opt" data-k="hideHands" aria-label="Hide hands"></button></div>
+      <div class="opt"><div>Confirm moves<small>Every build, trade and turn end asks “are you sure?” first</small></div><button class="toggle" aria-pressed="${cfg.confirm !== false}" data-act="opt" data-k="confirm" aria-label="Confirm moves"></button></div>
+      <div class="opt"><div>Friendly robber<small>No robbing players with 2 points or less</small></div><button class="toggle" aria-pressed="${cfg.friendly}" data-act="opt" data-k="friendly" aria-label="Friendly robber"></button></div>
+      ${cfg.players.some(p => p.bot) ? `<div class="opt"><div>Bot skill<small>${{ easy: 'Relaxed play, trades freely', normal: 'Solid play, picky about trades', hard: 'Sharp play, rarely helps the leader' }[cfg.level || 'normal']}</small></div><div class="seg"><button aria-pressed="${cfg.level === 'easy'}" data-act="level" data-l="easy">Easy</button><button aria-pressed="${(cfg.level || 'normal') === 'normal'}" data-act="level" data-l="normal">Normal</button><button aria-pressed="${cfg.level === 'hard'}" data-act="level" data-l="hard">Hard</button></div></div>` : ''}
+      <div class="opt"><div>Bot speed</div><div class="seg"><button aria-pressed="${cfg.speed === 'slow'}" data-act="speed" data-s="slow">Relaxed</button><button aria-pressed="${cfg.speed === 'normal'}" data-act="speed" data-s="normal">Normal</button><button aria-pressed="${cfg.speed === 'fast'}" data-act="speed" data-s="fast">Fast</button></div></div>
+    </div>
+    ${sv && ui.homeConfirm ? `<div class="card"><p style="margin:0">Starting a new game replaces the saved one.</p><div class="confirm-row"><button class="btn" data-act="cancel-new">Keep it</button><button class="btn primary" data-act="start-force">Start new game</button></div></div>`
+      : `<button class="btn primary big" data-act="start">Start game</button>`}
+    <details class="rules"><summary>How to play</summary>
+      <ul>
+        <li>Each player places two settlements and two roads. The second settlement gives starting resources.</li>
+        <li>On your turn, roll. Every tile with that number pays its resource to each touching settlement (cities get 2).</li>
+        <li>Spend cards to build: roads, settlements, cities, development cards, and ships in Archipelago.</li>
+        <li>A 7 moves the robber. Anyone holding more than 7 cards discards half. The roller steals one card.</li>
+        <li>Trade with the bank at 4:1, or better at a harbor. Trade with other players any way you agree.</li>
+        <li>Points: settlement 1, city 2, Longest Road (5+) 2, Largest Army (3+ knights) 2, point cards 1.</li>
+        <li>Archipelago: ships link along water. Move one open-ended ship per turn. Gold fields pay any resource you like.</li>
+      </ul>
+    </details>
+  </div>`;
+}
+
+function preset(kind) {
+  const c = ui.cfg;
+  const me = c.players.find(p => !p.bot) || { name: 'Player 1' };
+  const second = c.players.filter(p => !p.bot)[1];
+  const p2 = second ? second.name : 'Player 2';
+  const bot = (i, col) => ({ name: BOT_NAMES[i], color: col, bot: true });
+  if (kind === 'couple') c.players = [{ name: me.name, color: 'red', bot: false }, { name: p2, color: 'blue', bot: false }];
+  if (kind === 'couple-bot') c.players = [{ name: me.name, color: 'red', bot: false }, { name: p2, color: 'blue', bot: false }, bot(0, 'orange')];
+  if (kind === 'solo2') c.players = [{ name: me.name, color: 'red', bot: false }, bot(0, 'blue'), bot(1, 'orange')];
+  if (kind === 'solo3') c.players = [{ name: me.name, color: 'red', bot: false }, bot(0, 'blue'), bot(1, 'orange'), bot(2, 'white')];
+}
+
+function startGame() {
+  const c = ui.cfg;
+  c.players.forEach((p, i) => { const inp = document.getElementById('pname-' + i); if (inp) p.name = inp.value.trim() || (p.bot ? BOT_NAMES[i] : 'Player ' + (i + 1)); });
+  saveCfg();
+  const order = E.shuffle(c.players.map((p, i) => i));
+  G = E.newGame({ mode: c.mode, target: c.target[c.mode], friendly: c.friendly, level: c.level, players: order.map(i => c.players[i]) });
+  log0();
+  enterGame();
+}
+function log0() { ui.undo = []; ui.mode = null; ui.revealed = null; ui.modal = null; ui.modalKey = null; ui.gains = {}; ui.flashHexes = []; }
+
+function enterGame() {
+  $('#home').hidden = true; $('#game').hidden = false;
+  closeModal();
+  renderStatic();
+  afterAction();
+}
+function goHome() {
+  clearTimeout(ui.timer); ui.timer = null;
+  closeModal(); $('#curtain').hidden = true;
+  $('#game').hidden = true; $('#home').hidden = false;
+  ui.homeConfirm = false;
+  renderHome();
+}
+
+/* ================= BOARD ================= */
+function hexPts(x, y, r) {
+  return Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 180 * (60 * k - 30); return (x + r * Math.cos(a)).toFixed(3) + ',' + (y + r * Math.sin(a)).toFixed(3); }).join(' ');
+}
+const DECOR = [[0, -0.56], [-0.5, 0.33], [0.5, 0.33]];
+function renderStatic() {
+  const B = G.board;
+  const land = B.hexes.filter(h => h.terrain !== 'sea');
+  const xs = land.map(h => h.x), ys = land.map(h => h.y);
+  const m = 1.75;
+  ui.base = { x: Math.min(...xs) - m, y: Math.min(...ys) - m, w: Math.max(...xs) - Math.min(...xs) + 2 * m, h: Math.max(...ys) - Math.min(...ys) + 2 * m };
+  ui.view = Object.assign({}, ui.base);
+  applyView();
+  let s = '';
+  // sea
+  B.hexes.forEach(h => {
+    if (h.terrain !== 'sea') return;
+    s += `<polygon points="${hexPts(h.x, h.y, 1)}" fill="${FILL.sea}" stroke="#3a8db5" stroke-width=".03"/>`;
+    s += `<path d="M${(h.x - 0.32).toFixed(2)},${(h.y + 0.1).toFixed(2)} q.08,-.08 .16,0 t.16,0 t.16,0 t.16,0" fill="none" stroke="#ffffff" stroke-opacity=".18" stroke-width=".035" stroke-linecap="round"/>`;
+  });
+  // beaches + land
+  land.forEach(h => { s += `<polygon points="${hexPts(h.x, h.y, 1.02)}" fill="#e6d3a1"/>`; });
+  land.forEach(h => {
+    s += `<polygon points="${hexPts(h.x, h.y, 0.93)}" fill="${FILL[h.terrain]}" stroke="#00000022" stroke-width=".02"/>`;
+    const g = GLYPH[h.terrain];
+    if (g) DECOR.forEach(([dx, dy]) => { s += `<g transform="translate(${(h.x + dx).toFixed(3)},${(h.y + dy).toFixed(3)}) scale(.02)" opacity=".9">${g}</g>`; });
+    if (h.number) {
+      const red = h.number === 6 || h.number === 8;
+      const pips = E.PIPS[h.number];
+      s += `<circle cx="${h.x}" cy="${h.y}" r=".3" fill="#f7ecd0" stroke="#a88b54" stroke-width=".025"/>`;
+      s += `<text class="num" x="${h.x}" y="${h.y + 0.07}" text-anchor="middle" font-size="${red ? 0.3 : 0.26}" fill="${red ? '#c0261b' : '#2b2116'}">${h.number}</text>`;
+      for (let i = 0; i < pips; i++) s += `<circle cx="${(h.x + (i - (pips - 1) / 2) * 0.055).toFixed(3)}" cy="${h.y + 0.17}" r=".019" fill="${red ? '#c0261b' : '#2b2116'}"/>`;
+    }
+  });
+  // ports
+  B.ports.forEach(pt => {
+    const sea = B.hexes[pt.hex], ed = B.edges[pt.edge];
+    const bx = ed.x + (sea.x - ed.x) * 0.55, by = ed.y + (sea.y - ed.y) * 0.55;
+    pt.v.forEach(v => {
+      const vx = B.vertices[v];
+      s += `<line x1="${bx}" y1="${by}" x2="${vx.x + (bx - vx.x) * 0.12}" y2="${vx.y + (by - vx.y) * 0.12}" stroke="#8b5e34" stroke-width=".07" stroke-linecap="round"/>`;
+    });
+    const any = pt.type === 'any';
+    s += `<circle cx="${bx}" cy="${by}" r=".25" fill="#fbf6ea" stroke="${any ? '#6b5a40' : FILL[pt.type]}" stroke-width=".05"/>`;
+    if (any) s += `<text class="num" x="${bx}" y="${by + 0.075}" text-anchor="middle" font-size=".2" fill="#2b2116">3:1</text>`;
+    else s += `<g transform="translate(${bx},${by - 0.05}) scale(.012)">${GLYPH[pt.type]}</g><text class="num" x="${bx}" y="${by + 0.19}" text-anchor="middle" font-size=".12" fill="#2b2116">2:1</text>`;
+  });
+  $('#static').innerHTML = s;
+}
+
+function settlementPath(x, y, k) {
+  k = k || 1;
+  const p = [[-0.13, 0.11], [-0.13, -0.03], [0, -0.15], [0.13, -0.03], [0.13, 0.11]];
+  return 'M' + p.map(([a, b]) => (x + a * k).toFixed(3) + ',' + (y + b * k).toFixed(3)).join(' L') + ' Z';
+}
+function cityPath(x, y) {
+  const p = [[-0.22, 0.13], [0.22, 0.13], [0.22, -0.04], [0.02, -0.04], [0.02, -0.1], [-0.1, -0.21], [-0.22, -0.1]];
+  return 'M' + p.map(([a, b]) => (x + a).toFixed(3) + ',' + (y + b).toFixed(3)).join(' L') + ' Z';
+}
+function shipSvg(x, y, col, cls) {
+  return `<g class="${cls || ''}"><g transform="translate(${x.toFixed(3)},${y.toFixed(3)})"><path d="M0,-.04 V-.25 L.15,-.06 Z" fill="${col}" stroke="#1a1a1a" stroke-width=".022" stroke-linejoin="round"/><path d="M-.19,-.03 H.19 L.13,.07 H-.13 Z" fill="#7a4b26" stroke="#1a1a1a" stroke-width=".022" stroke-linejoin="round"/></g></g>`;
+}
+
+function spotsFor(viewer) {
+  // returns {v:[ids], e:[{id,kind}], h:[ids]} for the current human actor
+  const out = { v: [], e: [], h: [] };
+  if (!G || G.phase === 'gameover') return out;
+  const a = E.actor(G);
+  if (G.players[a].bot || needCurtain()) return out;
+  if (G.phase === 'setup') {
+    if (G.setup.step === 'settlement') out.v = E.validSettlements(G, a, true);
+    else {
+      const k = setupEdgeKind();
+      (k === 'ship' ? E.validShips(G, a, G.setup.vertex) : E.validRoads(G, a, G.setup.vertex)).forEach(id => out.e.push({ id, kind: k }));
+    }
+  } else if (G.phase === 'robber') out.h = E.robberTargets(G);
+  else if (G.phase === 'roadBuilding') {
+    const k = freeEdgeKind();
+    if (G.players[a].pieces[k] > 0) (k === 'ship' ? E.validShips(G, a) : E.validRoads(G, a)).forEach(id => out.e.push({ id, kind: k }));
+  } else if (G.phase === 'main' && ui.mode) {
+    const k = ui.mode.kind;
+    if (k === 'settlement' || k === 'city') out.v = E.buildSpots(G, a, k);
+    else if (k === 'road' || k === 'ship') E.buildSpots(G, a, k).forEach(id => out.e.push({ id, kind: k }));
+    else if (k === 'moveFrom') E.movableShips(G, a).forEach(id => out.e.push({ id, kind: 'movefrom' }));
+    else if (k === 'moveTo') E.shipTargets(G, a, ui.mode.from).forEach(id => out.e.push({ id, kind: 'moveto' }));
+  }
+  return out;
+}
+function setupEdgeKind() {
+  if (G.mode !== 'seafarers') return 'road';
+  const a = G.current, sv = G.setup.vertex;
+  const r = E.validRoads(G, a, sv).length, sh = E.validShips(G, a, sv).length;
+  if (ui.edgeKind === 'ship' && sh) return 'ship';
+  if (!r && sh) return 'ship';
+  return 'road';
+}
+function freeEdgeKind() {
+  if (G.mode !== 'seafarers') return 'road';
+  const pl = G.players[G.current];
+  const r = pl.pieces.road > 0 && E.validRoads(G, G.current).length, sh = pl.pieces.ship > 0 && E.validShips(G, G.current).length;
+  if (ui.edgeKind === 'ship' && sh) return 'ship';
+  if (!r && sh) return 'ship';
+  return 'road';
+}
+
+function renderDynamic() {
+  const B = G.board;
+  let s = '';
+  const fl = -(Date.now() - (ui.flashAt || 0));
+  ui.flashHexes.forEach(id => { const h = B.hexes[id]; s += `<polygon class="flash" style="animation-delay:${fl}ms" points="${hexPts(h.x, h.y, 0.93)}" fill="#fff6c8"/>`; });
+  const popDelay = `style="animation-delay:${-(Date.now() - (ui.popAt || 0))}ms"`;
+  const sp = spotsFor();
+  const myCol = pcol(E.actor(G));
+  sp.h.forEach(id => {
+    const h = B.hexes[id];
+    s += `<polygon class="hl-hex" data-h="${id}" points="${hexPts(h.x, h.y, 0.9)}" fill="#ffffff" fill-opacity=".28" stroke="#fff" stroke-width=".09" stroke-dasharray=".2 .1"/>`;
+  });
+  // edges
+  G.eb.forEach((o, e) => {
+    if (!o) return;
+    const ed = B.edges[e], a = B.vertices[ed.v[0]], b = B.vertices[ed.v[1]];
+    const col = pcol(o.p);
+    const cls = ui.newKeys.has('e' + e) ? 'pop" ' + popDelay + ' data-x="' : '';
+    const sh = 0.16;
+    const x1 = a.x + (b.x - a.x) * sh, y1 = a.y + (b.y - a.y) * sh, x2 = b.x - (b.x - a.x) * sh, y2 = b.y - (b.y - a.y) * sh;
+    if (o.t === 'road') {
+      s += `<g class="${cls}"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#1a1a1a" stroke-width=".17" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width=".11" stroke-linecap="round"/></g>`;
+    } else {
+      s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width=".05" stroke-dasharray=".08 .07" stroke-linecap="round"/>`;
+      s += shipSvg(ed.x, ed.y + 0.06, col, cls);
+    }
+  });
+  // robber & pirate
+  if (G.robber !== null) {
+    const h = B.hexes[G.robber], x = h.x + 0.36, y = h.y - 0.02;
+    s += `<g transform="translate(${x},${y})"><ellipse cx="0" cy=".2" rx=".14" ry=".04" fill="#00000055"/><path d="M-.11,.2 Q-.12,-.02 -.05,-.07 A.08,.08 0 1 1 .05,-.07 Q.12,-.02 .11,.2 Z" fill="#3b3b42" stroke="#111" stroke-width=".02"/></g>`;
+  }
+  if (G.pirate !== null) {
+    const h = B.hexes[G.pirate];
+    s += `<g transform="translate(${h.x},${h.y}) scale(1.7)"><path d="M0,-.04 V-.25 L.15,-.06 Z" fill="#1d1d22"/><path d="M0,-.04 V-.25 L-.13,-.07 Z" fill="#2c2c33"/><path d="M-.2,-.03 H.2 L.14,.08 H-.14 Z" fill="#2a1a10" stroke="#000" stroke-width=".015"/><circle cx=".05" cy="-.13" r=".025" fill="#fff"/></g>`;
+  }
+  // buildings
+  G.vb.forEach((b, v) => {
+    if (!b) return;
+    const vx = B.vertices[v], col = pcol(b.p);
+    const cls = ui.newKeys.has('v' + v) ? 'pop" ' + popDelay + ' data-x="' : '';
+    const d = b.t === 'city' ? cityPath(vx.x, vx.y) : settlementPath(vx.x, vx.y, 1.15);
+    s += `<path class="${cls}" d="${d}" fill="${col}" stroke="#151515" stroke-width=".03" stroke-linejoin="round"/>`;
+  });
+  // edge spots
+  sp.e.forEach(({ id, kind }) => {
+    const ed = B.edges[id], a = B.vertices[ed.v[0]], b = B.vertices[ed.v[1]];
+    const sh = 0.2;
+    const x1 = a.x + (b.x - a.x) * sh, y1 = a.y + (b.y - a.y) * sh, x2 = b.x - (b.x - a.x) * sh, y2 = b.y - (b.y - a.y) * sh;
+    const stroke = kind === 'movefrom' ? '#ffc94a' : '#ffffff';
+    s += `<g class="spot" data-e="${id}" data-k="${kind}"><line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="transparent" stroke-width=".38"/><g class="spot-e"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#10222c" stroke-opacity=".55" stroke-width=".2" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width=".11" stroke-linecap="round" stroke-dasharray="${kind === 'ship' || kind === 'moveto' ? '.09 .06' : 'none'}"/></g>${kind === 'movefrom' ? `<circle cx="${ed.x}" cy="${ed.y}" r=".22" fill="none" stroke="#ffc94a" stroke-width=".04"/>` : ''}</g>`;
+  });
+  sp.v.forEach(id => {
+    const vx = B.vertices[id];
+    s += `<g class="spot" data-v="${id}"><circle cx="${vx.x}" cy="${vx.y}" r=".3" fill="transparent"/><circle class="spot-v" cx="${vx.x}" cy="${vx.y}" r=".13" fill="#fff" stroke="${myCol}" stroke-width=".06"/></g>`;
+  });
+  if (ui.pending) s += ghostSvg();
+  $('#dynamic').innerHTML = s;
+}
+function ghostSvg() {
+  const B = G.board, p = ui.pending, col = pcol(E.actor(G)), kind = pendingKind();
+  let g = '';
+  if (p.h !== null) {
+    const h = B.hexes[p.h];
+    g += `<polygon points="${hexPts(h.x, h.y, 0.9)}" fill="#fff" fill-opacity=".35" stroke="#ffc94a" stroke-width=".1"/>`;
+    g += kind === 'pirate'
+      ? `<g transform="translate(${h.x},${h.y}) scale(1.7)" opacity=".85"><path d="M0,-.04 V-.25 L.15,-.06 Z" fill="#1d1d22"/><path d="M-.2,-.03 H.2 L.14,.08 H-.14 Z" fill="#2a1a10"/></g>`
+      : `<g transform="translate(${h.x + 0.36},${h.y - 0.02})" opacity=".85"><path d="M-.11,.2 Q-.12,-.02 -.05,-.07 A.08,.08 0 1 1 .05,-.07 Q.12,-.02 .11,.2 Z" fill="#3b3b42" stroke="#ffc94a" stroke-width=".03"/></g>`;
+  } else if (p.v !== null) {
+    const vx = B.vertices[p.v];
+    const d = kind === 'city' ? cityPath(vx.x, vx.y) : settlementPath(vx.x, vx.y, 1.15);
+    g += `<circle cx="${vx.x}" cy="${vx.y}" r=".3" fill="none" stroke="#ffc94a" stroke-width=".05"/><path d="${d}" fill="${col}" fill-opacity=".75" stroke="#ffc94a" stroke-width=".04" stroke-linejoin="round"/>`;
+  } else if (p.e !== null) {
+    const ed = B.edges[p.e], a = B.vertices[ed.v[0]], b = B.vertices[ed.v[1]], sh = 0.16;
+    const x1 = a.x + (b.x - a.x) * sh, y1 = a.y + (b.y - a.y) * sh, x2 = b.x - (b.x - a.x) * sh, y2 = b.y - (b.y - a.y) * sh;
+    g += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#ffc94a" stroke-width=".22" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-opacity=".85" stroke-width=".12" stroke-linecap="round"/>`;
+    if (kind === 'ship') g += shipSvg(ed.x, ed.y + 0.06, col, '');
+  }
+  return `<g class="ghost" pointer-events="none">${g}</g>`;
+}
+
+/* ---------- view (pan / zoom) ---------- */
+function applyView() { const v = ui.view; $('#board').setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`); }
+function clampView() {
+  const b = ui.base, v = ui.view;
+  v.w = Math.min(b.w, Math.max(b.w / 3.5, v.w)); v.h = v.w * b.h / b.w;
+  v.x = Math.min(b.x + b.w - v.w, Math.max(b.x, v.x));
+  v.y = Math.min(b.y + b.h - v.h, Math.max(b.y, v.y));
+}
+function zoomAt(f, ux, uy) {
+  const v = ui.view;
+  if (ux === undefined) { ux = v.x + v.w / 2; uy = v.y + v.h / 2; }
+  const nw = v.w * f, nh = v.h * f;
+  v.x = ux - (ux - v.x) * f; v.y = uy - (uy - v.y) * f; v.w = nw; v.h = nh;
+  clampView(); applyView();
+}
+function unitsPerPx() { const r = $('#board').getBoundingClientRect(); return Math.max(ui.view.w / r.width, ui.view.h / r.height); }
+function toUnits(px, py, view) {
+  const r = $('#board').getBoundingClientRect();
+  const k = Math.max(view.w / r.width, view.h / r.height);
+  const offX = (r.width - view.w / k) / 2, offY = (r.height - view.h / k) / 2;
+  return { x: view.x + (px - r.left - offX) * k, y: view.y + (py - r.top - offY) * k, k };
+}
+const pz = { pts: new Map(), start: null, startView: null, moved: false, justDragged: false };
+function setupPanZoom() {
+  const svg = $('#board');
+  svg.addEventListener('pointerdown', ev => {
+    pz.pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    pz.start = new Map([...pz.pts].map(([k, p]) => [k, Object.assign({}, p)]));
+    pz.startView = Object.assign({}, ui.view);
+    if (pz.pts.size === 1) pz.moved = false;
+  });
+  window.addEventListener('pointermove', ev => {
+    if (!pz.pts.has(ev.pointerId)) return;
+    pz.pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    const ids = [...pz.pts.keys()];
+    if (ids.length === 1) {
+      const p0 = pz.start.get(ids[0]); if (!p0) return;
+      const dx = ev.clientX - p0.x, dy = ev.clientY - p0.y;
+      if (!pz.moved && Math.hypot(dx, dy) < 8) return;
+      if (ui.view.w >= ui.base.w - 1e-6) return; // nothing to pan when fully zoomed out
+      pz.moved = true;
+      const k = toUnits(0, 0, pz.startView).k;
+      ui.view.x = pz.startView.x - dx * k; ui.view.y = pz.startView.y - dy * k;
+      clampView(); applyView();
+    } else if (ids.length >= 2) {
+      const a0 = pz.start.get(ids[0]), b0 = pz.start.get(ids[1]);
+      if (!a0 || !b0) return;
+      const a1 = pz.pts.get(ids[0]), b1 = pz.pts.get(ids[1]);
+      const d0 = Math.hypot(a0.x - b0.x, a0.y - b0.y), d1 = Math.hypot(a1.x - b1.x, a1.y - b1.y);
+      if (d0 < 10 || d1 < 10) return;
+      pz.moved = true;
+      const f = d0 / d1;
+      const sv = pz.startView;
+      const m0 = toUnits((a0.x + b0.x) / 2, (a0.y + b0.y) / 2, sv);
+      const nv = { w: sv.w * f, h: sv.h * f };
+      const r = $('#board').getBoundingClientRect();
+      const k1 = m0.k * f;
+      const offX = (r.width - nv.w / k1) / 2, offY = (r.height - nv.h / k1) / 2;
+      nv.x = m0.x - ((a1.x + b1.x) / 2 - r.left - offX) * k1;
+      nv.y = m0.y - ((a1.y + b1.y) / 2 - r.top - offY) * k1;
+      ui.view = nv; clampView(); applyView();
+    }
+  });
+  const up = ev => {
+    if (!pz.pts.has(ev.pointerId)) return;
+    pz.pts.delete(ev.pointerId);
+    if (pz.pts.size === 0) { if (pz.moved) pz.justDragged = true; setTimeout(() => { pz.justDragged = false; }, 60); }
+    else { pz.start = new Map([...pz.pts].map(([k, p]) => [k, Object.assign({}, p)])); pz.startView = Object.assign({}, ui.view); }
+  };
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+  svg.addEventListener('wheel', ev => {
+    ev.preventDefault();
+    const u = toUnits(ev.clientX, ev.clientY, ui.view);
+    zoomAt(ev.deltaY > 0 ? 1.12 : 1 / 1.12, u.x, u.y);
+  }, { passive: false });
+  svg.addEventListener('click', ev => {
+    if (pz.justDragged) { pz.justDragged = false; return; }
+    const t = ev.target.closest('[data-v],[data-e],[data-h]');
+    if (t) onBoardTap(t);
+  });
+}
+
+/* ================= RENDER ================= */
+function needCurtain() {
+  if (!G || G.phase === 'gameover' || G.phase === 'setup') return false;
+  const a = E.actor(G);
+  return !G.players[a].bot && privacyOn() && ui.revealed !== a;
+}
+function viewer() {
+  if (!G) return null;
+  const a = E.actor(G);
+  if (!G.players[a].bot && !needCurtain()) return a;
+  const h = humans();
+  if (h.length === 1) return h[0].id;
+  if (privacyOn()) return null; // pass and play: keep hands hidden while others act
+  if (ui.revealed !== null && !G.players[ui.revealed].bot) return ui.revealed;
+  return h[0] ? h[0].id : null;
+}
+
+function render() {
+  if (!G) return;
+  const a = E.actor(G);
+  if (!G.players[a].bot && (G.phase === 'setup' || !privacyOn())) ui.revealed = a;
+  renderPlayers();
+  renderDynamic();
+  renderDice();
+  renderTicker();
+  renderDock();
+  renderCurtain();
+  renderPhaseModal();
+}
+
+function renderPlayers() {
+  const cur = G.phase === 'gameover' ? G.winner : G.current;
+  const me = viewer();
+  $('#players').innerHTML = G.players.map(p => {
+    const pub = E.publicVP(G, p.id);
+    const showHidden = G.phase === 'gameover' || p.id === me;
+    const hid = E.hiddenVP(G, p.id);
+    const badges = [];
+    if (G.longest.p === p.id) badges.push('<span class="badge">ROAD</span>');
+    if (G.army.p === p.id) badges.push('<span class="badge">ARMY</span>');
+    const gain = ui.gains[p.id] ? `<span class="gain">+${ui.gains[p.id]}</span>` : '';
+    return `<div class="pchip ${p.id === cur ? 'turn' : ''}" style="--pc:${colorHex(p.color)}">
+      <div class="badges">${badges.join('')}</div>
+      <div class="nm"><i></i><span>${esc(p.name)}</span></div>
+      <div class="vp">${pub + (showHidden ? hid : 0)}<small>${showHidden && hid ? `incl. ${hid} hidden` : `/ ${G.target}`}</small></div>
+      <div class="meta"><span title="Resource cards">${ICON.card}${E.handCount(p.hand)}</span><span title="Development cards" style="color:#c6a8f0">${ICON.card}${p.dev.length}</span>${p.knights ? `<span title="Knights played">${ICON.sword}${p.knights}</span>` : ''}${((G.longest.lens || [])[p.id] || 0) >= 3 ? `<span title="Longest road">${ICON.roadsm}${G.longest.lens[p.id]}</span>` : ''}</div>
+      ${gain}
+    </div>`;
+  }).join('');
+}
+
+function dieHtml(n, red) {
+  const L = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] }[n];
+  let s = '';
+  for (let i = 1; i <= 9; i++) s += L.includes(i) ? `<b style="grid-area:${Math.ceil(i / 3)}/${(i - 1) % 3 + 1}"></b>` : '';
+  return `<div class="die ${red ? 'red-die' : ''}">${s}</div>`;
+}
+function renderDice() {
+  const d = G.dice;
+  // redraw only when a new roll happened, so the spin plays once per roll
+  const key = d ? d.join(',') + ':' + G.turnNo + ':' + G.rollCounts.reduce((x, y) => x + y, 0) : '';
+  if (ui.diceKey === key) return;
+  ui.diceKey = key;
+  $('#dice').innerHTML = d ? dieHtml(d[0], false) + dieHtml(d[1], true) + `<span class="dice-sum">${d[0] + d[1]}</span>` : '';
+}
+function renderTicker() {
+  const last = G.log.slice(-2);
+  $('#ticker').innerHTML = last.map(l => `<div>${l.p !== null ? `<i style="background:${pcol(l.p)}"></i>` : ''}${esc(l.t)}</div>`).join('');
+}
+
+function costDots(kind) {
+  const c = E.COST[kind]; let s = '';
+  Object.keys(c).forEach(r => { for (let i = 0; i < c[r]; i++) s += `<i style="background:${RES_DOT[r]}"></i>`; });
+  return `<span class="cost">${s}</span>`;
+}
+
+function handHtml(p, opts) {
+  const pl = G.players[p];
+  const bump = ui.bump || {};
+  const cards = E.RES.map(r => `<div class="rcard ${pl.hand[r] ? '' : 'zero'} ${bump[r] ? 'bump' : ''}" title="${E.RES_NAME[r]}"><div class="art" style="background:${FILL[r]}">${glyphSvg(r, 26)}</div><div class="ct">${pl.hand[r]}</div></div>`).join('');
+  const playable = ['knight', 'road', 'plenty', 'mono'].some(t => E.playableDev(G, p, t));
+  const dev = `<button class="devbtn ${playable ? 'glow' : ''}" data-act="dev" ${opts && opts.noDev ? 'disabled' : ''}><b>${pl.dev.length}</b>Cards</button>`;
+  return `<div class="hand">${cards}${dev}</div>`;
+}
+
+function renderDock() {
+  const a = E.actor(G);
+  const pa = G.players[a];
+  const v = viewer();
+  let prompt = '', body = '';
+  const col = colorHex(pa.color);
+  if (G.phase === 'gameover') {
+    prompt = `${esc(G.players[G.winner].name)} wins!`;
+    body = (v !== null ? handHtml(v, { noDev: true }) : '') + `<div class="row2"><button class="btn primary" data-act="show-results">See results</button><button class="btn" data-act="home">New game</button></div>`;
+    $('#dock').innerHTML = `<div class="prompt" style="--pc:${pcol(G.winner)}"><i></i><span>${prompt}</span></div>${body}`;
+    return;
+  }
+  if (pa.bot || needCurtain()) {
+    const what = pa.bot ? `<span class="thinking">${esc(pa.name)} is playing</span>` : `<span>Waiting for ${esc(pa.name)}</span>`;
+    $('#dock').innerHTML = `<div class="prompt" style="--pc:${col}"><i></i>${what}</div>${v !== null ? handHtml(v, { noDev: true }) : ''}`;
+    return;
+  }
+  // a human acts and may see their hand
+  const pl = pa, me = a;
+  if (ui.pending) {
+    const what = { settlement: 'Build a settlement here?', city: 'Upgrade to a city here?', road: 'Build a road here?', ship: ui.mode && ui.mode.kind === 'moveTo' ? 'Sail the ship here?' : 'Place a ship here?', robber: 'Move the robber here?', pirate: 'Move the pirate here?' }[pendingKind()];
+    $('#dock').innerHTML = `<div class="prompt" style="--pc:${col}"><i></i><span>${what} <small style="color:var(--muted);font-weight:700">Tap another spot to change it.</small></span></div>${handHtml(me, { noDev: true })}<div class="row2"><button class="btn" data-act="pending-no">Cancel</button><button class="btn primary big" data-act="pending-yes">Confirm</button></div>`;
+    return;
+  }
+  if (G.phase === 'setup') {
+    const first = G.setup.idx < G.players.length;
+    if (G.setup.step === 'settlement') prompt = `${esc(pl.name)}: place your ${first ? 'first' : 'second'} settlement`;
+    else prompt = `${esc(pl.name)}: place a ${setupEdgeKind()} next to it`;
+    if (!first && G.setup.step === 'settlement') prompt += ' (it pays starting resources)';
+    let extra = '';
+    if (G.setup.step === 'road' && G.mode === 'seafarers' && E.validShips(G, me, G.setup.vertex).length && E.validRoads(G, me, G.setup.vertex).length) {
+      extra = `<div class="row2"><div class="seg" role="group" style="flex:1"><button style="flex:1" aria-pressed="${setupEdgeKind() === 'road'}" data-act="edge-kind" data-k="road">Road</button><button style="flex:1" aria-pressed="${setupEdgeKind() === 'ship'}" data-act="edge-kind" data-k="ship">Ship</button></div></div>`;
+    }
+    body = handHtml(me, { noDev: true }) + extra;
+  } else if (G.phase === 'roll') {
+    prompt = `${esc(pl.name)}, your turn`;
+    const knight = E.playableDev(G, me, 'knight');
+    body = handHtml(me) + `<div class="row2">${knight ? '<button class="btn" data-act="play-knight" data-confirm="Play knight?">Play knight</button>' : ''}<button class="btn primary big" data-act="roll">Roll dice</button></div>`;
+  } else if (G.phase === 'robber') {
+    prompt = G.mode === 'seafarers' ? 'Move the robber (land) or the pirate (sea): tap a tile' : 'Move the robber: tap a tile';
+    body = handHtml(me, { noDev: true });
+  } else if (G.phase === 'roadBuilding') {
+    const k = freeEdgeKind();
+    prompt = `Free ${k} ${3 - G.freeRoads} of 2: tap a spot`;
+    const both = G.mode === 'seafarers' && pl.pieces.ship > 0 && E.validShips(G, me).length && pl.pieces.road > 0 && E.validRoads(G, me).length;
+    body = handHtml(me, { noDev: true }) + `<div class="row2">${both ? `<div class="seg" role="group" style="flex:1"><button style="flex:1" aria-pressed="${k === 'road'}" data-act="edge-kind" data-k="road">Road</button><button style="flex:1" aria-pressed="${k === 'ship'}" data-act="edge-kind" data-k="ship">Ship</button></div>` : ''}<button class="btn narrow" data-act="end-free" data-confirm="Skip?">Skip</button></div>`;
+  } else if (G.phase === 'main') {
+    if (ui.mode) {
+      const k = ui.mode.kind;
+      prompt = { road: 'Tap a glowing edge to build a road', ship: 'Tap a glowing edge to launch a ship', settlement: 'Tap a glowing corner to settle', city: 'Tap a settlement to upgrade it', moveFrom: 'Pick a ship to move (only open-ended ships can sail)', moveTo: 'Pick where the ship sails to' }[k];
+    } else prompt = `${esc(pl.name)}: build, trade, or end your turn`;
+    const kinds = ['road', 'settlement', 'city', G.mode === 'seafarers' ? 'ship' : null].filter(Boolean);
+    const btn = k => {
+      const can = E.canBuildKind(G, me, k);
+      const on = ui.mode && ui.mode.kind === k;
+      const label = { road: 'Road', settlement: 'Settle', city: 'City', ship: 'Ship' }[k];
+      return `<button class="act ${on ? 'on' : ''}" data-act="build" data-k="${k}" ${can || on ? '' : 'disabled'} style="--ic:${col}"><span class="ic">${ICON[k]}</span><span class="lb">${label}</span>${costDots(k)}</button>`;
+    };
+    const canDev = E.canAfford(G, me, 'dev') && G.deck.length > 0;
+    const actions = kinds.map(btn).join('') + `<button class="act" data-act="buy-dev" data-confirm="Buy?" ${canDev ? '' : 'disabled'}><span class="ic">${ICON.dev}</span><span class="lb">Card</span>${costDots('dev')}</button>`;
+    const cols = kinds.length + 1;
+    const movable = G.mode === 'seafarers' && E.movableShips(G, me).length > 0;
+    const row2 = [];
+    if (ui.mode) row2.push('<button class="btn" data-act="cancel-mode">Cancel</button>');
+    else {
+      if (ui.undo.length) row2.push('<button class="btn narrow" data-act="undo" aria-label="Undo">Undo</button>');
+      row2.push('<button class="btn" data-act="trade">Trade</button>');
+      if (movable) row2.push('<button class="btn" data-act="move-ship">Move ship</button>');
+      row2.push('<button class="btn primary" data-act="end-turn" data-confirm="Tap again to end">End turn</button>');
+    }
+    body = handHtml(me) + `<div class="actions" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${actions}</div><div class="row2">${row2.join('')}</div>`;
+  } else {
+    // discard / steal / gold / offer happen in a sheet
+    if (G.phase === 'discard') prompt = `${esc(pl.name)}: discard half your cards`;
+    else if (G.phase === 'steal') prompt = 'Choose who to rob';
+    else if (G.phase === 'gold') prompt = `${esc(pl.name)}: pick your gold`;
+    else if (G.phase === 'offer' && G.offer) prompt = `${esc(G.players[G.offer.from].name)} offers a trade`;
+    body = handHtml(me, { noDev: true });
+  }
+  $('#dock').innerHTML = `<div class="prompt" style="--pc:${col}"><i></i><span>${prompt}</span></div>${body}`;
+}
+
+function renderCurtain() {
+  const c = $('#curtain');
+  if (!needCurtain()) { c.hidden = true; return; }
+  const a = E.actor(G), pl = G.players[a];
+  const why = { roll: 'It’s your turn.', discard: 'A 7 was rolled. You need to discard.', gold: 'You have gold to collect.', offer: `${esc(G.players[G.offer ? G.offer.from : 0].name)} wants to trade with you.`, steal: 'Choose who to rob.', robber: 'Move the robber.', main: 'Your turn continues.', roadBuilding: 'Place your free roads.' }[G.phase] || '';
+  c.style.setProperty('--pc', colorHex(pl.color));
+  c.innerHTML = `<p>Pass the device to</p><h2>${esc(pl.name)}</h2><p>${why}</p><button class="btn primary big" data-act="reveal">I’m ${esc(pl.name)}, show my cards</button>`;
+  c.hidden = false;
+}
+
+/* ================= MODALS ================= */
+function openModal(kind, key) { ui.modal = kind; ui.modalKey = key || kind; ui.animModal = true; drawModal(); }
+function closeModal() { ui.modal = null; ui.modalKey = null; ui.picks = {}; ui.sel = []; ui.confirm = null; const m = $('#modal'); m.hidden = true; m.innerHTML = ''; }
+function sheet(title, inner, closable) {
+  return `<div class="modal-back ${ui.animModal ? '' : 'still'}" data-act="${closable ? 'close-modal-bg' : ''}"><div class="sheet" role="dialog" aria-label="${esc(title)}"><header><h2>${title}</h2>${closable ? '<button class="icon-btn" data-act="close-modal" aria-label="Close">✕</button>' : ''}</header>${inner}</div></div>`;
+}
+function stepperGrid(prefix, values, limits, extra) {
+  return `<div class="res-grid">${E.RES.map(r => `<div class="cnt"><div class="rpick" style="width:100%"><div class="art" style="background:${FILL[r]}">${glyphSvg(r, 26)}</div>${E.RES_NAME[r]}${extra ? `<small>${extra(r)}</small>` : ''}</div>
+    <div class="stepper"><button data-act="${prefix}" data-r="${r}" data-d="1" ${values[r] >= limits[r] ? 'disabled' : ''} aria-label="More ${E.RES_NAME[r]}">+</button><output>${values[r] || 0}</output><button data-act="${prefix}" data-r="${r}" data-d="-1" ${!values[r] ? 'disabled' : ''} aria-label="Less ${E.RES_NAME[r]}">−</button></div></div>`).join('')}</div>`;
+}
+function drawModal() {
+  const m = $('#modal');
+  if (!ui.modal || !G && ui.modal !== 'none') { m.hidden = true; return; }
+  const k = ui.modal;
+  let html = '';
+  const a = G ? E.actor(G) : null;
+  if (k === 'discard') {
+    const q = G.discardQ[0], pl = G.players[q.p];
+    const picks = Object.assign(E.emptyHand(), ui.picks);
+    const tot = E.RES.reduce((s, r) => s + picks[r], 0);
+    html = sheet(`${esc(pl.name)}: discard ${q.n}`, `<p>A 7 was rolled and you hold ${E.handCount(pl.hand)} cards. Choose ${q.n} to return to the bank.</p>
+      ${stepperGrid('pick', picks, pl.hand, r => `have ${pl.hand[r]}`)}
+      <button class="btn primary big" data-act="do-discard" data-confirm="Tap again to discard" ${tot === q.n ? '' : 'disabled'}>Discard ${tot} of ${q.n}</button>`);
+  } else if (k === 'gold') {
+    const q = G.goldQ[0], pl = G.players[q.p];
+    const need = Math.min(q.n, E.RES.reduce((s, r) => s + G.bank[r], 0));
+    const picks = Object.assign(E.emptyHand(), ui.picks);
+    const tot = E.RES.reduce((s, r) => s + picks[r], 0);
+    const lim = {}; E.RES.forEach(r => { lim[r] = tot >= need ? picks[r] : G.bank[r]; });
+    html = sheet(`${esc(pl.name)}: gold!`, `<p>Your gold field paid out. Take any ${need} resource${need > 1 ? 's' : ''}.</p>
+      ${stepperGrid('pick', picks, lim, r => `bank ${G.bank[r]}`)}
+      <button class="btn primary big" data-act="do-gold" data-confirm="Tap again to take" ${tot === need ? '' : 'disabled'}>Take ${tot} of ${need}</button>`);
+  } else if (k === 'steal') {
+    html = sheet('Rob a player', `<p>Take one random card from:</p>${G.stealFrom.map(p => `<div class="who"><i style="background:${pcol(p)}"></i><div class="n">${esc(G.players[p].name)}<small>${E.handCount(G.players[p].hand)} cards</small></div><button class="btn primary" data-act="do-steal" data-confirm="Sure?" data-p="${p}">Rob</button></div>`).join('')}`);
+  } else if (k === 'offer') {
+    const o = G.offer;
+    html = sheet(`${esc(G.players[o.from].name)} wants to trade`, `<div class="who"><i style="background:${pcol(o.from)}"></i><div class="n">You get<small>${esc(E.describe(o.give))}</small></div></div>
+      <div class="who"><i style="background:${pcol(o.to)}"></i><div class="n">You give<small>${esc(E.describe(o.get))}</small></div></div>
+      <div class="label">Your cards</div>
+      <div class="hand">${E.RES.map(r => { const n = G.players[o.to].hand[r], d = (o.give[r] || 0) - (o.get[r] || 0); return `<div class="rcard ${n ? '' : 'zero'}" title="${E.RES_NAME[r]}"><div class="art" style="background:${FILL[r]}">${glyphSvg(r, 26)}</div><div class="ct">${n}${d ? `<small style="font-size:.7rem;color:${d > 0 ? '#2b7a3a' : '#b0301f'}"> ${d > 0 ? '+' : ''}${d}</small>` : ''}</div></div>`; }).join('')}</div>
+      ${E.RES.every(r => (o.get[r] || 0) <= G.players[o.to].hand[r]) ? '' : '<p>You don’t have those cards.</p>'}
+      <div class="confirm-row"><button class="btn" data-act="offer-no" data-confirm="Decline?">Decline</button><button class="btn primary" data-act="offer-yes" data-confirm="Accept?" ${E.RES.every(r => (o.get[r] || 0) <= G.players[o.to].hand[r]) ? '' : 'disabled'}>Accept</button></div>`);
+  } else if (k === 'trade') html = tradeModal();
+  else if (k === 'dev') html = devModal();
+  else if (k === 'menu') html = menuModal();
+  else if (k === 'log') html = sheet('Game log', `<div class="loglist">${G.log.slice().reverse().map(l => `<div>${l.p !== null ? `<i style="background:${pcol(l.p)}"></i>` : ''}${esc(l.t)}</div>`).join('')}</div>`, true);
+  else if (k === 'costs') html = sheet('Building costs', costsHtml(), true);
+  else if (k === 'results') html = resultsModal();
+  const old = m.querySelector('.sheet');
+  const top = old ? old.scrollTop : 0;
+  m.innerHTML = html; m.hidden = false;
+  if (!ui.animModal) { const sh = m.querySelector('.sheet'); if (sh) sh.scrollTop = top; }
+  ui.animModal = false;
+}
+function costsHtml() {
+  const row = (label, kind) => `<div>${label}</div><div class="pips">${Object.keys(E.COST[kind]).map(r => Array(E.COST[kind][r]).fill(`<i style="background:${RES_DOT[r]}" title="${E.RES_NAME[r]}"></i>`).join('')).join('')}</div>`;
+  return `<div class="costs">${row('Road', 'road')}${row('Settlement (1 point)', 'settlement')}${row('City (2 points)', 'city')}${G && G.mode === 'seafarers' ? row('Ship', 'ship') : ''}${row('Development card', 'dev')}</div>
+    <p>${E.RES.map(r => `<span style="color:${RES_DOT[r]};font-weight:800">■</span> ${E.RES_NAME[r]}`).join(' &nbsp; ')}</p>
+    <p>Longest Road (5+ in a row) and Largest Army (3+ knights) are worth 2 points each.${G && G.mode === 'seafarers' ? ' Your first settlement on each new island is worth 2 extra points.' : ''}</p>`;
+}
+
+function tradeModal() {
+  const me = G.current, pl = G.players[me], t = ui.trade;
+  const tabs = `<div class="tabs"><button aria-pressed="${t.tab === 'bank'}" data-act="trade-tab" data-t="bank">Bank & harbors</button><button aria-pressed="${t.tab === 'players'}" data-act="trade-tab" data-t="players">Players</button></div>`;
+  let inner = '';
+  if (t.tab === 'bank') {
+    const give = E.RES.map(r => { const ratio = E.tradeRatio(G, me, r); const ok = pl.hand[r] >= ratio; return `<button class="rpick" aria-pressed="${t.give === r}" data-act="bank-give" data-r="${r}" ${ok ? '' : 'disabled'}><div class="art" style="background:${FILL[r]}">${glyphSvg(r, 24)}</div>${ratio}:1<small>have ${pl.hand[r]}</small></button>`; }).join('');
+    const get = E.RES.map(r => `<button class="rpick" aria-pressed="${t.get === r}" data-act="bank-get" data-r="${r}" ${G.bank[r] > 0 && r !== t.give ? '' : 'disabled'}><div class="art" style="background:${FILL[r]}">${glyphSvg(r, 24)}</div>${E.RES_NAME[r]}<small>bank ${G.bank[r]}</small></button>`).join('');
+    const ok = t.give && t.get && t.give !== t.get && pl.hand[t.give] >= E.tradeRatio(G, me, t.give) && G.bank[t.get] > 0;
+    inner = `<div class="label">You give</div><div class="res-grid">${give}</div><div class="label">You get 1</div><div class="res-grid">${get}</div>
+      <button class="btn primary big" data-act="do-bank" data-confirm="Tap again to trade" ${ok ? '' : 'disabled'}>${ok ? `Trade ${E.tradeRatio(G, me, t.give)} ${E.RES_NAME[t.give]} for 1 ${E.RES_NAME[t.get]}` : 'Pick what to give and get'}</button>`;
+  } else {
+    const pg = Object.assign(E.emptyHand(), t.pg), pw = Object.assign(E.emptyHand(), t.pw);
+    const lim = {}; E.RES.forEach(r => { lim[r] = 9; });
+    const giveLim = {}; E.RES.forEach(r => { giveLim[r] = pl.hand[r]; });
+    const ready = E.handCount(pg) > 0 && E.handCount(pw) > 0;
+    const mine = ready && E.RES.every(r => pg[r] <= pl.hand[r]);
+    const L = Bot.LEVELS[G.level] || Bot.LEVELS.normal;
+    const others = G.players.filter(o => o.id !== me).map(o => {
+      let status = `${E.handCount(o.hand)} cards`;
+      if (o.bot && G.talk && ((G.talk.accepts[o.id] || 0) >= L.maxAccepts || (G.talk.declines[o.id] || 0) >= L.maxDeclines)) status = 'Done trading this turn';
+      else if (!o.bot) status += ' · agree out loud first';
+      const label = o.bot ? 'Offer' : 'Trade';
+      return `<div class="who"><i style="background:${colorHex(o.color)}"></i><div class="n">${esc(o.name)}<small>${status}</small></div><button class="btn primary" data-act="do-ptrade" data-confirm="Sure?" data-p="${o.id}" ${mine ? '' : 'disabled'}>${label}</button></div>`;
+    }).join('');
+    inner = `<div class="label">You give</div>${stepperGrid('pg', pg, giveLim)}<div class="label">You want</div>${stepperGrid('pw', pw, lim)}<p>${ready ? 'Send this offer to:' : 'Pick what you give and what you want.'}</p>${others}`;
+  }
+  return sheet('Trade', tabs + inner, true);
+}
+
+function devModal() {
+  const me = viewer();
+  if (me === null) return sheet('Development cards', '<p>No cards to show.</p>', true);
+  const pl = G.players[me];
+  const groups = {};
+  pl.dev.forEach(d => { (groups[d.type] = groups[d.type] || []).push(d); });
+  const isTurn = G.current === me && E.actor(G) === me;
+  let list = Object.keys(groups).map(t => {
+    const n = groups[t].length;
+    const can = isTurn && E.playableDev(G, me, t);
+    const fresh = groups[t].every(d => d.turn >= G.turnNo);
+    let why = '';
+    if (t !== 'vp' && !can) why = G.devPlayed && isTurn ? 'One card per turn' : (fresh && isTurn ? 'New this turn' : (isTurn ? '' : 'Play on your turn'));
+    let ctl = t === 'vp' ? '' : `<button class="btn ${can ? 'primary' : ''}" data-act="play-dev" data-t="${t}" ${t === 'knight' || t === 'road' ? 'data-confirm="Sure?"' : ''} ${can ? '' : 'disabled'}>Play</button>`;
+    return `<div class="devcard"><div class="pic">${DEV_SHORT[t]}</div><div><b>${E.DEV_NAME[t]}${n > 1 ? ' ×' + n : ''}</b><small>${DEV_TEXT[t]}${why ? ' · ' + why : ''}</small></div>${ctl}</div>`;
+  }).join('');
+  if (!list) list = '<p>You have no development cards. Buy one for 1 Wool, 1 Grain, 1 Ore.</p>';
+  let picker = '';
+  if (ui.confirm === 'plenty' || ui.confirm === 'mono') {
+    const n = ui.confirm === 'plenty' ? 2 : 1;
+    picker = `<div class="label">${ui.confirm === 'plenty' ? 'Pick two resources (tap twice for two of one)' : 'Pick a resource to collect'}</div>
+      <div class="res-grid">${E.RES.map(r => { const c = ui.sel.filter(x => x === r).length; return `<button class="rpick" aria-pressed="${c > 0}" data-act="dev-sel" data-r="${r}" ${ui.confirm === 'plenty' && G.bank[r] <= c ? 'disabled' : ''}><div class="art" style="background:${FILL[r]}">${glyphSvg(r, 24)}</div>${E.RES_NAME[r]}${c ? `<small>×${c}</small>` : ''}</button>`; }).join('')}</div>
+      <div class="confirm-row"><button class="btn" data-act="dev-sel-clear">Clear</button><button class="btn primary" data-act="dev-confirm" data-confirm="Tap again to play" ${ui.sel.length === n ? '' : 'disabled'}>Play ${E.DEV_NAME[ui.confirm]}</button></div>`;
+  }
+  return sheet('Development cards', `<div class="devlist">${list}</div>${picker}<p>${G.deck.length} cards left in the deck.</p>`, true);
+}
+
+function menuModal() {
+  if (ui.confirm === 'quit') {
+    return sheet('Leave this game?', `<p>The game is saved on this device. You can resume it from the start screen.</p><div class="confirm-row"><button class="btn" data-act="close-modal">Stay</button><button class="btn primary" data-act="home">Go to start screen</button></div>`, true);
+  }
+  const bank = E.RES.map(r => `<span style="color:${RES_DOT[r]};font-weight:800">■</span> ${G.bank[r]}`).join(' &nbsp; ');
+  return sheet('Menu', `<div class="menu-list">
+      <button class="btn" data-act="open-costs">Building costs</button>
+      <button class="btn" data-act="open-log">Game log</button>
+      <button class="btn" data-act="toggle-confirm">${ui.cfg.confirm ? 'Stop asking to confirm moves' : 'Ask to confirm moves'}</button>
+      <button class="btn" data-act="toggle-privacy">${ui.cfg.hideHands ? 'Stop hiding hands between turns' : 'Hide hands between turns'}</button>
+      ${G.players.some(p => p.bot) ? `<button class="btn" data-act="cycle-level">Bot skill: ${{ easy: 'Easy', normal: 'Normal', hard: 'Hard' }[G.level || 'normal']}</button>` : ''}
+      <button class="btn" data-act="cycle-speed">Bot speed: ${{ slow: 'Relaxed', normal: 'Normal', fast: 'Fast' }[ui.cfg.speed]}</button>
+      <button class="btn danger" data-act="quit">Leave game</button>
+    </div><p>Bank: ${bank} · Dev cards left: ${G.deck.length} · Playing to ${G.target}</p>`, true);
+}
+
+function resultsModal() {
+  const rows = G.players.map(p => {
+    let set = 0, cit = 0;
+    G.vb.forEach(b => { if (b && b.p === p.id) b.t === 'city' ? cit++ : set++; });
+    return { p, set, cit, lr: G.longest.p === p.id ? 2 : 0, la: G.army.p === p.id ? 2 : 0, vp: E.hiddenVP(G, p.id), isl: p.bonusVP, tot: E.totalVP(G, p.id) };
+  }).sort((a, b) => b.tot - a.tot);
+  const sea = G.mode === 'seafarers';
+  const hist = G.rollCounts.slice(2).map((c, i) => `${i + 2}:${c}`).join(' · ');
+  return sheet(`${esc(G.players[G.winner].name)} wins!`, `<div style="overflow-x:auto"><table class="score-table"><tr><th></th><th>Builds</th><th>Road</th><th>Army</th>${sea ? '<th>Isles</th>' : ''}<th>Cards</th><th>Total</th></tr>
+    ${rows.map(r => `<tr><td><span style="color:${colorHex(r.p.color)};font-weight:800">●</span> ${esc(r.p.name)}</td><td>${r.set + r.cit * 2}</td><td>${r.lr}</td><td>${r.la}</td>${sea ? `<td>${r.isl}</td>` : ''}<td>${r.vp}</td><td><b>${r.tot}</b></td></tr>`).join('')}</table></div>
+    <p>Dice rolls this game: ${hist}</p>
+    <div class="confirm-row"><button class="btn" data-act="home">Change setup</button><button class="btn primary" data-act="rematch">Play again</button></div>`, true);
+}
+
+function renderPhaseModal() {
+  const a = E.actor(G);
+  const human = !G.players[a].bot && !needCurtain();
+  const phaseModal = { discard: 'discard', gold: 'gold', steal: 'steal', offer: 'offer' }[G.phase];
+  if (human && phaseModal) {
+    const key = phaseModal + ':' + a + ':' + (G.discardQ.length) + ':' + (G.goldQ.length);
+    if (ui.modalKey !== key) { ui.picks = {}; openModal(phaseModal, key); }
+    else drawModal();
+    return;
+  }
+  if (['discard', 'gold', 'steal', 'offer'].includes(ui.modal)) closeModal();
+  if (ui.modal === 'trade' && G.phase !== 'main') closeModal();
+  if (ui.modal === 'dev' && G.players[a].bot) closeModal();
+  if (ui.modal) drawModal();
+}
+
+/* ================= ACTIONS ================= */
+function toast(msg, color, isErr) {
+  const box = $('#toasts');
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  if (color) el.style.setProperty('--tc', color);
+  el.textContent = msg;
+  box.appendChild(el);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => el.remove(), isErr ? 2200 : 2800);
+}
+
+function act(fn, opts) {
+  if (!G) return;
+  const snap = opts && opts.undo ? JSON.stringify(G) : null;
+  const r = fn();
+  if (!r || !r.ok) { toast(r ? r.err : 'Not possible', null, true); return false; }
+  if (snap) ui.undo.push(snap); else ui.undo = [];
+  afterAction();
+  return true;
+}
+
+function processFx() {
+  const v = viewer();
+  const fxs = G.fx.splice(0);
+  let flash = null;
+  fxs.forEach(f => {
+    if (f.type === 'build') { if (!ui.newKeys.size) ui.popAt = Date.now(); ui.newKeys.add((f.kind === 'settlement' || f.kind === 'city' ? 'v' : 'e') + f.id); }
+    if (f.type === 'roll') {
+      const d = $('#dice'); d.classList.remove('rolling'); void d.offsetWidth; d.classList.add('rolling');
+      clearTimeout(ui.rollTimer); ui.rollTimer = setTimeout(() => d.classList.remove('rolling'), 600);
+      if (f.dice[0] + f.dice[1] === 7) toast(`${G.players[f.p].name} rolled 7: robber time`, pcol(f.p));
+    }
+    if (f.type === 'produce') {
+      flash = f.hexes;
+      ui.gains = {};
+      const bump = {};
+      Object.keys(f.gains).forEach(p => {
+        ui.gains[p] = E.RES.reduce((s, r) => s + (f.gains[p][r] || 0), 0);
+        if (+p === v) Object.keys(f.gains[p]).forEach(r => { bump[r] = 1; });
+      });
+      Object.keys(f.gold || {}).forEach(p => { ui.gains[p] = (ui.gains[p] || 0) + f.gold[p]; });
+      ui.bump = bump;
+      setTimeout(() => { ui.gains = {}; ui.bump = {}; if (G) renderPlayers(); }, 1900);
+    }
+    if (f.type === 'steal') {
+      const what = E.RES_NAME[f.res];
+      if (f.from === v) toast(`${G.players[f.to].name} stole your ${what}`, pcol(f.to));
+      else if (f.to === v) toast(`You stole ${what} from ${G.players[f.from].name}`, pcol(f.to));
+      else toast(`${G.players[f.to].name} robbed ${G.players[f.from].name}`, pcol(f.to));
+    }
+    if (f.type === 'award') toast(`${G.players[f.p].name}: ${f.what}`, pcol(f.p));
+    if (f.type === 'dev' && f.p === v && !G.players[f.p].bot) toast(`You drew: ${E.DEV_NAME[f.card]}`, '#8a55cf');
+    if (f.type === 'play' && G.players[f.p].bot) toast(`${G.players[f.p].name} played ${E.DEV_NAME[f.card]}`, pcol(f.p));
+    if (f.type === 'mono') toast(`${G.players[f.p].name} took ${f.n} ${E.RES_NAME[f.res]} with Monopoly`, pcol(f.p));
+    if (f.type === 'trade' && (G.players[f.a].bot || G.players[f.b].bot)) toast(`${G.players[f.a].name} traded with ${G.players[f.b].name}`, pcol(f.a));
+    if (f.type === 'win') setTimeout(() => openModal('results'), 900);
+  });
+  if (flash && flash.length) {
+    ui.flashHexes = flash; ui.flashAt = Date.now();
+    setTimeout(() => { ui.flashHexes = []; }, 1700);
+  }
+  if (ui.newKeys.size) setTimeout(() => { ui.newKeys.clear(); }, 600);
+}
+
+function afterAction() {
+  if (!G) return;
+  ui.pending = null;
+  processFx();
+  if (G.phase !== 'main') ui.mode = null;
+  if (ui.mode && ui.mode.kind !== 'moveTo' && ui.mode.kind !== 'moveFrom' && !E.canBuildKind(G, G.current, ui.mode.kind)) ui.mode = null;
+  saveGame();
+  render();
+  scheduleBot();
+}
+
+function botDelay() {
+  const base = { slow: 1100, normal: 650, fast: 220 }[ui.cfg.speed] || 650;
+  if (G.phase === 'roll') return base + 250;
+  if (G.phase === 'setup') return base;
+  return base;
+}
+function scheduleBot() {
+  clearTimeout(ui.timer); ui.timer = null;
+  if (!G || G.phase === 'gameover') return;
+  const a = E.actor(G);
+  if (!G.players[a].bot) return;
+  ui.timer = setTimeout(() => {
+    ui.timer = null;
+    if (!G || G.phase === 'gameover' || !G.players[E.actor(G)].bot) return;
+    const r = Bot.step(G);
+    if (!r || !r.ok) {
+      // safety valve: never let a bot stall the game
+      if (G.phase === 'main') E.doEndTurn(G);
+      else if (G.phase === 'roadBuilding') E.doEndFreeRoads(G);
+    }
+    ui.undo = [];
+    afterAction();
+  }, botDelay());
+}
+
+function onBoardTap(t) {
+  if (!G || G.phase === 'gameover') return;
+  const a = E.actor(G);
+  if (G.players[a].bot || needCurtain()) return;
+  const tap = {
+    v: t.dataset.v !== undefined ? +t.dataset.v : null,
+    e: t.dataset.e !== undefined ? +t.dataset.e : null,
+    h: t.dataset.h !== undefined ? +t.dataset.h : null,
+    k: t.dataset.k,
+  };
+  // picking which ship to move is only a selection, no confirm needed
+  const selectOnly = G.phase === 'main' && ui.mode && ui.mode.kind === 'moveFrom';
+  if (ui.cfg.confirm && !selectOnly) { ui.pending = tap; render(); return; }
+  runTap(tap);
+}
+function pendingKind() {
+  const p = ui.pending; if (!p) return null;
+  if (p.h !== null) return G.board.hexes[p.h].terrain === 'sea' ? 'pirate' : 'robber';
+  if (p.v !== null) return G.phase === 'setup' ? 'settlement' : (ui.mode ? ui.mode.kind : 'settlement');
+  if (p.k === 'moveto') return 'ship';
+  return p.k || 'road';
+}
+function runTap(tap) {
+  ui.pending = null;
+  const { v, e, h, k } = tap;
+  if (G.phase === 'setup') {
+    if (v !== null) act(() => E.doSetupSettlement(G, v));
+    else if (e !== null) act(() => E.doSetupEdge(G, e, k));
+  } else if (G.phase === 'robber' && h !== null) act(() => E.doMoveRobber(G, h));
+  else if (G.phase === 'roadBuilding' && e !== null) act(() => E.doBuild(G, k, e));
+  else if (G.phase === 'main' && ui.mode) {
+    const m = ui.mode.kind;
+    if ((m === 'settlement' || m === 'city') && v !== null) { ui.mode = null; act(() => E.doBuild(G, m, v), { undo: true }); }
+    else if ((m === 'road' || m === 'ship') && e !== null) {
+      const keep = m;
+      if (act(() => E.doBuild(G, keep, e), { undo: true }) && E.canBuildKind(G, G.current, keep)) { ui.mode = { kind: keep }; render(); }
+    }
+    else if (m === 'moveFrom' && e !== null) { ui.mode = { kind: 'moveTo', from: e }; render(); }
+    else if (m === 'moveTo' && e !== null) { const from = ui.mode.from; ui.mode = null; act(() => E.doMoveShip(G, from, e), { undo: true }); }
+  }
+}
+
+function onAct(name, el) {
+  const d = el.dataset;
+  const c = ui.cfg;
+  switch (name) {
+    /* home */
+    case 'mode': c.mode = d.m; saveCfg(); renderHome(); break;
+    case 'preset': syncNames(); preset(d.p); saveCfg(); renderHome(); break;
+    case 'cycle-color': {
+      syncNames();
+      const used = c.players.map(p => p.color);
+      const i = +d.i; let idx = COLORS.findIndex(x => x.id === c.players[i].color);
+      for (let n = 0; n < COLORS.length; n++) { idx = (idx + 1) % COLORS.length; if (!used.includes(COLORS[idx].id)) break; }
+      c.players[i].color = COLORS[idx].id; saveCfg(); renderHome(); break;
+    }
+    case 'set-human': syncNames(); c.players[+d.i].bot = false; if (BOT_NAMES.includes(c.players[+d.i].name)) c.players[+d.i].name = 'Player ' + (+d.i + 1); saveCfg(); renderHome(); break;
+    case 'set-bot': syncNames(); c.players[+d.i].bot = true; c.players[+d.i].name = BOT_NAMES.find(n => !c.players.some(p => p.name === n)) || 'Bot'; saveCfg(); renderHome(); break;
+    case 'remove-player': syncNames(); if (c.players.length > 2) c.players.splice(+d.i, 1); saveCfg(); renderHome(); break;
+    case 'add-player': {
+      syncNames();
+      const col = COLORS.find(x => !c.players.some(p => p.color === x.id)).id;
+      c.players.push({ name: BOT_NAMES.find(n => !c.players.some(p => p.name === n)), color: col, bot: true });
+      saveCfg(); renderHome(); break;
+    }
+    case 'target': syncNames(); c.target[c.mode] = Math.max(5, Math.min(20, c.target[c.mode] + +d.d)); saveCfg(); renderHome(); break;
+    case 'opt': syncNames(); c[d.k] = !c[d.k]; saveCfg(); renderHome(); break;
+    case 'speed': syncNames(); c.speed = d.s; saveCfg(); renderHome(); break;
+    case 'level': syncNames(); c.level = d.l; saveCfg(); renderHome(); break;
+    case 'cycle-level': G.level = { easy: 'normal', normal: 'hard', hard: 'easy' }[G.level || 'normal']; c.level = G.level; saveCfg(); saveGame(); drawModal(); break;
+    case 'start': syncNames(); if (loadSave()) { ui.homeConfirm = true; renderHome(); } else startGame(); break;
+    case 'start-force': startGame(); break;
+    case 'cancel-new': ui.homeConfirm = false; renderHome(); break;
+    case 'continue': {
+      const sv = loadSave(); if (!sv) { renderHome(); break; }
+      G = sv.G; G.fx = []; log0(); enterGame(); break;
+    }
+    /* game */
+    case 'reveal': ui.revealed = E.actor(G); render(); break;
+    case 'roll': act(() => E.doRoll(G)); break;
+    case 'play-knight': act(() => E.doPlayDev(G, 'knight')); break;
+    case 'build': {
+      const k = d.k;
+      ui.pending = null;
+      if (ui.mode && ui.mode.kind === k) ui.mode = null; else ui.mode = { kind: k };
+      render(); break;
+    }
+    case 'cancel-mode': ui.mode = null; ui.pending = null; render(); break;
+    case 'pending-yes': if (ui.pending) { runTap(ui.pending); if (G) render(); } break;
+    case 'pending-no': ui.pending = null; render(); break;
+    case 'toggle-confirm': c.confirm = !c.confirm; saveCfg(); ui.pending = null; closeModal(); render(); break;
+    case 'buy-dev': act(() => E.doBuyDev(G)); break;
+    case 'end-turn': ui.mode = null; act(() => E.doEndTurn(G)); break;
+    case 'undo': { const snap = ui.undo.pop(); if (snap) { G = JSON.parse(snap); G.fx = []; ui.mode = null; saveGame(); render(); } break; }
+    case 'move-ship': ui.mode = { kind: 'moveFrom' }; render(); break;
+    case 'edge-kind': ui.edgeKind = d.k; render(); break;
+    case 'end-free': act(() => E.doEndFreeRoads(G)); break;
+    case 'trade': ui.trade = { tab: ui.trade.tab, give: null, get: null, pg: {}, pw: {} }; openModal('trade'); break;
+    case 'trade-tab': ui.trade.tab = d.t; drawModal(); break;
+    case 'bank-give': ui.trade.give = d.r; if (ui.trade.get === d.r) ui.trade.get = null; drawModal(); break;
+    case 'bank-get': ui.trade.get = d.r; drawModal(); break;
+    case 'do-bank': { const t = ui.trade; if (act(() => E.doBankTrade(G, t.give, t.get), { undo: true })) { if (G.players[G.current].hand[t.give] < E.tradeRatio(G, G.current, t.give)) t.give = null; drawModal(); } break; }
+    case 'pg': case 'pw': { const o = ui.trade[name]; o[d.r] = Math.max(0, (o[d.r] || 0) + +d.d); if (o[d.r] && name === 'pg') ui.trade.pw[d.r] = 0; if (o[d.r] && name === 'pw') ui.trade.pg[d.r] = 0; drawModal(); break; }
+    case 'do-ptrade': {
+      const t = ui.trade, g = Object.assign(E.emptyHand(), t.pg), w = Object.assign(E.emptyHand(), t.pw);
+      const other = +d.p, on = G.players[other];
+      if (on.bot) {
+        // the bot receives g and pays w
+        const j = Bot.respond(G, other, G.current, g, w);
+        if (!j.ok) {
+          const msg = j.why === 'leader' ? `${on.name} won’t trade with someone that close to winning` : j.why === 'done' ? `${on.name} is done trading this turn` : `${on.name}: no thanks`;
+          toast(msg, pcol(other)); saveGame(); drawModal(); break;
+        }
+        if (act(() => E.doTrade(G, other, g, w))) { toast(`${on.name} accepts`, pcol(other)); t.pg = {}; t.pw = {}; drawModal(); }
+      } else {
+        if (!E.validTrade(G, G.current, other, g, w)) { toast(`${on.name} doesn’t have those cards`, pcol(other), true); break; }
+        if (act(() => E.doTrade(G, other, g, w), { undo: true })) { toast(`Traded with ${on.name}`, pcol(other)); t.pg = {}; t.pw = {}; drawModal(); }
+      }
+      break;
+    }
+    case 'dev': if (viewer() !== null) { ui.confirm = null; ui.sel = []; openModal('dev'); } break;
+    case 'play-dev': {
+      const t = d.t;
+      if (t === 'plenty' || t === 'mono') { ui.confirm = t; ui.sel = []; drawModal(); break; }
+      closeModal(); act(() => E.doPlayDev(G, t)); break;
+    }
+    case 'dev-sel': {
+      const n = ui.confirm === 'plenty' ? 2 : 1;
+      if (n === 1) ui.sel = [d.r]; else if (ui.sel.length < 2) ui.sel.push(d.r); else ui.sel = [d.r];
+      drawModal(); break;
+    }
+    case 'dev-sel-clear': ui.sel = []; drawModal(); break;
+    case 'dev-confirm': {
+      const t = ui.confirm, sel = ui.sel.slice();
+      closeModal();
+      act(() => E.doPlayDev(G, t, { res: t === 'plenty' ? sel : sel[0] }));
+      break;
+    }
+    case 'pick': {
+      const r = d.r; ui.picks[r] = Math.max(0, (ui.picks[r] || 0) + +d.d); drawModal(); break;
+    }
+    case 'do-discard': { const p = G.discardQ[0].p, picks = Object.assign(E.emptyHand(), ui.picks); ui.picks = {}; act(() => E.doDiscard(G, p, picks)); break; }
+    case 'do-gold': { const p = G.goldQ[0].p, picks = Object.assign(E.emptyHand(), ui.picks); ui.picks = {}; act(() => E.doGold(G, p, picks)); break; }
+    case 'do-steal': closeModal(); act(() => E.doSteal(G, +d.p)); break;
+    case 'offer-yes': closeModal(); act(() => E.doRespond(G, true)); break;
+    case 'offer-no': closeModal(); act(() => E.doRespond(G, false)); break;
+    case 'menu': ui.confirm = null; openModal('menu'); break;
+    case 'open-log': openModal('log'); break;
+    case 'open-costs': openModal('costs'); break;
+    case 'toggle-privacy': c.hideHands = !c.hideHands; saveCfg(); closeModal(); render(); break;
+    case 'cycle-speed': c.speed = { slow: 'normal', normal: 'fast', fast: 'slow' }[c.speed]; saveCfg(); drawModal(); break;
+    case 'quit': ui.confirm = 'quit'; drawModal(); break;
+    case 'show-results': openModal('results'); break;
+    case 'rematch': {
+      const opts = { mode: G.mode, target: G.target, friendly: G.friendly, level: G.level, players: E.shuffle(G.players.map(p => ({ name: p.name, color: p.color, bot: p.bot }))) };
+      closeModal(); G = E.newGame(opts); log0(); enterGame(); break;
+    }
+    case 'home': closeModal(); saveGame(); goHome(); break;
+    case 'close-modal': closeModal(); if (G) render(); break;
+    case 'close-modal-bg': break;
+    case 'zoom-in': zoomAt(1 / 1.3); break;
+    case 'zoom-out': zoomAt(1.3); break;
+    case 'zoom-fit': ui.view = Object.assign({}, ui.base); applyView(); break;
+  }
+}
+function syncNames() {
+  ui.cfg.players.forEach((p, i) => { const inp = document.getElementById('pname-' + i); if (inp) p.name = inp.value.slice(0, 14); });
+}
+
+document.addEventListener('click', ev => {
+  const back = ev.target.classList && ev.target.classList.contains('modal-back');
+  if (back) {
+    // tapping outside a closable sheet closes it
+    if (ev.target.dataset.act === 'close-modal-bg') { closeModal(); if (G) render(); }
+    return;
+  }
+  const el = ev.target.closest('[data-act]');
+  if (ui.armed && ui.armed.el !== el) disarm();
+  if (!el || el.disabled) return;
+  if (el.dataset.confirm && ui.cfg.confirm && G && !ui.armed) { arm(el); return; }
+  if (ui.armed) { clearTimeout(ui.armed.timer); ui.armed = null; }
+  onAct(el.dataset.act, el);
+});
+// first tap arms a button ("Sure?"), second tap runs it
+function arm(el) {
+  const lb = el.querySelector('.lb');
+  const target = lb || el;
+  ui.armed = { el, target, html: target.innerHTML, timer: setTimeout(disarm, 4000) };
+  target.textContent = el.dataset.confirm;
+  el.classList.add('armed');
+}
+function disarm() {
+  const a = ui.armed; if (!a) return;
+  clearTimeout(a.timer); ui.armed = null;
+  if (a.el.isConnected) { a.target.innerHTML = a.html; a.el.classList.remove('armed'); }
+}
+document.addEventListener('input', ev => {
+  if (ev.target.id && ev.target.id.startsWith('pname-')) { syncNames(); saveCfg(); }
+});
+
+/* ================= BOOT ================= */
+function boot(data) {
+  ui.cfg = loadCfg();
+  setupPanZoom();
+  if (data && data.G) { G = data.G; G.fx = []; if (data.ui) Object.assign(ui, { revealed: data.ui.revealed }); $('#home').hidden = true; $('#game').hidden = false; renderStatic(); afterAction(); return; }
+  renderHome();
+}
+if (window.claude && window.claude.hot && window.claude.hot.snapshot) {
+  try { window.claude.hot.snapshot(() => ({ G: G && !$('#game').hidden ? G : null, ui: { revealed: ui.revealed } })); } catch (e) { }
+}
+if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(boot);
+else boot((window.claude && window.claude.hot && window.claude.hot.data) || {});
+
+</script>
+
+</body></html>

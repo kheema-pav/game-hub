@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Game Hub</title>
+<meta name="description" content="Fan-made tabletop games for phone and laptop. Play against bots or pass one device around.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Familjen+Grotesk:wght@400;500;600&family=IM+Fell+English+SC&family=Fredoka:wght@600;700&family=Cinzel:wght@700&family=Bowlby+One&display=swap">
+<style>
+/* Layout: a game shelf. A short header, then one row of game boxes standing on a walnut shelf; each lid is drawn in its own game's colours and lettering. */
+:root{
+  --wall:#dfe4ea; --wall-2:#d2d9e1; --ink:#18202b; --muted:#4f5b69;
+  --shelf:#6b4a2e; --shelf-edge:#4e3420; --card:#f7f8fa; --line:#c2cbd6;
+  --accent:#f2b632; --accent-ink:#2b1d00; --shadow:rgba(20,26,36,.22);
+  --f-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --f-body:"Familjen Grotesk","Avenir Next","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --wall:#121722; --wall-2:#171e2b; --ink:#eaeef4; --muted:#9aa6b6;
+  --shelf:#4a3220; --shelf-edge:#2f1f13; --card:#1c2431; --line:#2d3848;
+  --accent:#f2b632; --accent-ink:#2b1d00; --shadow:rgba(0,0,0,.5); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --wall:#121722; --wall-2:#171e2b; --ink:#eaeef4; --muted:#9aa6b6;
+  --shelf:#4a3220; --shelf-edge:#2f1f13; --card:#1c2431; --line:#2d3848;
+  --accent:#f2b632; --accent-ink:#2b1d00; --shadow:rgba(0,0,0,.5); color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{color-scheme:light}
+body{margin:0;background:var(--wall);color:var(--ink);font:16px/1.5 var(--f-body);
+  background-image:linear-gradient(90deg,var(--wall-2) 1px,transparent 1px);background-size:120px 100%;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.wrap{max-width:1160px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+
+header{padding-block:48px 28px}
+.mark{display:flex;align-items:center;gap:14px}
+.meeple{width:44px;height:44px;flex:none}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(2.4rem,7vw,4rem);line-height:.95;letter-spacing:-.02em;margin:0;text-wrap:balance}
+.tag{margin:14px 0 0;max-width:52ch;font-size:1.1rem;color:var(--muted)}
+
+/* shelf of boxes */
+.shelf{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;padding-bottom:26px}
+.shelf::after{content:"";position:absolute;left:-16px;right:-16px;bottom:0;height:26px;border-radius:4px;
+  background:linear-gradient(180deg,var(--shelf) 0 70%,var(--shelf-edge) 70%);box-shadow:0 10px 20px var(--shadow)}
+@media (max-width:1000px){.shelf{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.shelf{grid-template-columns:minmax(0,1fr)}}
+.game{position:relative;z-index:1;display:flex;flex-direction:column;text-decoration:none;background:var(--card);border-radius:12px;overflow:hidden;
+  box-shadow:0 1px 0 var(--line),0 14px 28px -12px var(--shadow);transition:transform .18s ease,box-shadow .18s ease;min-width:0}
+.game:hover{transform:translateY(-6px);box-shadow:0 1px 0 var(--line),0 22px 34px -12px var(--shadow)}
+.lid{position:relative;aspect-ratio:4/3;max-width:100%;overflow:hidden;display:grid;place-items:end start;padding:16px}
+.lid svg.art{position:absolute;top:0;right:0;width:100%;height:72%}
+.lid .title{position:relative;margin:0;line-height:1;text-wrap:balance}
+.info{display:flex;flex-direction:column;gap:12px;padding:16px;flex:1}
+.pitch{margin:0;color:var(--muted);font-size:.98rem}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}
+.chip{font-size:.78rem;font-weight:600;letter-spacing:.02em;border:1px solid var(--line);border-radius:999px;padding:2px 9px;white-space:nowrap}
+.play{display:flex;align-items:center;justify-content:space-between;font-family:var(--f-display);font-weight:800;font-size:1.05rem;
+  background:var(--accent);color:var(--accent-ink);border-radius:9px;padding:10px 14px}
+.play span{transition:transform .18s}
+.game:hover .play span{transform:translateX(4px)}
+
+/* per-game lids */
+.codex .lid{background:#dce3d3}
+.codex .title{font-family:"IM Fell English SC",Georgia,serif;font-weight:400;font-size:1.7rem;color:#23261d}
+.isles .lid{background:radial-gradient(110% 90% at 60% 30%,#2a7fa3 0%,#0c3348 85%)}
+.isles .title{font-family:Fredoka,"Trebuchet MS",sans-serif;font-weight:700;font-size:1.8rem;color:#ffc94a;text-shadow:0 2px 8px rgba(0,0,0,.35)}
+.gems .lid{background:#0e1613;box-shadow:inset 0 0 0 8px #0e1613,inset 0 0 0 10px #94680f}
+.gems .title{font-family:Cinzel,Georgia,serif;font-weight:700;font-size:1.7rem;letter-spacing:.08em;color:#d9ae52}
+.sketch .lid{background-color:#eef1f5;background-image:linear-gradient(#dde3ea 1px,transparent 1px),linear-gradient(90deg,#dde3ea 1px,transparent 1px);background-size:16px 16px}
+.sketch .title{font-family:"Bowlby One","Arial Black",sans-serif;font-weight:400;font-size:1.6rem;color:#18212d}
+
+.soon{display:grid;grid-template-columns:auto minmax(0,1fr);gap:16px;align-items:center;margin-block:40px 18px;padding:18px 20px;border:2px dashed var(--line);border-radius:14px}
+.code{font-family:var(--f-display);font-weight:800;font-size:1.5rem;letter-spacing:.18em;background:var(--card);border-radius:8px;padding:6px 10px;font-variant-numeric:tabular-nums}
+.soon h2{margin:0 0 2px;font-family:var(--f-display);font-weight:800;font-size:1.2rem}
+.soon p{margin:0;color:var(--muted)}
+@media (max-width:560px){.soon{grid-template-columns:minmax(0,1fr)}}
+footer{padding-block:12px 40px;color:var(--muted);font-size:.85rem}
+footer p{margin:0;max-width:70ch}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="mark">
+      <svg class="meeple" viewBox="0 0 48 48" aria-hidden="true"><path fill="var(--accent)" d="M24 4a7 7 0 0 1 7 7c0 2.6-1.4 4.4-2.8 5.6 6.2 1.4 14.8 4.2 14.8 9 0 2.3-2.6 3.1-5.7 2.7l-2.4-.3 5.5 13.3c.5 1.3-.4 2.7-1.8 2.7H31.4c-.8 0-1.5-.5-1.8-1.2L24 33.6l-5.6 9.2c-.3.7-1 1.2-1.8 1.2H9.4c-1.4 0-2.3-1.4-1.8-2.7l5.5-13.3-2.4.3C7.6 28.7 5 27.9 5 25.6c0-4.8 8.6-7.6 14.8-9C18.4 15.4 17 13.6 17 11a7 7 0 0 1 7-7z"/></svg>
+      <h1>Game Hub</h1>
+    </div>
+    <p class="tag">Tabletop games for your phone or laptop. Play against bots at three difficulty levels, or pass one device around the table.</p>
+  </header>
+
+  <main class="shelf" aria-label="Games">
+    <a class="game codex" href="codex/">
+      <div class="lid">
+        <svg class="art" viewBox="0 0 400 300" preserveAspectRatio="xMaxYMin meet" aria-hidden="true">
+          <g transform="translate(205 40) rotate(-14)"><rect width="120" height="80" rx="8" fill="#b5432f"/><rect width="28" height="30" fill="#f3ecd8"/><rect x="92" y="50" width="28" height="30" fill="#f3ecd8"/></g>
+          <g transform="translate(232 72) rotate(-4)"><rect width="120" height="80" rx="8" fill="#4a8a3c"/><rect x="92" width="28" height="30" fill="#f3ecd8"/><rect y="50" width="28" height="30" fill="#f3ecd8"/></g>
+          <g transform="translate(250 112) rotate(6)"><rect width="120" height="80" rx="8" fill="#3b6fa8"/><rect width="28" height="30" fill="#f3ecd8"/><rect x="92" y="50" width="28" height="30" fill="#f3ecd8"/></g>
+          <g transform="translate(262 150) rotate(15)"><rect width="120" height="80" rx="8" fill="#7c4d9b" stroke="#d2a93f" stroke-width="5"/><rect x="92" width="28" height="30" fill="#f3ecd8"/><rect y="50" width="28" height="30" fill="#f3ecd8"/></g>
+        </svg>
+        <h2 class="title">Naturalist’s Codex</h2>
+      </div>
+      <div class="info">
+        <p class="pitch">Grow a field codex of overlapping cards. Cover corners, chase hidden objectives and race to 20 points.</p>
+        <div class="chips"><span class="chip">2–4 players</span><span class="chip">Bots</span><span class="chip">Pass-and-play</span><span class="chip">~30 min</span></div>
+        <span class="play">Play <span>→</span></span>
+      </div>
+    </a>
+
+    <a class="game isles" href="isles/">
+      <div class="lid">
+        <svg class="art" viewBox="0 0 400 300" preserveAspectRatio="xMaxYMin meet" aria-hidden="true">
+          <g transform="translate(270 110)" stroke="#0c3348" stroke-width="4">
+            <path d="M0-40 34.6-20v40L0 40-34.6 20v-40z" fill="#3f8f3a"/>
+            <path d="M69.3-40 103.9-20v40L69.3 40 34.7 20v-40z" fill="#e2b33c"/>
+            <path d="M34.6 20 69.3 40v40L34.6 100 0 80V40z" fill="#b8643a"/>
+            <path d="M-34.6 20 0 40v40l-34.6 20-34.7-20V40z" fill="#9fc46a"/>
+            <path d="M-69.3-40-34.7-20v40l-34.6 20-34.6-20v-40z" fill="#7f8a96"/>
+          </g>
+          <circle cx="270" cy="110" r="15" fill="#fbf6ea"/><text x="270" y="116" font-family="Fredoka,sans-serif" font-weight="700" font-size="17" text-anchor="middle" fill="#c0261b">8</text>
+          <path d="M60 70q10-8 20 0t20 0M110 40q10-8 20 0t20 0" fill="none" stroke="#7fc2dd" stroke-width="3" stroke-linecap="round" opacity=".6"/>
+        </svg>
+        <h2 class="title">Settle the Isles</h2>
+      </div>
+      <div class="info">
+        <p class="pitch">Gather resources, build roads and towns, and reach 10 points first. Archipelago mode adds ships and far islands.</p>
+        <div class="chips"><span class="chip">2–4 players</span><span class="chip">Bots</span><span class="chip">Pass-and-play</span><span class="chip">~45 min</span></div>
+        <span class="play">Play <span>→</span></span>
+      </div>
+    </a>
+
+    <a class="game gems" href="gems/">
+      <div class="lid">
+        <svg class="art" viewBox="0 0 400 300" preserveAspectRatio="xMaxYMin meet" aria-hidden="true">
+                    <g stroke="rgba(255,255,255,.35)" stroke-width="5">
+            <circle cx="235" cy="90" r="34" fill="#be2439"/><circle cx="310" cy="70" r="34" fill="#2457b0"/><circle cx="330" cy="150" r="34" fill="#16804f"/>
+            <circle cx="255" cy="170" r="34" fill="#2b2a30"/><circle cx="180" cy="140" r="34" fill="#f2f1ec"/>
+          </g>
+          <circle cx="300" cy="230" r="26" fill="#d7a21c" stroke="#fff3c4" stroke-width="4"/>
+        </svg>
+        <h2 class="title">Gem Guild</h2>
+      </div>
+      <div class="info">
+        <p class="pitch">Collect gems, buy mines, ships and shops, and win the favour of nobles. First to 15 prestige ends the game.</p>
+        <div class="chips"><span class="chip">2–4 players</span><span class="chip">Bots</span><span class="chip">Pass-and-play</span><span class="chip">~30 min</span></div>
+        <span class="play">Play <span>→</span></span>
+      </div>
+    </a>
+
+    <a class="game sketch" href="sketch/">
+      <div class="lid">
+        <svg class="art" viewBox="0 0 400 300" preserveAspectRatio="xMaxYMin meet" aria-hidden="true">
+          <g transform="translate(220 50) rotate(-6)"><rect width="150" height="96" rx="12" fill="#ffd23f" stroke="#18212d" stroke-width="4"/><text x="75" y="66" font-family="'Bowlby One',sans-serif" font-size="48" text-anchor="middle" fill="#18212d">?</text></g>
+          <path d="M60 210c30-40 60 30 90-10s50-50 80-5 40 20 70-15" fill="none" stroke="#18212d" stroke-width="5" stroke-linecap="round"/>
+          <g transform="translate(300 180) rotate(35)"><rect width="90" height="16" rx="3" fill="#4cc9f0" stroke="#18212d" stroke-width="3"/><path d="M90 0l18 8-18 8z" fill="#f3d6a8" stroke="#18212d" stroke-width="3"/></g>
+        </svg>
+        <h2 class="title">Pen &amp; Paper Sketch</h2>
+      </div>
+      <div class="info">
+        <p class="pitch">One phone keeps the secret words and the timer. Everyone else draws on real paper and guesses.</p>
+        <div class="chips"><span class="chip">2–4 teams</span><span class="chip">One phone</span><span class="chip">~20 min</span></div>
+        <span class="play">Play <span>→</span></span>
+      </div>
+    </a>
+  </main>
+
+  <section class="soon" aria-label="Coming soon">
+    <span class="code" aria-hidden="true">482 619</span>
+    <div><h2>Online play is on the way</h2><p>Start a game, get a six-digit code, and a friend joins from their own phone. No accounts needed.</p></div>
+  </section>
+
+  <footer><p>Fan-made versions of tabletop games, built for friends. Not affiliated with or endorsed by any game publisher. Games save on your own device.</p></footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Pen and Paper Sketch</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=DM+Sans:wght@400;500;700&display=swap">
+<style>
+/* Layout: one-screen phone flow (setup > hand over > secret word > timer > verdict > scores) on faint graph paper */
+:root{
+  --paper:#eef1f5; --grid:#dde3ea; --ink:#18212d; --muted:#5d6b7c;
+  --card:#ffffff; --line:#c9d1db; --mark:#ffd23f; --mark-ink:#18212d;
+  --good:#1f9d55; --bad:#d64545;
+  --display:"Bowlby One","Arial Black",Impact,sans-serif;
+  --body:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#141a22; --grid:#1c242e; --ink:#eef2f7; --muted:#98a5b5;
+  --card:#1e2733; --line:#33404f; --mark:#ffd23f; --mark-ink:#18212d;
+  --good:#3ecf7e; --bad:#ff7070; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#141a22; --grid:#1c242e; --ink:#eef2f7; --muted:#98a5b5;
+  --card:#1e2733; --line:#33404f; --mark:#ffd23f; --mark-ink:#18212d;
+  --good:#3ecf7e; --bad:#ff7070; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:24px 24px;
+  color:var(--ink);font:500 16px/1.45 var(--body);
+  padding-block:20px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+}
+main{max-width:30rem;margin:0 auto;display:flex;flex-direction:column;gap:16px;min-height:calc(100vh - 40px)}
+h1,h2{font-family:var(--display);font-weight:400;line-height:1.05;margin:0;text-wrap:balance;letter-spacing:.01em}
+h1{font-size:2.3rem} h2{font-size:1.6rem}
+p{margin:0}
+.muted{color:var(--muted)}
+.label{font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.card{background:var(--card);border:2px solid var(--ink);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:4px 4px 0 var(--ink)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:2px solid var(--ink);background:var(--card);border-radius:12px;padding:14px 16px;font-weight:700;min-height:52px}
+button:active{transform:translate(2px,2px)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--mark);outline-offset:2px}
+.primary{background:var(--mark);color:var(--mark-ink);box-shadow:3px 3px 0 var(--ink);font-size:1.1rem}
+.good{background:var(--good);color:#fff;border-color:var(--ink)}
+.bad{background:var(--bad);color:#fff}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1 1 8rem;min-width:0}
+.teamin{display:flex;gap:8px;align-items:center}
+.teamin input{flex:1;min-width:0;border:2px solid var(--line);background:var(--paper);border-radius:10px;padding:12px;font-weight:700}
+.dot{width:14px;height:14px;border-radius:50%;flex:none;border:2px solid var(--ink)}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:10px 6px;min-height:46px;box-shadow:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.stage{flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px}
+.big{text-align:center}
+.wordbox{background:var(--mark);color:var(--mark-ink);border:3px solid var(--ink);border-radius:16px;padding:28px 16px;text-align:center;box-shadow:5px 5px 0 var(--ink);min-height:9rem;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.word{font-family:var(--display);font-size:clamp(1.8rem,9vw,2.6rem);line-height:1.05;overflow-wrap:anywhere}
+.cat{font-size:.8rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+.hidden-word{background:var(--card);color:var(--muted)}
+.timer{font-family:var(--display);font-size:5.5rem;line-height:1;text-align:center;font-variant-numeric:tabular-nums}
+.timer.low{color:var(--bad)}
+.bar{height:12px;border:2px solid var(--ink);border-radius:8px;overflow:hidden;background:var(--card)}
+.bar i{display:block;height:100%;background:var(--ink);transition:width .25s linear}
+.score{display:flex;flex-direction:column;gap:8px}
+.score div{display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:var(--card)}
+.score .n{flex:1;font-weight:700;overflow-wrap:anywhere;min-width:0}
+.score .p{font-family:var(--display);font-size:1.5rem;font-variant-numeric:tabular-nums}
+.score .on{border-color:var(--ink);box-shadow:3px 3px 0 var(--ink)}
+.tiny{font-size:.85rem}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.top button{min-height:40px;padding:6px 12px;font-size:.85rem}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<main id="app"></main>
+
+<script>
+const WORDS = {
+  Object: ["Hourglass","Stethoscope","Lighthouse","Parachute","Typewriter","Chandelier","Compass","Hammock","Telescope","Drawbridge","Accordion","Padlock","Scarecrow","Kaleidoscope","Wheelbarrow","Periscope","Metronome","Snow globe","Jukebox","Bagpipes","Windmill","Trampoline","Catapult","Sundial","Umbrella stand","Tricycle","Ladle","Harpoon","Bunk bed","Submarine"],
+  Action: ["Eavesdropping","Sleepwalking","Procrastinating","Hitchhiking","Babysitting","Photobombing","Juggling","Tiptoeing","Haggling","Daydreaming","Sneezing","Skydiving","Snorkeling","Moonwalking","Arm wrestling","Counting sheep","Tying a tie","Spilling the beans","Walking the plank","Karaoke","Sandcastle building","Ice fishing","Pickpocketing","Gift wrapping","Flossing","Surfing the web","Burning the toast","Breaking the ice","Raising the roof","Thumb war"],
+  Concept: ["Gravity","Jealousy","Nostalgia","Deadline","Inflation","Camouflage","Democracy","Insomnia","Time zone","Black hole","Peer pressure","Stage fright","Jet lag","Cold war","Rush hour","Echo","Mirage","Static electricity","Awkward silence","Brain freeze","Superstition","Gossip","Quicksand","Optical illusion","Climate change","Writer's block","Small talk","Plot twist","Lost in translation","Midlife crisis"],
+  Place: ["Labyrinth","Observatory","Colosseum","Igloo","Skyscraper","Lighthouse keeper","Catacombs","Oasis","Speakeasy","Planetarium","Volcano","Bazaar","Monastery","Dry dock","Drive-in theater","Treehouse","Penthouse","Quarry","Aqueduct","Greenhouse"],
+  Character: ["Mermaid","Astronaut","Gladiator","Pirate captain","Mime","Beekeeper","Sumo wrestler","Vampire","Court jester","Scuba diver","Ninja","Cowboy","Lumberjack","Detective","Mad scientist","Genie","Werewolf","Referee","Magician","Cheerleader"]
+};
+const COLORS = ["#ffd23f","#4cc9f0","#ff6b9d","#7bd88f"];
+const S = {screen:"setup",teams:["Team One","Team Two"],secs:60,rounds:3,turn:0,used:new Set(),word:null,skipsLeft:1,end:0,left:60,paused:false,reveal:false,scores:[0,0],tick:null,wake:null};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const total = () => S.teams.length * S.rounds;
+
+function pickWord(){
+  const flat = Object.entries(WORDS).flatMap(([c,l])=>l.map(w=>[c,w]));
+  let pool = flat.filter(x=>!S.used.has(x[1]));
+  if(!pool.length){S.used.clear();pool=flat}
+  const [c,w] = pool[Math.floor(Math.random()*pool.length)];
+  S.used.add(w); S.word={c,w};
+}
+function beep(f=880,d=.25,n=1){
+  try{const a=new (window.AudioContext||window.webkitAudioContext)();
+    for(let i=0;i<n;i++){const o=a.createOscillator(),g=a.createGain();o.frequency.value=f;o.connect(g);g.connect(a.destination);
+      const t=a.currentTime+i*.32;g.gain.setValueAtTime(.25,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.start(t);o.stop(t+d)}}catch(e){}
+}
+async function keepAwake(){try{S.wake=await navigator.wakeLock.request("screen")}catch(e){}}
+
+function go(screen){S.screen=screen;render()}
+function startGame(){
+  S.scores=S.teams.map(()=>0);S.turn=0;S.used.clear();keepAwake();go("handover");
+}
+function beginDraw(){pickWord();S.skipsLeft=1;S.reveal=false;S.left=S.secs;S.paused=false;go("secret")}
+function startTimer(){
+  S.end=Date.now()+S.left*1000;S.paused=false;go("draw");
+  clearInterval(S.tick);
+  S.tick=setInterval(()=>{
+    if(S.paused)return;
+    S.left=Math.max(0,Math.ceil((S.end-Date.now())/1000));
+    paint();
+    if(S.left<=0){clearInterval(S.tick);beep(660,.3,3);if(navigator.vibrate)navigator.vibrate([200,100,200]);go("verdict")}
+  },250);
+}
+function verdict(ok){
+  if(ok)S.scores[S.turn%S.teams.length]++;
+  S.turn++;
+  go(S.turn>=total()?"final":"scores");
+}
+function skip(){if(S.skipsLeft>0){S.skipsLeft--;pickWord();render()}}
+
+function scoreList(active){
+  return `<div class="score">${S.teams.map((t,i)=>`<div class="${i===active?'on':''}"><span class="dot" style="background:${COLORS[i]}"></span><span class="n">${esc(t)}</span><span class="p">${S.scores[i]}</span></div>`).join("")}</div>`;
+}
+function status(){
+  const r = Math.floor(S.turn/S.teams.length)+1;
+  return `<div class="top"><span class="label">Round ${Math.min(r,S.rounds)} of ${S.rounds}</span><button id="quit">End game</button></div>`;
+}
+
+function render(){
+  const a=$("app"), cur=S.turn%S.teams.length, name=esc(S.teams[cur]||"");
+  let h="";
+  if(S.screen==="setup"){
+    h=`<div><h1>Pen &amp; Paper Sketch</h1><p class="muted">One phone for words and the clock. Draw on paper.</p></div>
+    <div class="card"><span class="label">Teams</span>
+      ${S.teams.map((t,i)=>`<div class="teamin"><span class="dot" style="background:${COLORS[i]}"></span><input id="t${i}" value="${esc(t)}" maxlength="20" aria-label="Team ${i+1} name"></div>`).join("")}
+      <div class="row">${S.teams.length<4?'<button id="addT">Add team</button>':''}${S.teams.length>2?'<button id="delT">Remove last</button>':''}</div>
+    </div>
+    <div class="card"><span class="label">Drawing time</span>
+      <div class="seg">${[45,60,90].map(v=>`<button data-secs="${v}" aria-pressed="${S.secs===v}">${v}s</button>`).join("")}</div>
+      <span class="label">Turns per team</span>
+      <div class="seg">${[2,3,5].map(v=>`<button data-rounds="${v}" aria-pressed="${S.rounds===v}">${v}</button>`).join("")}</div>
+    </div>
+    <button class="primary" id="start">Start game</button>
+    <p class="muted tiny">Each team gets one word per turn. Guess it before time runs out to score a point. One skip per turn.</p>`;
+  }
+  else if(S.screen==="handover"){
+    h=`${status()}<div class="stage big"><span class="label">Up next</span><h1 style="color:${'var(--ink)'}">${name}</h1>
+    <p class="muted">Pick a drawer. Everyone else looks away while the drawer reads the word.</p></div>
+    ${scoreList(cur)}
+    <button class="primary" id="ready">I'm the drawer</button>`;
+  }
+  else if(S.screen==="secret"){
+    h=`${status()}<div class="stage big"><span class="label">${name} · drawer only</span>
+    <div class="wordbox ${S.reveal?'':'hidden-word'}">${S.reveal
+      ?`<span class="cat">${esc(S.word.c)}</span><span class="word">${esc(S.word.w)}</span>`
+      :`<span class="word">Tap to reveal</span><span class="cat">Hidden from the team</span>`}</div>
+    ${S.reveal?`<div class="row"><button id="skip" ${S.skipsLeft?'':'disabled'}>${S.skipsLeft?'Skip word (1 left)':'No skips left'}</button><button id="hide">Hide</button></div>`:''}</div>
+    <button class="primary" id="go" ${S.reveal?'':'disabled style="opacity:.5"'}>Start the clock</button>`;
+  }
+  else if(S.screen==="draw"){
+    h=`${status()}<div class="stage"><span class="label big">${name} is drawing</span>
+    <div class="timer" id="tm"></div><div class="bar"><i id="bar"></i></div>
+    <div class="wordbox ${S.reveal?'':'hidden-word'}" id="wb"></div>
+    <div class="row"><button id="peek">${S.reveal?'Hide word':'Show word'}</button><button id="skip" ${S.skipsLeft?'':'disabled'}>Skip${S.skipsLeft?' (1)':''}</button></div></div>
+    <div class="row"><button id="pause">${S.paused?'Resume':'Pause'}</button><button class="good" id="got">Guessed it</button></div>`;
+  }
+  else if(S.screen==="verdict"){
+    h=`${status()}<div class="stage big"><h1>Time's up</h1>
+    <div class="wordbox"><span class="cat">The word was</span><span class="word">${esc(S.word.w)}</span></div>
+    <p class="muted">Did ${name} guess it?</p></div>
+    <div class="row"><button class="bad" id="no">Missed it</button><button class="good" id="yes">Got it</button></div>`;
+  }
+  else if(S.screen==="scores"){
+    h=`${status()}<div class="stage"><h2 class="big">Scores</h2>${scoreList(S.turn%S.teams.length)}
+    <p class="muted big">Next: ${esc(S.teams[S.turn%S.teams.length])}</p></div><button class="primary" id="next">Next turn</button>`;
+  }
+  else if(S.screen==="final"){
+    const max=Math.max(...S.scores), w=S.teams.filter((_,i)=>S.scores[i]===max);
+    h=`<div class="stage big"><span class="label">Final</span><h1>${w.length>1?"It's a tie":esc(w[0])+" wins"}</h1>
+    ${w.length>1?`<p class="muted">${w.map(esc).join(" and ")}</p>`:''}${scoreList(-1)}</div>
+    <div class="row"><button id="again" class="primary">Play again</button><button id="setup">Change teams</button></div>`;
+  }
+  a.innerHTML=h; bind(); paint();
+}
+function paint(){
+  if(S.screen!=="draw")return;
+  const tm=$("tm"); if(!tm)return;
+  tm.textContent=`${Math.floor(S.left/60)}:${String(S.left%60).padStart(2,"0")}`;
+  tm.classList.toggle("low",S.left<=10);
+  $("bar").style.width=(S.left/S.secs*100)+"%";
+  const wb=$("wb");
+  wb.className="wordbox "+(S.reveal?"":"hidden-word");
+  wb.innerHTML=S.reveal?`<span class="cat">${esc(S.word.c)}</span><span class="word">${esc(S.word.w)}</span>`:`<span class="word">Word hidden</span>`;
+}
+function on(id,fn){const e=$(id);if(e)e.onclick=fn}
+function bind(){
+  S.teams.forEach((_,i)=>{const e=$("t"+i);if(e)e.oninput=()=>{S.teams[i]=e.value||`Team ${i+1}`}});
+  on("addT",()=>{S.teams.push(`Team ${["One","Two","Three","Four"][S.teams.length]}`);render()});
+  on("delT",()=>{S.teams.pop();render()});
+  document.querySelectorAll("[data-secs]").forEach(b=>b.onclick=()=>{S.secs=+b.dataset.secs;render()});
+  document.querySelectorAll("[data-rounds]").forEach(b=>b.onclick=()=>{S.rounds=+b.dataset.rounds;render()});
+  on("start",startGame); on("ready",beginDraw);
+  const wb=document.querySelector(".wordbox.hidden-word");
+  if(wb&&S.screen==="secret")wb.onclick=()=>{S.reveal=true;render()};
+  on("hide",()=>{S.reveal=false;render()});
+  on("go",()=>{if(S.reveal){S.reveal=false;startTimer()}});
+  on("skip",skip);
+  on("peek",()=>{S.reveal=!S.reveal;render()});
+  on("pause",()=>{
+    if(S.paused){S.end=Date.now()+S.left*1000;S.paused=false}else{S.paused=true}
+    render();
+  });
+  on("got",()=>{clearInterval(S.tick);beep(990,.2,1);verdict(true)});
+  on("yes",()=>verdict(true)); on("no",()=>verdict(false));
+  on("next",()=>go("handover"));
+  on("again",startGame); on("setup",()=>go("setup"));
+  on("quit",()=>{clearInterval(S.tick);go(S.turn>0?"final":"setup")});
+}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&S.screen==="draw")keepAwake()});
+render();
+</script>
+
+</body></html>

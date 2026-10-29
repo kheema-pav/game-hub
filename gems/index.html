@@ -1,0 +1,1675 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Gem Guild</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap">
+<style>
+/* Layout: a merchant's table. The market (nobles + three card rows + gem bank) on the left,
+   a ledger of rival houses on the right; on phones the ledger drops below the bank. */
+:root {
+  --table: #dce3dc;
+  --panel: #eef2ed;
+  --raised: #f8faf7;
+  --ink: #17221c;
+  --muted: #546459;
+  --line: #bac7be;
+  --gilt: #94680f;
+  --gilt-soft: #efe1b9;
+  --focus: #1f5fbf;
+  --card: #fbf9f3;
+  --card-ink: #1a231d;
+  --parchment: #efe5c9;
+  --gem-w: #f2f1ec;
+  --gem-u: #2457b0;
+  --gem-g: #16804f;
+  --gem-r: #be2439;
+  --gem-k: #2b2a30;
+  --gem-o: #d7a21c;
+  --chip-edge: rgba(15, 25, 20, .28);
+  --deck1: #2c7049;
+  --deck2: #b07d17;
+  --deck3: #284a92;
+  --scrim: rgba(12, 20, 16, .55);
+  --shadow: 0 1px 2px rgba(18, 30, 24, .16), 0 4px 12px rgba(18, 30, 24, .10);
+  --f-display: 'Cinzel', 'Trajan Pro', 'Palatino Linotype', Georgia, serif;
+  --f-body: 'Alegreya Sans', 'Gill Sans', 'Segoe UI', system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --table: #0e1613; --panel: #15201b; --raised: #1c2823; --ink: #e3eae4; --muted: #94a59b;
+    --line: #2a3a32; --gilt: #d9ae52; --gilt-soft: #3b3119; --focus: #7fb0ff; --card: #ebe6d8;
+    --card-ink: #1a231d; --parchment: #e3d8b8; --gem-k: #1f1e23; --chip-edge: rgba(255, 255, 255, .34);
+    --scrim: rgba(0, 0, 0, .62); --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 16px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --table: #0e1613; --panel: #15201b; --raised: #1c2823; --ink: #e3eae4; --muted: #94a59b;
+  --line: #2a3a32; --gilt: #d9ae52; --gilt-soft: #3b3119; --focus: #7fb0ff; --card: #ebe6d8;
+  --card-ink: #1a231d; --parchment: #e3d8b8; --gem-k: #1f1e23; --chip-edge: rgba(255, 255, 255, .34);
+  --scrim: rgba(0, 0, 0, .62); --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 16px rgba(0, 0, 0, .3);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  background: var(--table); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.4;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 32px;
+}
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+
+/* gem color plumbing */
+.g-w { --gc: var(--gem-w); --gt: #1a231d; }
+.g-u { --gc: var(--gem-u); --gt: #fff; }
+.g-g { --gc: var(--gem-g); --gt: #fff; }
+.g-r { --gc: var(--gem-r); --gt: #fff; }
+.g-k { --gc: var(--gem-k); --gt: #fff; }
+.g-o { --gc: var(--gem-o); --gt: #1a231d; }
+
+/* ---------- buttons ---------- */
+.btn {
+  border: 1px solid var(--line); background: var(--raised); border-radius: 999px; padding: 8px 16px;
+  font-weight: 700; cursor: pointer; letter-spacing: .01em; min-height: 40px;
+}
+.btn:hover:not(:disabled) { border-color: var(--gilt); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--gilt); border-color: var(--gilt); color: var(--raised); }
+.btn.ghost { background: transparent; }
+.btn.small { min-height: 32px; padding: 4px 12px; font-size: 14px; }
+
+/* ---------- setup ---------- */
+.setup { max-width: 560px; margin: 0 auto; padding-block: 40px 0; display: grid; gap: 24px; }
+.wordmark { font-family: var(--f-display); font-weight: 700; font-size: clamp(44px, 12vw, 72px); letter-spacing: .08em; line-height: 1; color: var(--gilt); }
+.lede { color: var(--muted); max-width: 46ch; margin: 12px 0 0; font-size: 17px; }
+.gemline { display: flex; gap: 8px; margin-top: 16px; }
+.gemline .gem { width: 26px; height: 26px; }
+.setup-card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: grid; gap: 18px; }
+.label { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 700; }
+.field { display: grid; gap: 8px; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--raised); gap: 2px; }
+.seg button { border: 0; background: transparent; border-radius: 999px; padding: 6px 14px; cursor: pointer; font-weight: 500; min-height: 34px; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--raised); font-weight: 700; }
+.seats { display: grid; gap: 10px; }
+.seat { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px 10px; align-items: center; padding: 12px; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; }
+.seat-n { font-family: var(--f-display); font-weight: 700; color: var(--gilt); font-size: 20px; text-align: center; }
+.seat input[type=text] { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 8px 10px; font: inherit; color: var(--ink); }
+.seat .seg { grid-column: 2; justify-self: start; }
+.check { display: flex; gap: 10px; align-items: center; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--gilt); }
+.row-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.fineprint { color: var(--muted); font-size: 14px; margin: 0; }
+
+/* ---------- game chrome ---------- */
+.top {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-block: 14px;
+  max-width: 1180px; margin: 0 auto;
+}
+.top .wordmark { font-size: 26px; }
+.round { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; }
+.pill { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--gilt-soft); color: var(--ink); border: 1px solid var(--gilt); }
+.top .spacer { flex: 1; }
+.table {
+  max-width: 1180px; margin: 0 auto; display: grid; gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 900px) {
+  .table { grid-template-columns: minmax(0, 660px) minmax(300px, 1fr); align-items: start; }
+  .side { position: sticky; top: max(12px, env(safe-area-inset-top, 0px)); }
+}
+.board { display: grid; gap: 12px; min-width: 0; }
+.five { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: clamp(6px, 1.4vw, 10px); }
+
+/* ---------- cards ---------- */
+.card, .deck, .slot, .noble {
+  position: relative; width: 100%; aspect-ratio: 5 / 7; border-radius: 9px; container-type: inline-size;
+}
+.card {
+  color: var(--card-ink); overflow: hidden; box-shadow: var(--shadow);
+  border: 0; padding: 0; text-align: left; display: block;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gc) 16%, var(--card)) 30%, var(--card) 90%);
+}
+button.card { cursor: pointer; transition: transform .15s ease; }
+button.card[data-act="none"] { cursor: default; }
+button.card[data-act="none"]:hover { transform: none; }
+button.card:hover { transform: translateY(-2px); }
+.card .band {
+  position: absolute; inset: 0 0 auto 0; height: 30%;
+  background:
+    linear-gradient(115deg, transparent 0 42%, rgba(255, 255, 255, .22) 42% 52%, transparent 52%),
+    linear-gradient(135deg, color-mix(in srgb, var(--gc) 68%, white), var(--gc) 55%, color-mix(in srgb, var(--gc) 78%, black));
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .18);
+  display: flex; justify-content: space-between; align-items: center; padding: 0 5cqw 0 7cqw;
+}
+.card.g-w .band {
+  background:
+    linear-gradient(115deg, transparent 0 42%, rgba(255, 255, 255, .7) 42% 52%, transparent 52%),
+    linear-gradient(135deg, #ffffff, #e6e3da 55%, #cfcbc0);
+}
+.card .pts { font-family: var(--f-display); font-weight: 700; font-size: 31cqw; line-height: 1; color: #fff; text-shadow: 0 .6cqw 1.6cqw rgba(0, 0, 0, .5); }
+.card.g-w .pts { color: var(--card-ink); text-shadow: 0 1px 0 #fff; }
+.card .medal {
+  width: 30cqw; height: 30cqw; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: radial-gradient(circle at 38% 32%, #ffffff, #efece4 60%, #d3cfc3);
+  box-shadow: 0 .8cqw 2cqw rgba(0, 0, 0, .35), inset 0 0 0 1cqw rgba(255, 255, 255, .7), inset 0 -1cqw 2cqw rgba(0, 0, 0, .12);
+}
+.gem { display: block; }
+.card .medal .gem { width: 23cqw; height: 23cqw; color: var(--gc); filter: drop-shadow(0 .5cqw .5cqw rgba(0, 0, 0, .3)); }
+.card .scene {
+  position: absolute; right: 3cqw; bottom: 5cqw; width: 68cqw; height: 54cqw;
+  color: color-mix(in srgb, var(--gc) 62%, #5a5143); opacity: .5;
+}
+.card .scene svg { width: 100%; height: 100%; display: block; }
+.card.g-w .scene { color: #8a8478; }
+.card.g-k .scene { color: #45434b; }
+.card .cost { position: absolute; left: 6cqw; bottom: 6cqw; display: flex; flex-direction: column-reverse; gap: 3.5cqw; z-index: 1; }
+.pip {
+  width: 22cqw; height: 22cqw; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--gc) 55%, white), var(--gc) 65%);
+  color: var(--gt); font-weight: 700; font-size: 14cqw; line-height: 1; font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 1cqw rgba(255, 255, 255, .92), 0 .8cqw 1.6cqw 1cqw rgba(0, 0, 0, .25);
+}
+.pip.g-w { background: radial-gradient(circle at 35% 30%, #ffffff, #dedad0); box-shadow: 0 0 0 1cqw #fff, 0 0 0 1.6cqw #aaa69b, 0 .8cqw 1.6cqw 1cqw rgba(0, 0, 0, .2); }
+.card.buyable { box-shadow: 0 0 0 3px var(--gilt), var(--shadow); }
+.card.fresh { animation: arrive .6s ease-out .25s backwards; }
+@keyframes arrive { from { transform: scale(.85); opacity: .2; } to { transform: none; opacity: 1; } }
+
+.deck {
+  border: 0; padding: 0; color: #fff; cursor: pointer; overflow: hidden; box-shadow: var(--shadow);
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, .07) 0 6px, transparent 6px 12px),
+    var(--dc);
+  display: grid; place-items: center; align-content: center;
+}
+.deck .left { margin-top: 2cqw; }
+.deck.d1, .back.d1, .swatch.d1 { --dc: var(--deck1); }
+.deck.d2, .back.d2, .swatch.d2 { --dc: var(--deck2); }
+.deck.d3, .back.d3, .swatch.d3 { --dc: var(--deck3); }
+.deck .roman { font-family: var(--f-display); font-weight: 700; font-size: 26cqw; line-height: 1; }
+.deck .left { font-size: 13cqw; font-weight: 700; opacity: .85; font-variant-numeric: tabular-nums; }
+.deck.empty { background: transparent; border: 2px dashed var(--line); color: var(--muted); box-shadow: none; cursor: default; }
+.slot.empty { border: 2px dashed var(--line); }
+.back {
+  border: 0; padding: 0; overflow: hidden; color: #fff; display: grid; place-items: center;
+  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, .08) 0 5px, transparent 5px 10px), var(--dc);
+}
+.back span { font-family: var(--f-display); font-weight: 700; font-size: 26cqw; }
+
+/* ---------- nobles ---------- */
+.noble {
+  aspect-ratio: 1; background: linear-gradient(150deg, #f7efd9, var(--parchment)); color: var(--card-ink);
+  box-shadow: var(--shadow); overflow: hidden; display: block;
+}
+.noble .ni { position: absolute; inset: 0; padding: 7cqw; display: flex; flex-direction: column; justify-content: space-between; }
+.noble .pts { font-family: var(--f-display); font-weight: 700; font-size: 26cqw; line-height: 1; }
+.noble .req { display: flex; gap: 4cqw; }
+.noble .rq {
+  width: 19cqw; height: 26cqw; border-radius: 3cqw; background: var(--gc); color: var(--gt); display: grid; place-items: center;
+  font-weight: 700; font-size: 15cqw; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .2);
+}
+.noble .nm { position: absolute; right: 7cqw; top: 8cqw; width: 58cqw; text-align: right; font-size: 10.5cqw; line-height: 1.1; font-style: italic; color: rgba(26, 35, 29, .7); }
+.nobles-row .noble.gone { opacity: 0; }
+.noble.near { box-shadow: 0 0 0 3px var(--gilt), var(--shadow); }
+.nobles-strip { display: grid; gap: 6px; }
+.nchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.nchip {
+  display: inline-flex; gap: 3px; padding: 4px 5px; border-radius: 7px;
+  background: linear-gradient(150deg, #f7efd9, var(--parchment)); box-shadow: var(--shadow);
+}
+.nchip .rq {
+  width: 17px; height: 22px; border-radius: 3px; background: var(--gc); color: var(--gt); display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .22);
+}
+.nchip.near { box-shadow: 0 0 0 2px var(--gilt), var(--shadow); }
+.recap-card .recap { border-top: 0; padding-top: 0; }
+
+/* ---------- gem tokens ---------- */
+.bank { display: flex; flex-wrap: wrap; gap: 10px 12px; justify-content: space-between; }
+.tok-btn { border: 0; background: transparent; padding: 0; display: grid; justify-items: center; gap: 4px; cursor: pointer; position: relative; }
+.tok-btn[aria-disabled="true"] { cursor: default; }
+.chip {
+  --size: clamp(42px, 12vw, 56px);
+  width: var(--size); height: var(--size); border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle at 34% 30%, color-mix(in srgb, var(--gc) 62%, white), var(--gc) 62%);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .32), inset 0 0 0 7px var(--gc), inset 0 0 0 8px rgba(255, 255, 255, .25), 0 0 0 1px var(--chip-edge), 0 2px 5px rgba(0, 0, 0, .22);
+  color: var(--gt); font-weight: 700; font-size: 20px; font-variant-numeric: tabular-nums;
+}
+.g-w.chip { box-shadow: inset 0 0 0 3px rgba(0, 0, 0, .08), inset 0 0 0 7px var(--gc), inset 0 0 0 8px rgba(0, 0, 0, .12), 0 0 0 1px var(--chip-edge), 0 2px 5px rgba(0, 0, 0, .22); }
+.tok-btn .nm { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.tok-btn .picked {
+  position: absolute; top: -6px; right: -6px; min-width: 24px; height: 24px; border-radius: 12px; padding: 0 6px;
+  background: var(--gilt); color: var(--raised); font-weight: 700; font-size: 14px; display: grid; place-items: center;
+  box-shadow: 0 0 0 2px var(--table);
+}
+.tok-btn.empty .chip { opacity: .3; }
+.tok-btn:not([aria-disabled="true"]):hover .chip { transform: translateY(-2px); }
+
+/* ---------- action bar ---------- */
+.bar { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 10px; }
+.status { font-size: 16px; }
+.status b { font-weight: 700; }
+.last { color: var(--muted); font-size: 14px; }
+.hint { font-size: 14px; color: var(--gem-r); font-weight: 500; }
+.pickrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.minichip { --size: 30px; font-size: 14px; cursor: pointer; border: 0; padding: 0; }
+.pickrow .spacer { flex: 1; }
+.thinking::after { content: ''; display: inline-block; width: 1.2em; text-align: left; animation: dots 1.2s steps(4) infinite; }
+@keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+/* ---------- players ledger ---------- */
+.side { display: grid; gap: 14px; min-width: 0; }
+.players { display: grid; gap: 10px; }
+.pl { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 10px; }
+.pl.is-turn { border-color: var(--gilt); box-shadow: 0 0 0 2px var(--gilt-soft); }
+.pl-head { display: flex; align-items: flex-start; gap: 10px; }
+.pl-who { flex: 1; min-width: 0; }
+.pl-name { font-weight: 700; font-size: 17px; overflow-wrap: anywhere; display: flex; gap: 8px; align-items: center; }
+.pl-name .turn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gilt); flex: none; }
+.pl-kind { font-size: 13px; color: var(--muted); }
+.pl-pts { text-align: right; line-height: 1; }
+.pl-pts b { font-family: var(--f-display); font-size: 30px; font-variant-numeric: tabular-nums; }
+.pl-pts span { display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
+.pl-gems { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.gcol { display: grid; justify-items: center; gap: 4px; }
+.gcol .bon {
+  width: 26px; height: 34px; border-radius: 4px; background: var(--gc); color: var(--gt); display: grid; place-items: center;
+  font-weight: 700; font-size: 15px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .2), 0 0 0 1px var(--chip-edge);
+}
+.gcol .tk { --size: 28px; font-size: 13px; }
+.gcol .zero { opacity: .28; }
+.gcol .blank { visibility: hidden; }
+.pl-meta { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; font-variant-numeric: tabular-nums; }
+.pl-meta .over { color: var(--gem-r); font-weight: 700; }
+.pl-res { display: grid; grid-template-columns: repeat(3, minmax(0, 72px)); gap: 8px; }
+.pl-res .label { grid-column: 1 / -1; }
+.pl-nobles { display: flex; gap: 6px; flex-wrap: wrap; }
+.pl-nobles .noble { width: 48px; }
+
+.log { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.log h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-family: var(--f-body); margin-bottom: 8px; }
+.log ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 220px; overflow-y: auto; font-size: 14px; }
+.log li { color: var(--muted); }
+.log li b { color: var(--ink); }
+.log .r { font-variant-numeric: tabular-nums; font-size: 12px; margin-right: 6px; }
+
+/* ---------- overlays ---------- */
+.scrim {
+  position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; z-index: 50;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  overflow-y: auto;
+}
+.dialog {
+  width: min(460px, 100%); background: var(--panel); color: var(--ink); border-radius: 18px; border: 1px solid var(--line);
+  padding: 20px; display: grid; gap: 14px; box-shadow: 0 20px 50px rgba(0, 0, 0, .35); max-height: 100%; overflow-y: auto;
+}
+.dialog h2 { font-family: var(--f-display); font-size: 22px; letter-spacing: .03em; }
+.dialog p { margin: 0; }
+.dialog .muted { color: var(--muted); font-size: 15px; }
+.cardview { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; align-items: start; }
+.cardview .facts { display: grid; gap: 6px; font-size: 15px; }
+.paylist { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.paylist .chip { --size: 28px; font-size: 13px; }
+.dlg-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+.discard-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.noble-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px; }
+.noble-pick button { border: 0; padding: 0; background: transparent; cursor: pointer; }
+.standings { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.standings th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.standings td { padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.standings td.n, .standings th.n { text-align: right; }
+.standings tr.win td { font-weight: 700; }
+.crown { color: var(--gilt); }
+.rules { display: grid; gap: 10px; font-size: 15px; }
+.rules h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--gilt); font-family: var(--f-body); }
+.rules ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.handoff { display: grid; gap: 14px; text-align: center; justify-items: center; }
+.handoff .big { font-family: var(--f-display); font-size: 30px; color: var(--gilt); }
+
+/* ---------- bot move preview, flights, recap ---------- */
+.pv { position: relative; z-index: 2; animation: pvpulse .9s ease-in-out infinite alternate; }
+.card.pv, .deck.pv { box-shadow: 0 0 0 4px var(--gilt), 0 0 22px 6px color-mix(in srgb, var(--gilt) 55%, transparent); }
+@keyframes pvpulse { from { transform: translateY(0) scale(1); } to { transform: translateY(-4px) scale(1.04); } }
+.ribbon {
+  position: absolute; left: 0; right: 0; top: 40%; z-index: 3; background: var(--gilt); color: #fff;
+  text-align: center; font-weight: 700; font-size: 11cqw; padding: 2.5cqw 0; letter-spacing: .08em; text-transform: uppercase;
+  box-shadow: 0 1cqw 3cqw rgba(0, 0, 0, .3);
+}
+.tok-btn.pv .chip { box-shadow: 0 0 0 4px var(--gilt), 0 0 18px 4px color-mix(in srgb, var(--gilt) 55%, transparent); }
+.status .who { color: var(--gilt); }
+#fx { position: fixed; inset: 0; pointer-events: none; z-index: 45; overflow: hidden; }
+.flyer { position: fixed; will-change: transform, opacity; }
+.flyer > .card, .flyer > .noble { box-shadow: 0 10px 28px rgba(0, 0, 0, .4); }
+.flyer > .chip { --size: 100%; width: 100%; height: 100%; font-size: 0; }
+.bump { animation: bump .45s ease-out; }
+@keyframes bump { 40% { transform: scale(1.35); } }
+.recap { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.recap .label { margin-bottom: 2px; }
+.recap ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.recap li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 15px; color: var(--muted); }
+.recap li b { color: var(--ink); }
+.recap .tags { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.recap .chip { --size: 20px; font-size: 0; }
+.recap .minus { opacity: .55; }
+.swatch {
+  width: 18px; height: 25px; border-radius: 3px; display: inline-grid; place-items: center;
+  background: var(--gc); color: var(--gt); font-size: 12px; font-weight: 700; font-family: var(--f-display);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .2), 0 0 0 1px var(--chip-edge);
+}
+.swatch.back { background: var(--dc); color: #fff; font-size: 10px; }
+.swatch.nob { width: 22px; height: 22px; background: var(--parchment); color: var(--card-ink); }
+
+@media (max-width: 480px) {
+  .bank { gap: 8px; }
+  .tok-btn .nm { font-size: 10px; letter-spacing: .04em; }
+  .cardview { grid-template-columns: 96px minmax(0, 1fr); }
+  .pl-res { grid-template-columns: repeat(3, minmax(0, 64px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  button.card:hover, .tok-btn:hover .chip { transform: none !important; }
+}
+</style>
+
+<div id="app"></div>
+<div id="fx" aria-hidden="true"></div>
+
+<script>
+// ===== Gem Guild rules engine =====
+const COLORS = ['w', 'u', 'g', 'r', 'k'];
+const TOKENS = ['w', 'u', 'g', 'r', 'k', 'o'];
+const GEM_NAME = { w: 'Diamond', u: 'Sapphire', g: 'Emerald', r: 'Ruby', k: 'Onyx', o: 'Gold' };
+const WIN_POINTS = 15;
+const TOKEN_LIMIT = 10;
+const MAX_RESERVED = 3;
+const ROUND_CAP = 150;
+
+// level  bonus  prestige  cost: white blue green red black
+const CARD_ROWS = `
+1 k 0 1 1 1 1 0
+1 k 0 1 2 1 1 0
+1 k 0 2 2 0 1 0
+1 k 0 0 0 1 3 1
+1 k 0 0 0 2 1 0
+1 k 0 2 0 2 0 0
+1 k 0 0 0 3 0 0
+1 k 1 0 4 0 0 0
+1 u 0 1 0 1 1 1
+1 u 0 1 0 1 2 1
+1 u 0 1 0 2 2 0
+1 u 0 0 1 3 1 0
+1 u 0 1 0 0 0 2
+1 u 0 0 0 2 0 2
+1 u 0 0 0 0 0 3
+1 u 1 0 0 0 4 0
+1 w 0 0 1 1 1 1
+1 w 0 0 1 2 1 1
+1 w 0 0 2 2 0 1
+1 w 0 3 1 0 0 1
+1 w 0 0 0 0 2 1
+1 w 0 0 2 0 0 2
+1 w 0 0 3 0 0 0
+1 w 1 0 0 4 0 0
+1 g 0 1 1 0 1 1
+1 g 0 1 1 0 1 2
+1 g 0 0 1 0 2 2
+1 g 0 1 3 1 0 0
+1 g 0 2 1 0 0 0
+1 g 0 0 2 0 2 0
+1 g 0 0 0 0 3 0
+1 g 1 0 0 0 0 4
+1 r 0 1 1 1 0 1
+1 r 0 2 1 1 0 1
+1 r 0 2 0 1 0 2
+1 r 0 1 0 0 1 3
+1 r 0 0 2 1 0 0
+1 r 0 2 0 0 2 0
+1 r 0 3 0 0 0 0
+1 r 1 4 0 0 0 0
+2 k 1 3 2 2 0 0
+2 k 1 3 0 3 0 2
+2 k 2 0 1 4 2 0
+2 k 2 0 0 5 3 0
+2 k 2 5 0 0 0 0
+2 k 3 0 0 0 0 6
+2 u 1 0 2 2 3 0
+2 u 1 0 2 3 0 3
+2 u 2 5 3 0 0 0
+2 u 2 2 0 0 1 4
+2 u 2 0 5 0 0 0
+2 u 3 0 6 0 0 0
+2 w 1 0 0 3 2 2
+2 w 1 2 3 0 3 0
+2 w 2 0 0 1 4 2
+2 w 2 0 0 0 5 3
+2 w 2 0 0 0 5 0
+2 w 3 6 0 0 0 0
+2 g 1 3 0 2 3 0
+2 g 1 2 3 0 0 2
+2 g 2 4 2 0 0 1
+2 g 2 0 5 3 0 0
+2 g 2 0 0 5 0 0
+2 g 3 0 0 6 0 0
+2 r 1 2 0 0 2 3
+2 r 1 0 3 0 2 3
+2 r 2 1 4 2 0 0
+2 r 2 3 0 0 0 5
+2 r 2 0 0 0 0 5
+2 r 3 0 0 0 6 0
+3 k 3 3 3 5 3 0
+3 k 4 0 0 0 7 0
+3 k 4 0 0 3 6 3
+3 k 5 0 0 0 7 3
+3 u 3 3 0 3 3 5
+3 u 4 7 0 0 0 0
+3 u 4 6 3 0 0 3
+3 u 5 7 3 0 0 0
+3 w 3 0 3 3 5 3
+3 w 4 0 0 0 0 7
+3 w 4 3 0 0 3 6
+3 w 5 3 0 0 0 7
+3 g 3 5 3 0 3 3
+3 g 4 0 7 0 0 0
+3 g 4 3 6 3 0 0
+3 g 5 0 7 3 0 0
+3 r 3 3 5 3 0 3
+3 r 4 0 0 7 0 0
+3 r 4 0 3 6 3 0
+3 r 5 0 0 7 3 0
+`;
+
+const CARDS = CARD_ROWS.trim().split('\n').map((line, id) => {
+  const [lv, color, pts, w, u, g, r, k] = line.trim().split(/\s+/);
+  return { id, level: +lv, color, points: +pts, cost: { w: +w, u: +u, g: +g, r: +r, k: +k } };
+});
+
+// Each noble is worth 3 prestige. Requirement: white blue green red black bonuses.
+const NOBLES = [
+  ['Anne of Brittany', '0 0 4 4 0'],
+  ['Charles V', '0 0 0 4 4'],
+  ['Francis I', '4 4 0 0 0'],
+  ['Henry VIII', '4 0 0 0 4'],
+  ['Isabella of Castile', '0 4 4 0 0'],
+  ['Catherine de’ Medici', '3 0 0 3 3'],
+  ['Elisabeth of Austria', '3 3 3 0 0'],
+  ['Mary Stuart', '0 3 3 3 0'],
+  ['Niccolò Machiavelli', '0 0 3 3 3'],
+  ['Suleiman the Magnificent', '3 3 0 0 3'],
+].map(([name, req], id) => {
+  const [w, u, g, r, k] = req.split(' ').map(Number);
+  return { id, name, req: { w, u, g, r, k } };
+});
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+const emptyTokens = () => ({ w: 0, u: 0, g: 0, r: 0, k: 0, o: 0 });
+const emptyBonus = () => ({ w: 0, u: 0, g: 0, r: 0, k: 0 });
+
+function newGame(seats) {
+  const n = seats.length;
+  const per = n === 2 ? 4 : n === 3 ? 5 : 7;
+  const bank = { w: per, u: per, g: per, r: per, k: per, o: 5 };
+  const decks = [1, 2, 3].map(lv => shuffle(CARDS.filter(c => c.level === lv).map(c => c.id)));
+  const market = decks.map(d => d.splice(0, 4));
+  const nobles = shuffle(NOBLES.map(x => x.id)).slice(0, n + 1);
+  const players = seats.map(s => ({
+    name: s.name, type: s.type, level: s.level || null,
+    tokens: emptyTokens(), bonus: emptyBonus(), pts: 0, cards: [], reserved: [], nobles: [],
+  }));
+  return { players, bank, decks, market, nobles, cur: 0, round: 1, finalRound: false, over: false, passes: 0, log: [] };
+}
+
+function cloneState(s) {
+  return {
+    ...s,
+    players: s.players.map(p => ({
+      ...p, tokens: { ...p.tokens }, bonus: { ...p.bonus }, cards: p.cards.slice(),
+      reserved: p.reserved.map(r => ({ ...r })), nobles: p.nobles.slice(),
+    })),
+    bank: { ...s.bank }, decks: s.decks.map(d => d.slice()), market: s.market.map(r => r.slice()),
+    nobles: s.nobles.slice(), log: [],
+  };
+}
+
+const tokenCount = p => TOKENS.reduce((n, c) => n + p.tokens[c], 0);
+
+// Tokens a player hands over for a card: colored tokens first, gold covers the rest. null if unaffordable.
+function payment(p, card) {
+  const pay = emptyTokens();
+  let gold = 0;
+  for (const c of COLORS) {
+    const need = Math.max(0, card.cost[c] - p.bonus[c]);
+    const use = Math.min(need, p.tokens[c]);
+    pay[c] = use;
+    gold += need - use;
+  }
+  if (gold > p.tokens.o) return null;
+  pay.o = gold;
+  return pay;
+}
+
+function legalMoves(s, pi) {
+  const p = s.players[pi];
+  const moves = [];
+  s.market.forEach((row, lv) => row.forEach((id, i) => {
+    if (id != null && id >= 0 && payment(p, CARDS[id])) moves.push({ t: 'buy', lv, i });
+  }));
+  p.reserved.forEach((r, i) => {
+    if (r.id >= 0 && payment(p, CARDS[r.id])) moves.push({ t: 'buyR', i });
+  });
+  const avail = COLORS.filter(c => s.bank[c] > 0);
+  if (avail.length >= 3) {
+    for (let a = 0; a < avail.length; a++)
+      for (let b = a + 1; b < avail.length; b++)
+        for (let c = b + 1; c < avail.length; c++) moves.push({ t: 'take', gems: [avail[a], avail[b], avail[c]] });
+  } else if (avail.length) {
+    moves.push({ t: 'take', gems: avail.slice() });
+  }
+  for (const c of COLORS) if (s.bank[c] >= 4) moves.push({ t: 'take2', c });
+  if (p.reserved.length < MAX_RESERVED) {
+    s.market.forEach((row, lv) => row.forEach((id, i) => {
+      if (id != null && id >= 0) moves.push({ t: 'reserve', lv, i });
+    }));
+    s.decks.forEach((d, lv) => { if (d.length) moves.push({ t: 'reserveDeck', lv }); });
+  }
+  return moves;
+}
+
+function gainCard(p, id) {
+  const c = CARDS[id];
+  p.cards.push(id);
+  p.bonus[c.color]++;
+  p.pts += c.points;
+}
+function payFor(s, p, id) {
+  const pay = payment(p, CARDS[id]);
+  for (const c of TOKENS) { p.tokens[c] -= pay[c]; s.bank[c] += pay[c]; }
+  gainCard(p, id);
+  return pay;
+}
+const draw = (s, lv) => (s.decks[lv].length ? s.decks[lv].shift() : null);
+function takeGold(s, p) {
+  if (s.bank.o > 0) { s.bank.o--; p.tokens.o++; return true; }
+  return false;
+}
+
+// Applies one action. Returns details the UI uses for the log.
+function applyMove(s, pi, m) {
+  const p = s.players[pi];
+  s.passes = m.t === 'pass' ? s.passes + 1 : 0;
+  switch (m.t) {
+    case 'take':
+      for (const c of m.gems) { s.bank[c]--; p.tokens[c]++; }
+      return {};
+    case 'take2':
+      s.bank[m.c] -= 2; p.tokens[m.c] += 2;
+      return {};
+    case 'reserve': {
+      const id = s.market[m.lv][m.i];
+      p.reserved.push({ id, hidden: false });
+      s.market[m.lv][m.i] = draw(s, m.lv);
+      return { id, gold: takeGold(s, p) };
+    }
+    case 'reserveDeck': {
+      const id = draw(s, m.lv);
+      p.reserved.push({ id, hidden: true });
+      return { id, gold: takeGold(s, p) };
+    }
+    case 'buy': {
+      const id = s.market[m.lv][m.i];
+      const pay = payFor(s, p, id);
+      s.market[m.lv][m.i] = draw(s, m.lv);
+      return { id, pay };
+    }
+    case 'buyR': {
+      const id = p.reserved.splice(m.i, 1)[0].id;
+      return { id, pay: payFor(s, p, id) };
+    }
+    default:
+      return {};
+  }
+}
+
+function eligibleNobles(s, p) {
+  return s.nobles.filter(nid => COLORS.every(c => p.bonus[c] >= NOBLES[nid].req[c]));
+}
+function claimNoble(s, pi, nid) {
+  const p = s.players[pi];
+  s.nobles = s.nobles.filter(x => x !== nid);
+  p.nobles.push(nid);
+  p.pts += 3;
+}
+
+// Called once the active player has finished their action, discards and noble visit.
+function endTurn(s) {
+  const n = s.players.length;
+  if (s.players[s.cur].pts >= WIN_POINTS) s.finalRound = true;
+  s.cur = (s.cur + 1) % n;
+  if (s.cur === 0) {
+    if (s.finalRound) s.over = true;
+    else s.round++;
+  }
+  if (s.passes >= n) s.over = true;
+  if (s.round > ROUND_CAP) s.over = true;
+}
+
+// Most prestige wins; ties go to whoever bought the fewest development cards.
+function standings(s) {
+  const rows = s.players.map((p, i) => ({ i, pts: p.pts, cards: p.cards.length }));
+  rows.sort((a, b) => b.pts - a.pts || a.cards - b.cards);
+  const top = rows[0];
+  rows.forEach(r => { r.winner = r.pts === top.pts && r.cards === top.cards; });
+  return rows;
+}
+
+// ===== Bots =====
+
+// What a bot is allowed to know: deck order and opponents' face-down reservations stay hidden.
+function botView(s, pi) {
+  const v = cloneState(s);
+  v.decks = s.decks.map(d => d.map(() => -1));
+  v.players.forEach((p, j) => {
+    if (j !== pi) p.reserved = p.reserved.map(r => (r.hidden ? { id: -1, hidden: true } : r));
+  });
+  return v;
+}
+
+function knownCards(s, p) {
+  const list = [];
+  for (const row of s.market) for (const id of row) if (id != null && id >= 0) list.push(id);
+  for (const r of p.reserved) if (r.id >= 0) list.push(r.id);
+  return list;
+}
+
+// How much each color matters to this player right now (0..1).
+function colorDemand(s, p) {
+  const d = emptyBonus();
+  for (const row of s.market) for (const id of row) {
+    if (id == null || id < 0) continue;
+    const card = CARDS[id];
+    const w = 0.5 + card.points * 0.3;
+    for (const c of COLORS) d[c] += Math.max(0, card.cost[c] - p.bonus[c]) * w;
+  }
+  for (const nid of s.nobles) {
+    const n = NOBLES[nid];
+    for (const c of COLORS) d[c] += Math.max(0, n.req[c] - p.bonus[c]) * 1.5;
+  }
+  const mx = Math.max(1, ...COLORS.map(c => d[c]));
+  for (const c of COLORS) d[c] /= mx;
+  return d;
+}
+
+// Rough number of gem-taking turns before the card can be bought.
+function turnsToBuy(s, p, card) {
+  const sh = {};
+  for (const c of COLORS) sh[c] = Math.max(0, Math.max(0, card.cost[c] - p.bonus[c]) - p.tokens[c]);
+  let gold = p.tokens.o;
+  while (gold > 0) {
+    let big = null;
+    for (const c of COLORS) if (sh[c] > 0 && (!big || sh[c] > sh[big])) big = c;
+    if (!big) break;
+    sh[big]--; gold--;
+  }
+  let total = 0, mx = 0;
+  for (const c of COLORS) { total += sh[c]; mx = Math.max(mx, sh[c]); }
+  if (!total) return 0;
+  let t = Math.max(Math.ceil(total / 3), Math.ceil(mx / 2));
+  for (const c of COLORS) if (sh[c] > s.bank[c]) t += 2;
+  if (tokenCount(p) + total > TOKEN_LIMIT) t += 1;
+  return t;
+}
+
+const W = { bonus0: 0.8, bonusLate: 0.5, bonusDem: 0.3, tok: 0.06, tokDem: 0.08, gold: 0.18, decay: 0.6, pot1: 0.45, pot2: 0.2, pot3: 0.1, noble1: 0.5, noble2: 0.2, nobleDecay: 0.62, resPen: 0.25, blend: 0.55 };
+function evaluate(s, pi, w = W) {
+  const p = s.players[pi];
+  const maxP = Math.max(...s.players.map(q => q.pts));
+  const stage = Math.min(1, maxP / WIN_POINTS);
+  let v = p.pts;
+  if (p.pts >= WIN_POINTS) v += 30 + p.pts;
+  const dem = colorDemand(s, p);
+  const bonusBase = w.bonus0 - w.bonusLate * stage;
+  for (const c of COLORS) v += p.bonus[c] * (bonusBase + w.bonusDem * dem[c]);
+  for (const c of COLORS) v += p.tokens[c] * (w.tok + w.tokDem * dem[c]);
+  v += p.tokens.o * w.gold;
+  const nob = s.nobles.map(nid => {
+    let d = 0;
+    for (const c of COLORS) d += Math.max(0, NOBLES[nid].req[c] - p.bonus[c]);
+    return 3 * Math.pow(w.nobleDecay, d);
+  }).sort((a, b) => b - a);
+  v += (nob[0] || 0) * w.noble1 + (nob[1] || 0) * w.noble2;
+  const pot = knownCards(s, p).map(id => {
+    const card = CARDS[id];
+    const worth = card.points + bonusBase + w.bonusDem * dem[card.color];
+    return worth * Math.pow(w.decay, turnsToBuy(s, p, card));
+  }).sort((a, b) => b - a);
+  v += w.pot1 * (pot[0] || 0) + w.pot2 * (pot[1] || 0) + w.pot3 * (pot[2] || 0);
+  v -= w.resPen * p.reserved.length;
+  return v;
+}
+
+// Tokens of each color the player's most reachable targets still call for.
+function targetNeed(s, p) {
+  const need = emptyBonus();
+  const targets = knownCards(s, p)
+    .map(id => ({ id, t: turnsToBuy(s, p, CARDS[id]) - CARDS[id].points * 0.3 }))
+    .sort((a, b) => a.t - b.t).slice(0, 3);
+  for (const { id } of targets)
+    for (const c of COLORS) need[c] += Math.max(0, CARDS[id].cost[c] - p.bonus[c]);
+  return need;
+}
+
+// Returns tokens until the player is back to the limit; keeps what their targets need.
+function botDiscard(s, pi) {
+  const p = s.players[pi];
+  const returned = [];
+  while (tokenCount(p) > TOKEN_LIMIT) {
+    const need = targetNeed(s, p);
+    let pick = null, best = Infinity;
+    for (const c of COLORS) {
+      if (!p.tokens[c]) continue;
+      const score = need[c] - p.tokens[c];
+      if (score < best) { best = score; pick = c; }
+    }
+    if (!pick) pick = 'o';
+    p.tokens[pick]--; s.bank[pick]++;
+    returned.push(pick);
+  }
+  return returned;
+}
+
+function simulate(s, pi, m) {
+  const c = cloneState(s);
+  applyMove(c, pi, m);
+  botDiscard(c, pi);
+  const el = eligibleNobles(c, c.players[pi]);
+  if (el.length) claimNoble(c, pi, el[0]);
+  return c;
+}
+
+// Biggest prestige jump each opponent could make on their very next turn.
+function opponentThreat(s, pi) {
+  let pen = 0;
+  s.players.forEach((q, j) => {
+    if (j === pi) return;
+    let best = 0;
+    for (const id of knownCards(s, q)) {
+      const card = CARDS[id];
+      if (!payment(q, card)) continue;
+      let gain = card.points;
+      q.bonus[card.color]++;
+      if (eligibleNobles(s, q).length) gain += 3;
+      q.bonus[card.color]--;
+      best = Math.max(best, gain);
+    }
+    if (q.pts + best >= WIN_POINTS) pen += 8;
+    else pen += 0.3 * best;
+  });
+  return pen;
+}
+
+function easyChoose(s, pi, moves) {
+  const p = s.players[pi];
+  const buys = moves.filter(m => m.t === 'buy' || m.t === 'buyR');
+  if (buys.length && Math.random() < 0.75) {
+    const pts = m => CARDS[m.t === 'buy' ? s.market[m.lv][m.i] : p.reserved[m.i].id].points;
+    return buys.map(m => ({ m, v: pts(m) + Math.random() * 2 })).sort((a, b) => b.v - a.v)[0].m;
+  }
+  const takes = moves.filter(m => m.t === 'take' || m.t === 'take2');
+  if (!takes.length || Math.random() < 0.08) return moves[Math.floor(Math.random() * moves.length)];
+  // Chase one of the three cheapest cards on the table.
+  const targets = knownCards(s, p).map(id => ({ id, t: turnsToBuy(s, p, CARDS[id]) + Math.random() }))
+    .sort((a, b) => a.t - b.t).slice(0, 3);
+  const target = targets.length ? CARDS[targets[Math.floor(Math.random() * targets.length)].id] : null;
+  if (!target) return takes[Math.floor(Math.random() * takes.length)];
+  const short = c => Math.max(0, target.cost[c] - p.bonus[c] - p.tokens[c]);
+  const score = m => (m.t === 'take2' ? Math.min(2, short(m.c)) : m.gems.reduce((n, c) => n + (short(c) > 0 ? 1 : 0), 0)) + Math.random() * 0.9;
+  return takes.map(m => ({ m, v: score(m) })).sort((a, b) => b.v - a.v)[0].m;
+}
+
+function botChoose(s, pi, w = W) {
+  const level = s.players[pi].level;
+  const view = botView(s, pi);
+  const moves = legalMoves(view, pi);
+  if (!moves.length) return { t: 'pass' };
+  if (level === 'easy') return easyChoose(view, pi, moves);
+  // Medium looks one move ahead with a little noise; Hard looks two of its own moves
+  // ahead and avoids leaving an opponent a winning (or big) purchase.
+  let best = moves[0], bestV = -Infinity;
+  for (const m of moves) {
+    const s1 = simulate(view, pi, m);
+    let v = evaluate(s1, pi, w);
+    if (level === 'hard') {
+      if (s1.players[pi].pts < WIN_POINTS) {
+        let b2 = -Infinity;
+        for (const m2 of legalMoves(s1, pi)) b2 = Math.max(b2, evaluate(simulate(s1, pi, m2), pi, w));
+        if (b2 > -Infinity) v = (1 - w.blend) * v + w.blend * b2;
+      }
+      v -= opponentThreat(s1, pi);
+    } else {
+      v += Math.random() * 0.35;
+    }
+    if (v > bestV) { bestV = v; best = m; }
+  }
+  return best;
+}
+
+</script>
+<script>
+// ===== Interface =====
+const app = document.getElementById('app');
+const SAVE_KEY = 'gemguild-game-v1';
+const SETUP_KEY = 'gemguild-setup-v1';
+const BOT_NAMES = ['Marco', 'Lucia', 'Tommaso', 'Beatrice'];
+const LEVEL_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+const ROMAN = ['I', 'II', 'III'];
+const PACES = {
+  slow: { label: 'Slow', think: 900, show: 2200, fly: 950 },
+  normal: { label: 'Normal', think: 700, show: 1400, fly: 750 },
+  fast: { label: 'Fast', think: 250, show: 550, fly: 420 },
+};
+const pace = () => PACES[setup.pace] || PACES.normal;
+const reducedMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
+function load(k) { try { const t = localStorage.getItem(k); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
+function forget(k) { try { localStorage.removeItem(k); } catch (e) { /* storage unavailable */ } }
+const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+// One cut per gem: brilliant diamond, oval sapphire, step-cut emerald, round ruby, onyx cabochon.
+const EDGE = 'fill="none" stroke="#000" stroke-opacity=".45" stroke-width=".8" stroke-linejoin="round"';
+const GEM_SHAPES = {
+  w: `<path d="M6.5 3.5h11l4.5 6L12 21 2 9.5z" fill="currentColor"/><path d="M6.5 3.5 9 9.5l3-6zM12 3.5l3 6 2.5-6z" fill="#fff" opacity=".75"/><path d="M2 9.5h7L12 21z" fill="#000" opacity=".1"/><path d="M15 9.5h7L12 21z" fill="#000" opacity=".22"/><path d="M2 9.5h20M9 9.5 12 21l3-11.5" fill="none" stroke="#000" stroke-opacity=".25" stroke-width=".6"/><path d="M6.5 3.5h11l4.5 6L12 21 2 9.5z" ${EDGE}/>`,
+  u: `<ellipse cx="12" cy="12" rx="8.5" ry="10" fill="currentColor"/><ellipse cx="12" cy="12" rx="4.3" ry="5.4" fill="#fff" opacity=".22"/><path d="M12 2l4.6 5.4L12 6.6 7.4 7.4z" fill="#fff" opacity=".55"/><path d="M3.5 12l3.9-4.6v9.2z" fill="#fff" opacity=".2"/><path d="M20.5 12l-3.9-4.6v9.2z" fill="#000" opacity=".22"/><path d="M12 22l4.6-5.4-4.6.8-4.6-.8z" fill="#000" opacity=".28"/><ellipse cx="12" cy="12" rx="8.5" ry="10" ${EDGE}/>`,
+  g: `<path d="M7 2.5h10l3.5 3.5v12L17 21.5H7L3.5 18V6z" fill="currentColor"/><path d="M9 6.5h6l1.5 1.5v8L15 17.5H9L7.5 16V8z" fill="#fff" opacity=".22"/><path d="M7 2.5h10l-2 4H9z" fill="#fff" opacity=".5"/><path d="M3.5 6l4 2v8l-4 2z" fill="#fff" opacity=".16"/><path d="M20.5 6l-4 2v8l4 2z" fill="#000" opacity=".22"/><path d="M7 21.5h10l-2-4H9z" fill="#000" opacity=".3"/><path d="M7 2.5h10l3.5 3.5v12L17 21.5H7L3.5 18V6z" ${EDGE}/>`,
+  r: `<circle cx="12" cy="12" r="9.5" fill="currentColor"/><path d="M12 6.5l4.8 2.7v5.6L12 17.5l-4.8-2.7V9.2z" fill="#fff" opacity=".22"/><path d="M12 2.5l4.8 6.7L12 6.5 7.2 9.2z" fill="#fff" opacity=".5"/><path d="M2.5 12l4.7-2.8v5.6z" fill="#fff" opacity=".2"/><path d="M21.5 12l-4.7-2.8v5.6z" fill="#000" opacity=".22"/><path d="M12 21.5l4.8-6.7-4.8 2.7-4.8-2.7z" fill="#000" opacity=".3"/><circle cx="12" cy="12" r="9.5" ${EDGE}/>`,
+  k: `<ellipse cx="12" cy="12.5" rx="9.5" ry="8.5" fill="currentColor"/><ellipse cx="12" cy="15" rx="7.5" ry="5" fill="#000" opacity=".25"/><ellipse cx="8.8" cy="8.8" rx="3.8" ry="2" transform="rotate(-24 8.8 8.8)" fill="#fff" opacity=".6"/><circle cx="15.5" cy="16" r="1" fill="#fff" opacity=".35"/><ellipse cx="12" cy="12.5" rx="9.5" ry="8.5" ${EDGE}/>`,
+  o: `<circle cx="12" cy="12" r="9.5" fill="currentColor"/><circle cx="12" cy="12" r="6.5" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width="1.2"/><circle cx="12" cy="12" r="9.5" ${EDGE}/>`,
+};
+const gemSVG = c => `<svg class="gem" viewBox="0 0 24 24" aria-hidden="true">${GEM_SHAPES[c]}</svg>`;
+const gemIcon = c => `<span class="g-${c}" style="color:var(--gc)">${gemSVG(c)}</span>`;
+
+// Card art by level, as in the game: I mines, II ships and caravans, III shops.
+const SCENES = [
+  `<svg viewBox="0 0 100 80" aria-hidden="true"><path d="M0 80 22 38l12 13 18-31 22 35 10-10 16 25v10z" fill="currentColor" opacity=".4"/><path d="M34 80V62a14 14 0 0 1 28 0v18z" fill="currentColor"/><path d="M31 62h34M48 48v-4" stroke="currentColor" stroke-width="3"/><path d="M4 78h92" stroke="currentColor" stroke-width="1.6"/><path d="M80 14l2 5 5 2-5 2-2 5-2-5-5-2 5-2zM14 22l1.4 3.4 3.4 1.4-3.4 1.4L14 31.6l-1.4-3.4L9.2 26.8l3.4-1.4z" fill="currentColor"/></svg>`,
+  `<svg viewBox="0 0 100 80" aria-hidden="true"><path d="M52 8v50" stroke="currentColor" stroke-width="2.4"/><path d="M55 12q24 16 0 38z" fill="currentColor" opacity=".6"/><path d="M49 16q-22 15 0 36z" fill="currentColor" opacity=".45"/><path d="M52 8l11 3-11 3z" fill="currentColor"/><path d="M14 58h74l-11 13H26z" fill="currentColor"/><path d="M0 72q8-5 16 0t17 0 17 0 17 0 17 0 16 0v8H0z" fill="currentColor" opacity=".4"/></svg>`,
+  `<svg viewBox="0 0 100 80" aria-hidden="true"><path d="M10 30 50 8l40 22z" fill="currentColor" opacity=".75"/><path d="M16 30h68v44H16z" fill="currentColor" opacity=".28"/><path d="M22 74V54a8 8 0 0 1 16 0v20zM42 74V54a8 8 0 0 1 16 0v20zM62 74V54a8 8 0 0 1 16 0v20z" fill="currentColor" opacity=".85"/><path d="M24 36h12v9H24zM44 36h12v9H44zM64 36h12v9H64z" fill="currentColor" opacity=".6"/><path d="M6 74h88v5H6z" fill="currentColor" opacity=".7"/><circle cx="50" cy="21" r="3" fill="currentColor"/></svg>`,
+];
+
+const defaultSetup = () => ({
+  count: 2,
+  shuffle: false,
+  pace: 'normal',
+  seats: [
+    { name: 'You', kind: 'human' },
+    { name: BOT_NAMES[1], kind: 'medium' },
+    { name: BOT_NAMES[2], kind: 'medium' },
+    { name: BOT_NAMES[3], kind: 'medium' },
+  ],
+});
+let setup = { ...defaultSetup(), ...(load(SETUP_KEY) || {}) };
+let G = null;
+const ui = {
+  screen: 'setup', sel: [], hint: null, modal: null, discard: null, nobleChoice: null,
+  handoff: false, showOver: true, rules: false, confirmNew: false, lastMove: null, fresh: null, botTimer: null, preview: null,
+};
+
+const isHuman = p => p.type === 'human';
+const curP = () => G.players[G.cur];
+const humanCount = () => G.players.filter(isHuman).length;
+const kindLabel = p => (isHuman(p) ? 'Human' : `Bot · ${LEVEL_LABEL[p.level]}`);
+const canInteract = () => G && !G.over && ui.screen === 'game' && isHuman(curP()) && !ui.handoff && !ui.discard && !ui.nobleChoice;
+
+// Whose face-down reservations can be shown on this screen.
+function viewerIndex() {
+  if (!G || ui.handoff) return -1;
+  if (isHuman(curP())) return G.cur;
+  const humans = G.players.map((p, i) => (isHuman(p) ? i : -1)).filter(i => i >= 0);
+  return humans.length === 1 ? humans[0] : -1;
+}
+
+function saveGame() {
+  if (!G) return;
+  if (G.over) forget(SAVE_KEY); else store(SAVE_KEY, G);
+}
+
+function addLog(pi, text, tags = {}) {
+  G.log.push({ pi, text, round: G.round, ...tags });
+  if (G.log.length > 200) G.log.shift();
+}
+
+const gemList = gems => gems.map(c => GEM_NAME[c]).join(', ');
+function cardPhrase(id) {
+  const c = CARDS[id];
+  return `a level ${ROMAN[c.level - 1]} ${GEM_NAME[c.color]} card${c.points ? ` (${c.points} prestige)` : ''}`;
+}
+
+function describe(m, res) {
+  switch (m.t) {
+    case 'take': return `took ${gemList(m.gems)}`;
+    case 'take2': return `took 2 ${GEM_NAME[m.c]}`;
+    case 'reserve': return `reserved ${cardPhrase(res.id)}${res.gold ? ' and took 1 Gold' : ''}`;
+    case 'reserveDeck': return `reserved a face-down card from deck ${ROMAN[m.lv]}${res.gold ? ' and took 1 Gold' : ''}`;
+    case 'buy': case 'buyR': return `bought ${cardPhrase(res.id)}${m.t === 'buyR' ? ' from their reserve' : ''}`;
+    default: return 'had no legal move and passed';
+  }
+}
+
+// What the recap draws next to each line (never the identity of a face-down card).
+function logTags(m, res) {
+  switch (m.t) {
+    case 'take': return { gain: m.gems };
+    case 'take2': return { gain: [m.c, m.c] };
+    case 'reserve': return { card: res.id, gain: res.gold ? ['o'] : [] };
+    case 'reserveDeck': return { deck: m.lv, gain: res.gold ? ['o'] : [] };
+    case 'buy': case 'buyR': return { card: res.id };
+    default: return {};
+  }
+}
+
+function previewText(m) {
+  const p = G.players[G.cur];
+  switch (m.t) {
+    case 'take': return `is taking ${gemList(m.gems)}`;
+    case 'take2': return `is taking 2 ${GEM_NAME[m.c]}`;
+    case 'reserve': return `is reserving ${cardPhrase(G.market[m.lv][m.i])}`;
+    case 'reserveDeck': return `is reserving a face-down card from deck ${ROMAN[m.lv]}`;
+    case 'buy': return `is buying ${cardPhrase(G.market[m.lv][m.i])}`;
+    case 'buyR': return `is buying ${cardPhrase(p.reserved[m.i].id)} from their reserve`;
+    default: return 'has no legal move and passes';
+  }
+}
+
+// ---------- flight animations ----------
+const rectOf = sel => { const el = document.querySelector(sel); return el ? el.getBoundingClientRect() : null; };
+const panelSel = pi => `.pl[data-pi="${pi}"]`;
+
+function captureFx(pi) {
+  const p = G.players[pi];
+  const r = { bank: {}, panel: {}, market: {}, deck: [], res: [], nobles: {} };
+  for (const c of TOKENS) { r.bank[c] = rectOf(`.tok-btn[data-c="${c}"] .chip`); r.panel[c] = rectOf(`${panelSel(pi)} .gcol.g-${c} .tk`); }
+  document.querySelectorAll('[data-act="mk"]').forEach(el => { r.market[`${el.dataset.lv}-${el.dataset.i}`] = { rect: el.getBoundingClientRect(), html: el.outerHTML }; });
+  for (let lv = 0; lv < 3; lv++) r.deck[lv] = rectOf(`.deck.d${lv + 1}`);
+  document.querySelectorAll(`${panelSel(pi)} [data-rj]`).forEach(el => { r.res[+el.dataset.rj] = { rect: el.getBoundingClientRect(), html: el.outerHTML }; });
+  document.querySelectorAll('.nobles-row [data-n]').forEach(el => { r.nobles[el.dataset.n] = { rect: el.getBoundingClientRect(), html: el.outerHTML }; });
+  return {
+    pi, r, tokens: { ...p.tokens }, cards: p.cards.slice(), reserved: p.reserved.map(x => x.id), nobles: p.nobles.slice(),
+    market: G.market.map(row => row.slice()),
+  };
+}
+
+// Runs a state change, then flies tokens, cards and nobles from where they were to where they went.
+function withFx(pi, change) {
+  const before = reducedMotion() || ui.screen !== 'game' ? null : captureFx(pi);
+  change();
+  if (before && G) playFx(before);
+}
+
+function playFx(b) {
+  const { pi, r } = b;
+  const p = G.players[pi];
+  let delay = 0;
+  const step = 110;
+  const findSlot = id => {
+    for (let lv = 0; lv < 3; lv++) { const i = b.market[lv].indexOf(id); if (i >= 0) return r.market[`${lv}-${i}`]; }
+    return null;
+  };
+  // Cards first: bought cards fly to the bonus column, reserved cards to the reserve row.
+  for (const id of p.cards.filter(id => !b.cards.includes(id))) {
+    const src = findSlot(id) || r.res[b.reserved.indexOf(id)];
+    if (src) fly(src.html, src.rect, `${panelSel(pi)} .gcol.g-${CARDS[id].color} .bon`, delay, 'card');
+    delay += step * 2;
+  }
+  if (p.reserved.length > b.reserved.length) {
+    const j = p.reserved.length - 1;
+    const id = p.reserved[j].id;
+    const src = p.reserved[j].hidden ? null : findSlot(id);
+    const lv = CARDS[id].level - 1;
+    const from = src ? src.rect : r.deck[lv];
+    const html = src ? src.html : `<div class="card back d${lv + 1}"><span>${ROMAN[lv]}</span></div>`;
+    if (from) fly(html, from, `${panelSel(pi)} [data-rj="${j}"]`, delay, 'card');
+    delay += step * 2;
+  }
+  for (const c of TOKENS) {
+    const d = p.tokens[c] - b.tokens[c];
+    for (let k = 0; k < Math.abs(d); k++) {
+      const html = `<span class="chip g-${c}"></span>`;
+      if (d > 0 && r.bank[c]) fly(html, r.bank[c], `${panelSel(pi)} .gcol.g-${c} .tk`, delay, 'chip');
+      if (d < 0 && r.panel[c]) fly(html, r.panel[c], `.tok-btn[data-c="${c}"] .chip`, delay, 'chip');
+      delay += step;
+    }
+  }
+  for (const nid of p.nobles.filter(n => !b.nobles.includes(n))) {
+    const src = r.nobles[nid];
+    if (src) fly(src.html, src.rect, `${panelSel(pi)} .pl-pts`, delay + step, 'card');
+  }
+}
+
+function fly(html, from, toSel, delay, kind) {
+  const layer = document.getElementById('fx');
+  const target = document.querySelector(toSel);
+  if (!layer || !target) return;
+  const to = target.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'flyer';
+  el.innerHTML = html;
+  Object.assign(el.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: kind === 'chip' ? `${from.height}px` : 'auto' });
+  layer.appendChild(el);
+  // Targets below or above the screen (the ledger on a phone): head for that edge and fade out.
+  const vh = window.innerHeight;
+  let cy = to.top + to.height / 2;
+  const away = cy > vh - 24 || cy < 24;
+  cy = Math.min(Math.max(cy, 24), vh - 24);
+  const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+  const dy = cy - (from.top + from.height / 2);
+  const s = away ? 0.45 : Math.max(0.2, Math.min(1.2, to.width / from.width));
+  const anim = el.animate([
+    { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+    { transform: `translate(${dx * 0.45}px, ${dy * 0.45 - 40}px) scale(${kind === 'chip' ? 1.15 : 1.05})`, opacity: 1, offset: 0.45 },
+    { transform: `translate(${dx}px, ${dy}px) scale(${s})`, opacity: away ? 0 : 1 },
+  ], { duration: pace().fly, delay, easing: 'cubic-bezier(.45, 0, .25, 1)', fill: 'both' });
+  anim.onfinish = () => {
+    el.remove();
+    const t = document.querySelector(toSel);
+    if (t) { t.classList.remove('bump'); void t.offsetWidth; t.classList.add('bump'); }
+  };
+}
+
+// ---------- turn flow ----------
+function perform(m) {
+  const pi = G.cur;
+  const res = applyMove(G, pi, m);
+  const text = describe(m, res);
+  addLog(pi, text, logTags(m, res));
+  ui.lastMove = { pi, text };
+  ui.fresh = (m.t === 'buy' || m.t === 'reserve') ? `${m.lv}-${m.i}` : null;
+  ui.sel = []; ui.hint = null; ui.modal = null;
+  return pi;
+}
+
+function humanAct(m) {
+  withFx(G.cur, () => {
+    const pi = perform(m);
+    if (tokenCount(G.players[pi]) > TOKEN_LIMIT) { ui.discard = emptyTokens(); render(); return; }
+    resolveNobles(pi);
+  });
+}
+
+function resolveNobles(pi) {
+  const p = G.players[pi];
+  const el = eligibleNobles(G, p);
+  if (el.length > 1 && isHuman(p)) { ui.nobleChoice = el; render(); return; }
+  if (el.length) visit(pi, el[0]);
+  finishTurn();
+}
+
+function visit(pi, nid) {
+  claimNoble(G, pi, nid);
+  addLog(pi, `was visited by ${NOBLES[nid].name} (+3 prestige)`, { noble: nid });
+  ui.lastMove = { pi, text: `${ui.lastMove ? ui.lastMove.text + ', then was' : 'was'} visited by ${NOBLES[nid].name}` };
+}
+
+function finishTurn() {
+  const before = G.finalRound;
+  const pi = G.cur;
+  endTurn(G);
+  if (!before && G.finalRound) addLog(pi, `reached ${G.players[pi].pts} prestige. Final round: everyone gets an equal number of turns.`);
+  ui.nobleChoice = null; ui.discard = null;
+  if (G.over) { ui.showOver = true; }
+  else if (isHuman(curP()) && humanCount() > 1) ui.handoff = true;
+  saveGame();
+  render();
+  scheduleBot();
+}
+
+function scheduleBot() {
+  clearTimeout(ui.botTimer);
+  if (!G || G.over || ui.screen !== 'game' || isHuman(curP())) return;
+  ui.botTimer = setTimeout(botTurn, pace().think);
+}
+
+// A bot turn shows its choice on the board first, then plays it out.
+function botTurn() {
+  if (!G || G.over || isHuman(curP())) return;
+  const game = G, pi = G.cur;
+  const m = botChoose(G, pi);
+  ui.preview = { pi, m };
+  render();
+  ui.botTimer = setTimeout(() => {
+    if (G !== game || G.cur !== pi) return;
+    ui.preview = null;
+    withFx(pi, () => {
+      perform(m);
+      const returned = botDiscard(G, pi);
+      if (returned.length) {
+        addLog(pi, `returned ${returned.length} token${returned.length > 1 ? 's' : ''} (${gemList(returned)})`, { lose: returned });
+        ui.lastMove.text += ` and returned ${gemList(returned)}`;
+      }
+      const el = eligibleNobles(G, G.players[pi]);
+      if (el.length) visit(pi, el[0]);
+      finishTurn();
+    });
+  }, pace().show);
+}
+
+function startGame(seats) {
+  clearTimeout(ui.botTimer);
+  G = newGame(seats);
+  Object.assign(ui, { preview: null, screen: 'game', sel: [], hint: null, modal: null, discard: null, nobleChoice: null, showOver: true, rules: false, confirmNew: false, lastMove: null, fresh: null });
+  ui.handoff = isHuman(curP()) && humanCount() > 1;
+  saveGame();
+  render();
+  scheduleBot();
+}
+
+function seatsFromSetup() {
+  const seats = setup.seats.slice(0, setup.count).map((s, i) => ({
+    name: (s.name || '').trim() || (s.kind === 'human' ? `Player ${i + 1}` : BOT_NAMES[i]),
+    type: s.kind === 'human' ? 'human' : 'bot',
+    level: s.kind === 'human' ? null : s.kind,
+  }));
+  return setup.shuffle ? shuffle(seats) : seats;
+}
+
+// ---------- gem selection ----------
+function clickBank(c) {
+  if (!canInteract() || c === 'o') return;
+  const sel = ui.sel;
+  ui.hint = null;
+  if (!G.bank[c]) { ui.hint = `The ${GEM_NAME[c]} pile is empty.`; }
+  else if (!sel.length) sel.push(c);
+  else if (sel.length === 1 && sel[0] === c) {
+    if (G.bank[c] >= 4) sel.push(c);
+    else ui.hint = `You can take 2 ${GEM_NAME[c]} only when 4 or more are in the pile.`;
+  } else if (sel.length === 2 && sel[0] === sel[1]) ui.hint = 'You already picked 2 of a kind. Clear the selection to choose differently.';
+  else if (sel.includes(c)) ui.hint = 'Three gems must all be different colors.';
+  else if (sel.length < 3) sel.push(c);
+  else ui.hint = 'You can take at most 3 gems.';
+  render();
+}
+
+function selectedMove() {
+  const s = ui.sel;
+  if (s.length === 2 && s[0] === s[1]) return { t: 'take2', c: s[0] };
+  if (s.length === 3) return { t: 'take', gems: s.slice() };
+  if (s.length && !COLORS.some(c => G.bank[c] > 0 && !s.includes(c))) return { t: 'take', gems: s.slice() };
+  return null;
+}
+
+// ---------- rendering ----------
+function cardHTML(id, o = {}) {
+  const c = CARDS[id];
+  const pips = COLORS.filter(k => c.cost[k] > 0).map(k => `<span class="pip g-${k}">${c.cost[k]}</span>`).join('');
+  const label = `Level ${ROMAN[c.level - 1]} ${GEM_NAME[c.color]} card, ${c.points} prestige. Costs ${COLORS.filter(k => c.cost[k]).map(k => `${c.cost[k]} ${GEM_NAME[k]}`).join(', ')}`;
+  const tag = o.act ? 'button' : 'div';
+  const attrs = o.act ? ` data-act="${o.act}" ${o.data || ''} aria-label="${esc(label)}"` : ` role="img" aria-label="${esc(label)}"`;
+  return `<${tag} class="card g-${c.color}${o.buyable ? ' buyable' : ''}${o.fresh ? ' fresh' : ''}${o.ribbon ? ' pv' : ''}"${attrs}>
+    <span class="band"><span class="pts">${c.points || ''}</span><span class="medal">${gemSVG(c.color)}</span></span>
+    <span class="scene">${SCENES[c.level - 1]}</span>
+    <span class="cost">${pips}</span>
+    ${o.ribbon ? `<span class="ribbon">${o.ribbon}</span>` : ''}
+  </${tag}>`;
+}
+
+function nobleHTML(nid, o = {}) {
+  const n = NOBLES[nid];
+  const req = COLORS.filter(c => n.req[c]).map(c => `<span class="rq g-${c}">${n.req[c]}</span>`).join('');
+  const label = `${n.name}, 3 prestige. Needs ${COLORS.filter(c => n.req[c]).map(c => `${n.req[c]} ${GEM_NAME[c]} bonuses`).join(', ')}`;
+  return `<div class="noble${o.near ? ' near' : ''}" data-n="${nid}" role="img" aria-label="${esc(label)}">
+    <span class="ni"><span class="pts">3</span><span class="nm">${esc(n.name)}</span><span class="req">${req}</span></span></div>`;
+}
+
+function chip(c, n, cls = '') { return `<span class="chip g-${c} ${cls}">${n}</span>`; }
+
+function renderSetup() {
+  const saved = load(SAVE_KEY);
+  const seats = setup.seats.slice(0, setup.count).map((s, i) => `
+    <div class="seat">
+      <span class="seat-n">${i + 1}</span>
+      <input type="text" id="seat-name-${i}" data-seat="${i}" value="${esc(s.name)}" maxlength="18" aria-label="Seat ${i + 1} name">
+      <div class="seg" role="group" aria-label="Seat ${i + 1} player">
+        ${['human', 'easy', 'medium', 'hard'].map(k => `<button data-act="kind" data-i="${i}" data-k="${k}" aria-pressed="${s.kind === k}">${k === 'human' ? 'Human' : LEVEL_LABEL[k] + ' bot'}</button>`).join('')}
+      </div>
+    </div>`).join('');
+  return `<div class="setup">
+    <div>
+      <h1 class="wordmark">Gem Guild</h1>
+      <p class="lede">You are a gem merchant in the Renaissance. Collect gems, buy mines, ships and shops, and win the patronage of nobles. The first merchant to 15 prestige starts the final round.</p>
+      <div class="gemline">${COLORS.map(c => gemIcon(c)).join('')}</div>
+    </div>
+    <div class="setup-card">
+      <div class="field"><span class="label">Players</span>
+        <div class="seg" role="group" aria-label="Number of players">${[2, 3, 4].map(n => `<button data-act="count" data-n="${n}" aria-pressed="${setup.count === n}">${n} players</button>`).join('')}</div>
+      </div>
+      <div class="field"><span class="label">Seats, in turn order</span><div class="seats">${seats}</div></div>
+      <label class="check"><input type="checkbox" id="shuffle-seats" ${setup.shuffle ? 'checked' : ''}> Shuffle the turn order</label>
+      <div class="row-actions">
+        <button class="btn primary" data-act="start">Start game</button>
+        ${saved ? '<button class="btn" data-act="resume">Resume saved game</button>' : ''}
+        <button class="btn ghost" data-act="rules">How to play</button>
+      </div>
+      <p class="fineprint">With two or more human seats, the game pauses between turns so you can pass the device and keep face-down reservations private.</p>
+    </div>
+  </div>${ui.rules ? rulesDialog() : ''}`;
+}
+
+function marketRow(lv, me) {
+  const n = G.decks[lv].length;
+  const pm = ui.preview && ui.preview.m;
+  const pvDeck = pm && pm.t === 'reserveDeck' && pm.lv === lv;
+  const ribbonAt = i => (pm && pm.lv === lv && pm.i === i ? (pm.t === 'buy' ? 'Buying' : pm.t === 'reserve' ? 'Reserving' : null) : null);
+  const deck = n
+    ? `<button class="deck d${lv + 1}${pvDeck ? ' pv' : ''}" data-act="deck" data-lv="${lv}" aria-label="Deck ${ROMAN[lv]}, ${n} cards left"><span class="roman">${ROMAN[lv]}</span><span class="left">${n}</span>${pvDeck ? '<span class="ribbon">Reserving</span>' : ''}</button>`
+    : `<div class="deck empty" aria-label="Deck ${ROMAN[lv]} is empty"><span class="roman">${ROMAN[lv]}</span><span class="left">0</span></div>`;
+  const slots = G.market[lv].map((id, i) => (id == null
+    ? '<div class="slot empty" aria-label="Empty space"></div>'
+    : cardHTML(id, { act: 'mk', data: `data-lv="${lv}" data-i="${i}"`, buyable: me && payment(me, CARDS[id]), fresh: ui.fresh === `${lv}-${i}`, ribbon: ribbonAt(i) }))).join('');
+  return `<div class="five">${deck}${slots}</div>`;
+}
+
+function bankHTML() {
+  const live = canInteract();
+  return `<div class="bank" role="group" aria-label="Gem bank">${TOKENS.map(c => {
+    const picked = ui.sel.filter(x => x === c).length;
+    const left = G.bank[c] - picked;
+    const off = !live || c === 'o';
+    const pm = ui.preview && ui.preview.m;
+    const pv = !pm ? 0 : pm.t === 'take' ? (pm.gems.includes(c) ? 1 : 0) : pm.t === 'take2' ? (pm.c === c ? 2 : 0)
+      : (pm.t === 'reserve' || pm.t === 'reserveDeck') && c === 'o' && G.bank.o ? 1 : 0;
+    if (pv) return `<button class="tok-btn pv" data-act="bank" data-c="${c}" aria-disabled="true" aria-label="${GEM_NAME[c]}: ${left} in bank">
+      ${chip(c, left)}<span class="nm">${GEM_NAME[c]}</span><span class="picked">+${pv}</span></button>`;
+    return `<button class="tok-btn${left ? '' : ' empty'}" data-act="bank" data-c="${c}" aria-disabled="${off}" aria-label="${GEM_NAME[c]}: ${left} in bank${c === 'o' ? '. Gold only comes from reserving' : ''}">
+      ${chip(c, left)}<span class="nm">${GEM_NAME[c]}</span>${picked ? `<span class="picked">+${picked}</span>` : ''}</button>`;
+  }).join('')}</div>`;
+}
+
+const narrow = () => !!(window.matchMedia && window.matchMedia('(max-width: 899px)').matches);
+
+function lastMoveHTML() {
+  const vi = viewerIndex();
+  const recap = vi >= 0 && !G.over ? recapHTML(vi) : '';
+  return recap || (ui.lastMove ? `<div class="last">Last move: <b>${esc(G.players[ui.lastMove.pi].name)}</b> ${esc(ui.lastMove.text)}.</div>` : '');
+}
+
+function barHTML(withRecap = true) {
+  const p = curP();
+  let status;
+  if (G.over) status = '<b>Game over.</b>';
+  else if (ui.handoff) status = `Waiting for <b>${esc(p.name)}</b>.`;
+  else if (isHuman(p)) status = `<b>${esc(p.name)}</b>, it’s your turn. Take gems from the bank, or tap a card to buy or reserve it.`;
+  else if (ui.preview) status = `<b class="who">${esc(p.name)}</b> ${esc(previewText(ui.preview.m))}.`;
+  else status = `<b>${esc(p.name)}</b> is thinking<span class="thinking"></span>`;
+  const last = withRecap ? lastMoveHTML() : '';
+  let pick = '';
+  if (canInteract()) {
+    const m = selectedMove();
+    const chips = ui.sel.map((c, i) => `<button class="minichip chip g-${c}" data-act="unsel" data-i="${i}" aria-label="Remove ${GEM_NAME[c]}">${GEM_NAME[c][0]}</button>`).join('');
+    const tip = !ui.sel.length ? 'Pick 3 different gems, or 2 of one color when its pile has 4 or more.'
+      : m ? '' : ui.sel.length === 1 ? 'Pick 2 more different gems, or the same one again for a pair.' : 'Pick one more different gem.';
+    if (!legalMoves(G, G.cur).length) return `<div class="bar" aria-live="polite"><div class="status">${status}</div>${last}<div class="pickrow"><span class="last">You have no legal move this turn.</span><span class="spacer"></span><button class="btn small primary" data-act="pass">Pass</button></div></div>`;
+    pick = `<div class="pickrow">${chips}<span class="last">${tip}</span><span class="spacer"></span>
+      ${ui.sel.length ? '<button class="btn small ghost" data-act="clear">Clear</button>' : ''}
+      <button class="btn small primary" data-act="take" ${m ? '' : 'disabled'}>Take gems</button></div>`;
+  }
+  return `<div class="bar" aria-live="polite"><div class="status">${status}</div>${last}${pick}${ui.hint ? `<div class="hint">${esc(ui.hint)}</div>` : ''}</div>`;
+}
+
+// Every log entry since this player's own latest one.
+function sinceLastTurn(pi) {
+  let k = G.log.length - 1;
+  while (k >= 0 && G.log[k].pi !== pi) k--;
+  return G.log.slice(k + 1);
+}
+
+function recapHTML(pi) {
+  const items = sinceLastTurn(pi);
+  if (!items.length) return '';
+  const mini = (c, cls = '') => `<span class="chip g-${c} ${cls}"></span>`;
+  const rows = items.map(e => {
+    const tags = [];
+    if (e.card != null) { const c = CARDS[e.card]; tags.push(`<span class="swatch g-${c.color}">${c.points || ''}</span>`); }
+    if (e.deck != null) tags.push(`<span class="swatch back d${e.deck + 1}">${ROMAN[e.deck]}</span>`);
+    (e.gain || []).forEach(c => tags.push(mini(c)));
+    (e.lose || []).forEach(c => tags.push(mini(c, 'minus')));
+    if (e.noble != null) tags.push('<span class="swatch nob">3</span>');
+    return `<li><span><b>${esc(G.players[e.pi].name)}</b> ${esc(e.text)}</span>${tags.length ? `<span class="tags" aria-hidden="true">${tags.join('')}</span>` : ''}</li>`;
+  }).join('');
+  return `<div class="recap"><span class="label">Since your last turn</span><ol>${rows}</ol></div>`;
+}
+
+function playerHTML(p, i, vi) {
+  const turn = i === G.cur && !G.over;
+  const gems = TOKENS.map(c => `<div class="gcol g-${c}">
+      <span class="bon ${c === 'o' ? 'blank' : p.bonus[c] ? '' : 'zero'}" title="${GEM_NAME[c]} bonuses">${c === 'o' ? '' : p.bonus[c]}</span>
+      <span class="chip tk g-${c} ${p.tokens[c] ? '' : 'zero'}" title="${GEM_NAME[c]} tokens">${p.tokens[c]}</span></div>`).join('');
+  const tc = tokenCount(p);
+  const reveal = G.over || vi === i;
+  const mine = canInteract() && i === G.cur;
+  const pm = ui.preview && ui.preview.pi === i ? ui.preview.m : null;
+  const res = p.reserved.map((r, j) => {
+    const ribbon = pm && pm.t === 'buyR' && pm.i === j ? 'Buying' : null;
+    if (r.hidden && !reveal && !ribbon) return `<div class="card back d${CARDS[r.id].level}" data-rj="${j}" role="img" aria-label="Face-down level ${ROMAN[CARDS[r.id].level - 1]} card"><span>${ROMAN[CARDS[r.id].level - 1]}</span></div>`;
+    return cardHTML(r.id, mine ? { act: 'res', data: `data-j="${j}" data-rj="${j}"`, buyable: payment(p, CARDS[r.id]) } : { act: 'none', data: `data-rj="${j}"`, ribbon });
+  }).join('');
+  return `<article class="pl${turn ? ' is-turn' : ''}" data-pi="${i}">
+    <div class="pl-head">
+      <div class="pl-who"><div class="pl-name">${turn ? '<span class="turn-dot" aria-hidden="true"></span>' : ''}${esc(p.name)}</div><div class="pl-kind">${kindLabel(p)}</div></div>
+      <div class="pl-pts"><b>${p.pts}</b><span>prestige</span></div>
+    </div>
+    <div class="pl-gems" aria-label="Bonuses (cards) and tokens">${gems}</div>
+    <div class="pl-meta"><span class="${tc > TOKEN_LIMIT ? 'over' : ''}">${tc}/${TOKEN_LIMIT} tokens</span><span>${p.cards.length} cards</span><span>${p.reserved.length}/${MAX_RESERVED} reserved</span></div>
+    ${p.reserved.length ? `<div class="pl-res"><span class="label">Reserved</span>${res}</div>` : ''}
+    ${p.nobles.length ? `<div class="pl-nobles">${p.nobles.map(n => nobleHTML(n)).join('')}</div>` : ''}
+  </article>`;
+}
+
+function logHTML() {
+  const items = G.log.slice(-60).reverse().map(e => `<li><span class="r">R${e.round}</span><b>${esc(G.players[e.pi].name)}</b> ${esc(e.text)}</li>`).join('');
+  return `<section class="log"><h2>Ledger</h2><ol>${items || '<li>No moves yet.</li>'}</ol></section>`;
+}
+
+// Phone-sized noble: just the requirement, since every noble is worth 3.
+function nobleChipHTML(nid, near) {
+  const n = NOBLES[nid];
+  const label = `${n.name}, 3 prestige. Needs ${COLORS.filter(c => n.req[c]).map(c => `${n.req[c]} ${GEM_NAME[c]} bonuses`).join(', ')}`;
+  return `<span class="nchip${near ? ' near' : ''}" data-n="${nid}" role="img" aria-label="${esc(label)}" title="${esc(n.name)}">${COLORS.filter(c => n.req[c]).map(c => `<span class="rq g-${c}">${n.req[c]}</span>`).join('')}</span>`;
+}
+
+function renderGame() {
+  const me = canInteract() ? curP() : null;
+  const vi = viewerIndex();
+  const phone = narrow();
+  const isNear = n => me && COLORS.reduce((d, c) => d + Math.max(0, NOBLES[n].req[c] - me.bonus[c]), 0) <= 1;
+  const nobleSlots = G.nobles.map(n => nobleHTML(n, { near: isNear(n) })).join('');
+  const nobleRow = phone
+    ? `<div class="nobles-strip"><span class="label">Nobles · 3 prestige each</span><div class="nobles-row nchips" aria-label="Nobles">${G.nobles.map(n => nobleChipHTML(n, isNear(n))).join('')}</div></div>`
+    : `<div class="five nobles-row" aria-label="Nobles">${nobleSlots}</div>`;
+  // Phones: your hand sits right under the bank, then what others did, then their hands.
+  const summary = phone ? lastMoveHTML() : '';
+  const side = phone
+    ? `${vi >= 0 ? `<div class="players">${playerHTML(G.players[vi], vi, vi)}</div>` : ''}
+       ${summary ? `<section class="bar recap-card" aria-live="polite">${summary}</section>` : ''}
+       <div class="players">${G.players.map((p, i) => (i === vi ? '' : playerHTML(p, i, vi))).join('')}</div>
+       ${logHTML()}`
+    : `<div class="players">${G.players.map((p, i) => playerHTML(p, i, vi)).join('')}</div>${logHTML()}`;
+  return `<header class="top">
+      <span class="wordmark">Gem Guild</span>
+      <span class="round">Round ${G.round}</span>
+      ${G.finalRound && !G.over ? '<span class="pill">Final round</span>' : ''}
+      ${G.over ? '<span class="pill">Game over</span>' : ''}
+      <span class="spacer"></span>
+      ${G.over && !ui.showOver ? '<button class="btn small" data-act="show-over">Results</button>' : ''}
+      ${G.players.some(p => !isHuman(p)) ? `<button class="btn small ghost" data-act="pace" aria-label="Bot speed: ${pace().label}. Tap to change">Bot speed: ${pace().label}</button>` : ''}
+      <button class="btn small ghost" data-act="rules">Rules</button>
+      <button class="btn small" data-act="newgame">New game</button>
+    </header>
+    <main class="table">
+      <section class="board" aria-label="Market">
+        ${nobleRow}
+        ${[2, 1, 0].map(lv => marketRow(lv, me)).join('')}
+        ${bankHTML()}
+        ${barHTML(!phone)}
+      </section>
+      <aside class="side">${side}</aside>
+    </main>
+    ${overlays()}`;
+}
+
+function payLine(p, card) {
+  const pay = payment(p, card);
+  if (pay) {
+    const parts = TOKENS.filter(c => pay[c]).map(c => chip(c, pay[c])).join('');
+    return `<div class="facts"><span>You pay</span><div class="paylist">${parts || '<span>nothing. Your bonuses cover it.</span>'}</div></div>`;
+  }
+  const miss = COLORS.map(c => [c, Math.max(0, card.cost[c] - p.bonus[c] - p.tokens[c])]).filter(x => x[1]);
+  const total = miss.reduce((n, x) => n + x[1], 0) - p.tokens.o;
+  return `<div class="facts"><span>You are ${total} short${p.tokens.o ? ` after your ${p.tokens.o} Gold` : ''}. Missing:</span><div class="paylist">${miss.map(([c, n]) => chip(c, n)).join('')}</div></div>`;
+}
+
+function cardDialog() {
+  const p = curP();
+  const m = ui.modal;
+  const canReserve = p.reserved.length < MAX_RESERVED;
+  const goldNote = G.bank.o ? 'You also take 1 Gold.' : 'No Gold is left, so you get none.';
+  if (m.kind === 'deck') {
+    return `<h2>Deck ${ROMAN[m.lv]}</h2>
+      <p>Reserve the top card face down. Only you will see it. ${goldNote}</p>
+      ${canReserve ? '' : '<p class="hint">You already hold 3 reserved cards.</p>'}
+      <div class="dlg-actions"><button class="btn ghost" data-act="close">Cancel</button><button class="btn primary" data-act="reserve" ${canReserve ? '' : 'disabled'}>Reserve</button></div>`;
+  }
+  const id = m.kind === 'mk' ? G.market[m.lv][m.i] : p.reserved[m.i].id;
+  const card = CARDS[id];
+  const pay = payment(p, card);
+  return `<h2>${GEM_NAME[card.color]} · Level ${ROMAN[card.level - 1]}</h2>
+    <div class="cardview">${cardHTML(id)}
+      <div class="facts">
+        <span><b>${card.points}</b> prestige, plus a permanent ${GEM_NAME[card.color]} bonus.</span>
+        ${payLine(p, card)}
+      </div>
+    </div>
+    ${m.kind === 'mk' && canReserve ? `<p class="muted">Reserving keeps it for you only. ${goldNote}</p>` : ''}
+    ${m.kind === 'mk' && !canReserve ? '<p class="muted">You already hold 3 reserved cards.</p>' : ''}
+    <div class="dlg-actions">
+      <button class="btn ghost" data-act="close">Cancel</button>
+      ${m.kind === 'mk' ? `<button class="btn" data-act="reserve" ${canReserve ? '' : 'disabled'}>Reserve</button>` : ''}
+      <button class="btn primary" data-act="buy" ${pay ? '' : 'disabled'}>Buy</button>
+    </div>`;
+}
+
+function discardDialog() {
+  const p = curP();
+  const over = tokenCount(p) - TOKEN_LIMIT;
+  const chosen = TOKENS.reduce((n, c) => n + ui.discard[c], 0);
+  const keep = TOKENS.map(c => {
+    const n = p.tokens[c] - ui.discard[c];
+    return n ? `<button class="tok-btn" data-act="disc" data-c="${c}" aria-label="Return one ${GEM_NAME[c]}">${chip(c, n)}<span class="nm">${GEM_NAME[c]}</span></button>` : '';
+  }).join('');
+  const back = TOKENS.flatMap(c => Array(ui.discard[c]).fill(c)).map(c => `<button class="minichip chip g-${c}" data-act="undisc" data-c="${c}" aria-label="Keep ${GEM_NAME[c]}">${GEM_NAME[c][0]}</button>`).join('');
+  return `<h2>Too many tokens</h2>
+    <p>You can hold at most ${TOKEN_LIMIT}. Tap tokens to return ${over} of them to the bank.</p>
+    <div class="discard-grid">${keep}</div>
+    <div class="pickrow"><span class="last">Returning ${chosen} of ${over}:</span>${back}</div>
+    <div class="dlg-actions"><button class="btn primary" data-act="disc-ok" ${chosen === over ? '' : 'disabled'}>Return tokens</button></div>`;
+}
+
+function rulesDialog() {
+  return `<div class="scrim" data-act="close"><div class="dialog" data-act="noop" role="dialog" aria-modal="true" aria-label="Rules">
+    <h2>How to play</h2>
+    <div class="rules">
+      <p>On your turn, do exactly one of these:</p>
+      <ul>
+        <li><b>Take 3 gems</b> of different colors. If fewer than 3 colors are left in the bank, take one of each that remains.</li>
+        <li><b>Take 2 gems</b> of the same color, only if that pile holds 4 or more before you take.</li>
+        <li><b>Reserve a card</b> from the table, or the top of a deck face down, and take 1 Gold if any is left. You may hold 3 reserved cards.</li>
+        <li><b>Buy a card</b> from the table or from your reserve.</li>
+      </ul>
+      <h3>Paying</h3>
+      <p>Each card you own gives a permanent bonus of its gem, which lowers every future cost by 1 in that color. Gold stands in for any color. Spent tokens go back to the bank.</p>
+      <h3>Limits</h3>
+      <p>You may hold at most 10 tokens, Gold included. Return the extra at the end of your turn.</p>
+      <h3>Nobles</h3>
+      <p>At the end of your turn, a noble visits if your bonuses meet their requirement. They are worth 3 prestige. Only one noble can visit per turn. If several qualify, you choose.</p>
+      <h3>End of the game</h3>
+      <p>When someone reaches 15 prestige, finish the round so everyone has played the same number of turns. Most prestige wins. On a tie, the player who bought fewer development cards wins.</p>
+      <h3>Setup by player count</h3>
+      <p>2 players: 4 of each gem and 3 nobles. 3 players: 5 each and 4 nobles. 4 players: 7 each and 5 nobles. Always 5 Gold.</p>
+    </div>
+    <div class="dlg-actions"><button class="btn primary" data-act="close">Got it</button></div>
+  </div></div>`;
+}
+
+function overDialog() {
+  const rows = standings(G);
+  const winners = rows.filter(r => r.winner);
+  const tieOnPoints = rows.filter(r => r.pts === rows[0].pts).length > 1;
+  const title = winners.length > 1 ? 'A shared victory' : `${esc(G.players[winners[0].i].name)} wins`;
+  const note = winners.length > 1 ? 'Tied on prestige and on cards bought.'
+    : tieOnPoints ? 'Tied on prestige. The win goes to the player who bought fewer cards.' : '';
+  const body = rows.map((r, k) => {
+    const p = G.players[r.i];
+    return `<tr class="${r.winner ? 'win' : ''}"><td>${r.winner ? '<span class="crown">★</span> ' : ''}${k + 1}. ${esc(p.name)}</td><td class="n">${p.pts}</td><td class="n">${p.cards.length}</td><td class="n">${p.nobles.length}</td></tr>`;
+  }).join('');
+  return `<h2>${title}</h2>
+    ${note ? `<p class="muted">${note}</p>` : ''}
+    <table class="standings"><thead><tr><th>Player</th><th class="n">Prestige</th><th class="n">Cards</th><th class="n">Nobles</th></tr></thead><tbody>${body}</tbody></table>
+    <p class="muted">Finished after ${G.round} round${G.round > 1 ? 's' : ''}.</p>
+    <div class="dlg-actions">
+      <button class="btn ghost" data-act="hide-over">See the board</button>
+      <button class="btn" data-act="setup">Change players</button>
+      <button class="btn primary" data-act="rematch">Play again</button>
+    </div>`;
+}
+
+function overlays() {
+  const wrap = (inner, label, closable) => `<div class="scrim" ${closable ? 'data-act="close"' : ''}><div class="dialog" data-act="noop" role="dialog" aria-modal="true" aria-label="${label}">${inner}</div></div>`;
+  if (ui.rules) return rulesDialog();
+  if (ui.confirmNew) return wrap(`<h2>Leave this game?</h2><p>The current game will be lost.</p>
+    <div class="dlg-actions"><button class="btn ghost" data-act="close">Keep playing</button><button class="btn" data-act="setup">Change players</button><button class="btn primary" data-act="rematch">Restart, same players</button></div>`, 'Leave game', true);
+  if (G.over && ui.showOver) return wrap(overDialog(), 'Results', false);
+  if (ui.handoff) {
+    const p = curP();
+    return wrap(`<div class="handoff">
+      <p class="muted">Pass the device to</p><div class="big">${esc(p.name)}</div>
+      <button class="btn primary" data-act="handoff">I’m ${esc(p.name)}, show my turn</button></div>${recapHTML(G.cur)}`, 'Next player', false);
+  }
+  if (ui.discard) return wrap(discardDialog(), 'Return tokens', false);
+  if (ui.nobleChoice) return wrap(`<h2>Nobles want to visit</h2><p>You qualify for more than one, but only one visits per turn. Choose one.</p>
+    <div class="noble-pick">${ui.nobleChoice.map(n => `<button data-act="noble" data-n="${n}">${nobleHTML(n)}</button>`).join('')}</div>`, 'Choose a noble', false);
+  if (ui.modal) return wrap(cardDialog(), 'Card', true);
+  return '';
+}
+
+function render() {
+  app.innerHTML = ui.screen === 'setup' ? renderSetup() : renderGame();
+  ui.fresh = null;
+}
+
+// ---------- events ----------
+app.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const d = el.dataset;
+  switch (d.act) {
+    case 'noop': case 'none': return;
+    case 'pace': {
+      const keys = Object.keys(PACES);
+      setup.pace = keys[(keys.indexOf(setup.pace) + 1) % keys.length];
+      store(SETUP_KEY, setup); render(); return;
+    }
+    case 'count': setup.count = +d.n; store(SETUP_KEY, setup); render(); return;
+    case 'kind': {
+      const s = setup.seats[+d.i];
+      const wasHuman = s.kind === 'human';
+      s.kind = d.k;
+      if (wasHuman && d.k !== 'human' && (/^(You|Player \d)$/.test(s.name) || !s.name.trim())) s.name = BOT_NAMES[+d.i];
+      if (!wasHuman && d.k === 'human' && BOT_NAMES.includes(s.name)) s.name = `Player ${+d.i + 1}`;
+      store(SETUP_KEY, setup); render(); return;
+    }
+    case 'start': store(SETUP_KEY, setup); startGame(seatsFromSetup()); return;
+    case 'resume': {
+      const saved = load(SAVE_KEY);
+      if (!saved) { render(); return; }
+      G = saved;
+      Object.assign(ui, { screen: 'game', sel: [], modal: null, discard: null, nobleChoice: null, lastMove: null, rules: false });
+      ui.handoff = isHuman(curP()) && humanCount() > 1;
+      // A save made mid-discard or mid-noble choice resumes at that step.
+      if (isHuman(curP()) && tokenCount(curP()) > TOKEN_LIMIT) ui.discard = emptyTokens();
+      render(); scheduleBot(); return;
+    }
+    case 'rules': ui.rules = true; render(); return;
+    case 'close': ui.rules = false; ui.modal = null; ui.confirmNew = false; render(); return;
+    case 'bank': clickBank(d.c); return;
+    case 'unsel': ui.sel.splice(+d.i, 1); ui.hint = null; render(); return;
+    case 'pass': if (canInteract() && !legalMoves(G, G.cur).length) humanAct({ t: 'pass' }); return;
+    case 'clear': ui.sel = []; ui.hint = null; render(); return;
+    case 'take': { const m = selectedMove(); if (m && canInteract()) humanAct(m); return; }
+    case 'mk': if (canInteract()) { ui.modal = { kind: 'mk', lv: +d.lv, i: +d.i }; render(); } return;
+    case 'deck': if (canInteract() && G.decks[+d.lv].length) { ui.modal = { kind: 'deck', lv: +d.lv }; render(); } return;
+    case 'res': if (canInteract()) { ui.modal = { kind: 'res', i: +d.j }; render(); } return;
+    case 'buy': {
+      const m = ui.modal;
+      if (!m || !canInteract()) return;
+      humanAct(m.kind === 'mk' ? { t: 'buy', lv: m.lv, i: m.i } : { t: 'buyR', i: m.i });
+      return;
+    }
+    case 'reserve': {
+      const m = ui.modal;
+      if (!m || !canInteract() || curP().reserved.length >= MAX_RESERVED) return;
+      humanAct(m.kind === 'deck' ? { t: 'reserveDeck', lv: m.lv } : { t: 'reserve', lv: m.lv, i: m.i });
+      return;
+    }
+    case 'disc': {
+      const p = curP();
+      const chosen = TOKENS.reduce((n, c) => n + ui.discard[c], 0);
+      if (chosen < tokenCount(p) - TOKEN_LIMIT && p.tokens[d.c] - ui.discard[d.c] > 0) ui.discard[d.c]++;
+      render(); return;
+    }
+    case 'undisc': if (ui.discard[d.c] > 0) ui.discard[d.c]--; render(); return;
+    case 'disc-ok': {
+      const p = curP(), pi = G.cur;
+      const back = [];
+      for (const c of TOKENS) for (let k = 0; k < ui.discard[c]; k++) back.push(c);
+      ui.discard = null;
+      render(); // close the dialog so the tokens can be seen leaving the ledger
+      withFx(pi, () => {
+        for (const c of back) { p.tokens[c]--; G.bank[c]++; }
+        addLog(pi, `returned ${back.length} token${back.length > 1 ? 's' : ''} (${gemList(back)})`, { lose: back });
+        resolveNobles(pi);
+      });
+      return;
+    }
+    case 'noble': { ui.nobleChoice = null; const pi = G.cur; render(); withFx(pi, () => { visit(pi, +d.n); finishTurn(); }); return; }
+    case 'handoff': ui.handoff = false; render(); return;
+    case 'newgame':
+      if (G.over) { ui.screen = 'setup'; G = null; render(); } else { ui.confirmNew = true; render(); }
+      return;
+    case 'setup': clearTimeout(ui.botTimer); forget(SAVE_KEY); G = null; ui.screen = 'setup'; ui.confirmNew = false; render(); return;
+    case 'rematch': {
+      // Same players; the seat order rotates so a different player starts.
+      const ps = G.players.map(p => ({ name: p.name, type: p.type, level: p.level }));
+      ps.push(ps.shift());
+      startGame(ps); return;
+    }
+    case 'hide-over': ui.showOver = false; render(); return;
+    case 'show-over': ui.showOver = true; render(); return;
+  }
+});
+
+app.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.seat != null) { setup.seats[+t.dataset.seat].name = t.value.slice(0, 18); store(SETUP_KEY, setup); }
+  if (t.id === 'shuffle-seats') { setup.shuffle = t.checked; store(SETUP_KEY, setup); }
+});
+
+if (window.matchMedia) {
+  const mq = window.matchMedia('(max-width: 899px)');
+  const relayout = () => { if (ui.screen === 'game' && G) render(); };
+  if (mq.addEventListener) mq.addEventListener('change', relayout); else if (mq.addListener) mq.addListener(relayout);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && (ui.modal || ui.rules || ui.confirmNew)) { ui.modal = null; ui.rules = false; ui.confirmNew = false; render(); }
+});
+
+// ---------- boot (keeps a game in progress across live page updates) ----------
+window.claude?.hot?.snapshot?.(() => ({ G, screen: ui.screen, lastMove: ui.lastMove, handoff: ui.handoff, discard: ui.discard, nobleChoice: ui.nobleChoice }));
+function start(data) {
+  if (data && data.G) {
+    G = data.G; ui.screen = data.screen || 'game'; ui.lastMove = data.lastMove || null; ui.handoff = !!data.handoff;
+    ui.discard = data.discard || null; ui.nobleChoice = data.nobleChoice || null;
+  }
+  render();
+  scheduleBot();
+}
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+
+</script>
+
+</body></html>
