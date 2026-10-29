@@ -54,3 +54,29 @@ Game over when `endTurn` sets `over`. Results via the existing `standings()`.
 - Join by code and by link, reload mid-game, not-seated screen, host start with 2 of 3, leave while open.
 - Local play unchanged: a full all-bot game with fast timers, pass-and-play handoff, `#continue` from the hub, no console errors at phone and desktop sizes.
 - HubLobby works standalone in shared/demo-lobby.html (create, join, waiting room) against the emulator.
+
+## Amendments after review (override everything above)
+
+P0
+1. Canonical moves: sort `take.gems` by COLORS index before writing. Match a record against `legalMoves` with a canonical key (`t|lv|i|c|gems.join('')`), then apply the matched engine move object, never the record's own object.
+2. Validate a whole record atomically: an illegal `ret` or `noble` discards the action too. If validating on `cloneState()`, preserve the log (cloneState empties it).
+3. Seat types: remote seats `type:'remote'`, local seat `'human'`, `level:null` (UI-only; identical-results tests compare engine fields only). In online mode `scheduleBot`/`botTurn` return immediately. `kindLabel` shows "Online"/"You"; Bot speed hidden; the bar says "Waiting for X" instead of "is thinking…".
+4. Never touch local storage online: no `saveGame()`, no `forget(SAVE_KEY)`, no rematch. Online over/confirm dialogs get their own buttons: "See the board" and "Leave game". Leave = unsubscribe watch, reset title and badge, `history.replaceState` away `?room`, `G=null`, back to setup. Skip the hot-reload snapshot online. `start()` checks `?room=` before `#continue`.
+5. While the player is drafting a turn (discard or noble dialog open, or a gem selection in progress), defer rebuilds and keep only the latest snapshot; apply it when the draft is committed or cancelled.
+6. Replay into a new state and swap `G` only if the applied-record count or an engine fingerprint (state minus log) differs, so the player's own sounds aren't cut off by the local snapshot after setDoc. `console.warn` on an unexpected mismatch.
+7. Own moves list = the longer of the server copy and a local overlay (Codex `mineDoc` pattern, codex/index.html ~1289). On permission-denied, drop the overlay and rebuild.
+
+P1
+8. RNG order: copy Codex's `rng`/`sshuffle`. `uids = Object.keys(seats).sort()` (default sort); `newGame(placeholders, r)` (decks 1,2,3 then nobles, using r); `order = sshuffle(uids, r)`; assign uid/name to `players[i]` in that order; seat 0 starts. Replaces the generic first-player rule. Use Codex `nameAt` for duplicate names.
+9. `ret`: keys TOKENS only, integers ≥ 0, gold allowed, each ≤ held after the action, sum exactly `tokenCount - 10`; null/zeros when not over 10. Order: action → ret → noble → endTurn. Nobles are checked after every action including take and pass.
+10. Replay writes the same log entries as the UI (describe/logTags, returns "returned N tokens (…)" in TOKENS order, noble visit, "Final round", "broke the rules"). Refactor `addLog` to `addLog(s, …)`.
+11. Accepted leaks (document in code comments): after reserveDeck the player sees the hidden card before committing and could reload to redo; an unsent turn is lost on reload while offline.
+12. Remote moves: do not call perform/visit/finishTurn/botDiscard. Use `withFx(pi, () => { G = next; ui.lastMove = …; ui.fresh = …; render(); })` with render inside. Sounds: `moveSounds(pi, rec.a, {gold})`, returnSound, noble chime + score. Animate only when exactly one new record arrived and it is a remote seat's; otherwise swap silently. Your-turn chime/badge/title and over sound only on transitions, never on first load.
+13. `HubLobby.enter(code, {game, onPlay})`: lookup, then redirect to `../<game>/?room=` if the code is another game's; missing-code error; notSeated when playing and unseated; join + waiting room when open; straight to play when playing and seated.
+14. HubLobby takes `seatOptions` and `minToStart` (Catan will use 3–4; Pictionary up to 8 after platform v2). The host gets "Close" (room stays open; the hub can remove it).
+15. Mount HubLobby on `document.body`, its own CSS variables (light/dark), z-index 4900, its own name field when the profile name is empty (Codex `needName` pattern ~1205). Guard HubKit profile/setBadge/recordResult calls (the stub lacks them).
+
+P2
+16. On first load of a playing room, each seated client writes its own doc if missing: `{moves:[], turn:{phase:'play', next:<seat0 uid>}}` so the hub shows the right status.
+17. Stats: `won` = my standings row `.winner` (shared win counts); `score` = my points. Record whenever `G.over` is observed, including on load (recordResult is idempotent).
+18. sw.js: bump to `gh-v3` and precache `shared/lobby.js`. Splendor loads `firebase-config.js`, `online.js`, `lobby.js`; the Online section is hidden when `!HubOnline.available()`.
