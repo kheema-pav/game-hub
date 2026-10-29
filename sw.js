@@ -1,8 +1,8 @@
 /* Game Hub service worker: offline play. Spec: docs/hubkit-spec.md (amendment B). */
-const VERSION = 'gh-v2';
+const VERSION = 'gh-v3';
 const CACHE = VERSION;
 const FONTS = 'gh-fonts-v1';
-const PRECACHE = ['./', 'codex/', 'isles/', 'gems/', 'sketch/', 'shared/hubkit.js', 'shared/online.js', 'shared/firebase-config.js', 'manifest.webmanifest',
+const PRECACHE = ['./', 'codex/', 'isles/', 'gems/', 'sketch/', 'shared/hubkit.js', 'shared/online.js', 'shared/lobby.js', 'shared/firebase-config.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {

@@ -372,6 +372,7 @@ button.card:hover { transform: translateY(-2px); }
 .waitbox { max-width: 560px; margin: 0 auto; padding-block: 56px 0; display: grid; gap: 18px; }
 
 @media (max-width: 480px) {
+  .roomcode { display: none; }
   .bank { gap: 8px; }
   .tok-btn .nm { font-size: 10px; letter-spacing: .04em; }
   .cardview { grid-template-columns: 96px minmax(0, 1fr); }
@@ -1524,7 +1525,7 @@ function renderGame() {
     : `<div class="players">${G.players.map((p, i) => playerHTML(p, i, vi)).join('')}</div>${logHTML()}`;
   return `<header class="top">
       <span class="wordmark">Splendor</span>
-      <span class="round">Round ${G.round}${ON.active ? ` · Room ${fmtCode(ON.code)}` : ''}</span>
+      <span class="round">Round ${G.round}${ON.active ? `<span class="roomcode"> · Room ${fmtCode(ON.code)}</span>` : ''}</span>
       ${G.finalRound && !G.over ? '<span class="pill">Final round</span>' : ''}
       ${G.over ? '<span class="pill">Game over</span>' : ''}
       <span class="spacer"></span>

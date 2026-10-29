@@ -82,6 +82,9 @@
     '.hl-root{--hl-bg:#fff;--hl-page:#eef1f5;--hl-text:#1b2230;--hl-muted:#5d6675;--hl-line:rgba(20,30,50,.14);--hl-row:#f0f2f6;--hl-row2:#e4e8ef;--hl-dim:rgba(10,14,22,.45);--hl-accent:var(--hl-acc-l,#f2b632);--hl-on:var(--hl-on-l,#000);--hl-warn:#b3261e;--hl-warn-bg:#fbe9e7;font:400 16px/1.4 ' + FONT + ';color:var(--hl-text);-webkit-text-size-adjust:100%}',
     '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .hl-root{--hl-bg:#1a2030;--hl-page:#121722;--hl-text:#eef1f6;--hl-muted:#a3adbd;--hl-line:rgba(255,255,255,.16);--hl-row:#252d40;--hl-row2:#2f3950;--hl-dim:rgba(0,0,0,.6);--hl-accent:var(--hl-acc-d,#f2b632);--hl-on:var(--hl-on-d,#000);--hl-warn:#ff9a90;--hl-warn-bg:#42262b}}',
     ':root[data-theme="dark"] .hl-root{--hl-bg:#1a2030;--hl-page:#121722;--hl-text:#eef1f6;--hl-muted:#a3adbd;--hl-line:rgba(255,255,255,.16);--hl-row:#252d40;--hl-row2:#2f3950;--hl-dim:rgba(0,0,0,.6);--hl-accent:var(--hl-acc-d,#f2b632);--hl-on:var(--hl-on-d,#000);--hl-warn:#ff9a90;--hl-warn-bg:#42262b}',
+    '.hl-layer{--hl-accent:var(--hl-acc-l,#f2b632);--hl-on:var(--hl-on-l,#000)}',
+    '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .hl-layer{--hl-accent:var(--hl-acc-d,#f2b632);--hl-on:var(--hl-on-d,#000)}}',
+    ':root[data-theme="dark"] .hl-layer{--hl-accent:var(--hl-acc-d,#f2b632);--hl-on:var(--hl-on-d,#000)}',
     '.hl-root *{box-sizing:border-box}',
     '.hl-layer{position:fixed;top:0;left:0;right:0;bottom:0;z-index:4900;display:flex;align-items:flex-end;justify-content:center}',
     '.hl-layer.hl-page{background:var(--hl-page);align-items:center;overflow-y:auto;padding:16px}',
@@ -244,7 +247,7 @@
         }).join('') + '</div>' +
         '<button class="hl-btn hl-go hl-wide" type="button" data-hl="create">Create game</button>' +
         '<h3 class="hl-sec">Join with a code</h3>' +
-        '<div class="hl-row"><input class="hl-in hl-code hl-grow" id="hl-code" inputmode="numeric" pattern="[0-9 ]*" autocomplete="off" maxlength="14" placeholder="000 000" aria-label="Six-digit game code" enterkeyhint="go">' +
+        '<div class="hl-row"><input class="hl-in hl-code hl-grow" id="hl-code" inputmode="numeric" pattern="[0-9 ]*" autocomplete="off" placeholder="000 000" aria-label="Six-digit game code" enterkeyhint="go">' +
         '<button class="hl-btn" type="button" data-hl="join">Join</button></div>' +
         '<p class="hl-err" role="alert" id="hl-msg"></p>';
       var code = h.panel.querySelector('#hl-code');
