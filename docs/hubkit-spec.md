@@ -2,6 +2,8 @@
 
 Status: approved plan, ready to build. Owner: coordinator session. Builders: Sonnet helper agents.
 
+**Read "Amendments after review" at the end first. Where it conflicts with anything above, the amendment wins.**
+
 ## Goal
 
 Every game on the site gets the same menu button, the same menu sheet, shared sound and settings, and a way back to the hub.
@@ -171,3 +173,57 @@ Each game: add the kit script tag; call `HubKit.init` once at startup; put `${Hu
 6. No horizontal scroll on phones; the Codex header fits one row on a 390 px phone.
 7. The service worker installs on localhost; after going offline, the hub and a game still load.
 8. Existing flows still work: a full bot game in Codex, Catan and Splendor reaches game over with the test harness's fast timers; Pictionary plays a full round.
+
+
+## Amendments after review (these override everything above)
+
+### A. API and kit behaviour
+1. `HubKit.setFloating(bool)` is part of the public API.
+2. `accent` may be a string or `{light, dark}`; the kit uses the one matching the sheet's scheme. Text on accent-coloured buttons is black or white, whichever has higher contrast (compute from luminance).
+   Per game: hub `{light:'#b07d12', dark:'#f2b632'}` auto; Codex `{light:'#7a5a12', dark:'#d8b45a'}` auto; Catan `'#ffc94a'` with `scheme:'dark'`; Splendor `{light:'#94680f', dark:'#d9ae52'}` auto; Pictionary `'#ffd23f'` auto.
+3. Items: plain and confirm items close the sheet, then call `onSelect`. Value and toggle items keep the sheet open and re-render it. Hide the "This game" section when `items()` returns an empty array.
+4. No `data-act` attribute anywhere in kit markup. Use `data-hk-*` attributes only. (The games' document-level handlers react to `data-act`.)
+5. Haptics are automatic: when vibration is on and supported, `sfx('place')` buzzes 10 ms, `sfx('error')` [30,40,30], `sfx('win')` [20,40,20,40,60], `sfx('buzzer')` [200,100,200]. Games never call `buzz` themselves.
+6. Audio unlock: try to create/resume the AudioContext on `pointerup`, `touchend`, `click` and `keydown` (capture phase, passive). Keep the listeners until `ctx.state === 'running'`. Call `resume()` again on `visibilitychange` when visible (Safari can leave it `interrupted`). `sfx` before unlock is a silent no-op.
+7. Style isolation: every kit rule is scoped as `#hubkit-root .hk-…` for sheet contents, and the menu button uses `button.hk-menu-btn.hk-menu-btn` (doubled class for specificity) and explicitly sets border, background, padding, margin, min-height, min-width, width, height, transform, box-shadow, font, line-height, color, border-radius and outline, including `:active` and `:focus-visible`. (Pictionary styles every `button` globally and `.top button`.)
+8. Focus: on close, focus the first visible `[data-hubkit="menu"]` (the game may have re-rendered the button while the sheet was open), or the floating button.
+9. Keys: the kit adds its keydown listener on `window` in the capture phase. While the sheet is open it handles Esc (close) and Tab (focus trap) and calls `stopImmediatePropagation()` on every keydown so game shortcuts (Codex `f`, Ctrl+Z, Splendor Esc) don't fire behind it. The `m` mute shortcut works only when the sheet is closed, ignores Ctrl/Meta/Alt and key repeats, ignores focus in input/textarea/select/contenteditable, and shows a small toast "Sound off" / "Sound on" for 1.2 s (kit-rendered, bottom centre, z 5000, `aria-live="polite"`).
+10. Lifecycle: close the sheet on `pagehide`; on `pageshow` re-read settings. Listen for `storage` events on `hubkit.settings` so mute syncs across tabs.
+11. Sheet sizing: `max-height: calc(100dvh - env(safe-area-inset-top,0px) - 16px)`, internal scrolling with `overscroll-behavior: contain`, bottom padding `calc(16px + env(safe-area-inset-bottom,0px))`.
+12. Service worker registration happens only inside the kit. Capture `document.currentScript.src` at the top level of hubkit.js (it is null later) to compute `HUB_URL`, and register `HUB_URL + 'sw.js'` with scope `HUB_URL`, only on https or localhost, in try/catch.
+13. Every page that loads the kit must still work if the kit fails to load. Each game and the hub include this stub right after the kit script tag:
+    `<script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>`
+
+### B. Service worker (replaces the earlier rules)
+- Precache with `new Request(url, {cache:'reload'})`: `./`, `codex/`, `isles/`, `gems/`, `sketch/` (folder URLs, which is how pages are opened), `shared/hubkit.js`, `manifest.webmanifest`, the icons.
+- Fetch: same-origin GET → network first with a 3 s timeout, store every successful response in the cache, fall back to `caches.match(request, {ignoreSearch:true})`. Google Fonts → stale-while-revalidate in a separate cache. Ignore other origins and non-GET.
+- `self.skipWaiting()` on install and `clients.claim()` on activate. Delete caches whose name isn't the current version on activate. Version string: `gh-v1`.
+
+### C. Hub "Continue" (replaces section "Hub page changes" item 2)
+- In progress rules:
+  - Codex `naturalists-codex-v1`: object with `v===1`, `phase` not `'setup'` and not `'over'`; label "Round {round}".
+  - Catan `sti.save.v1`: object with `G.v===1` and `G.phase !== 'gameover'`; label "Turn {G.turnNo}" (use "Setting up" when `G.phase==='setup'`).
+  - Splendor `gemguild-game-v1`: object with `players` array and `over !== true`; label "Round {round}".
+  - Pictionary `pictionary.save.v1`: `{v:1, screen, teams, scores, turn, rounds, secs, used:[...], skipsLeft}`; in progress when `screen` is not `'setup'` or `'final'`; label "Turn {turn+1} of {teams.length*rounds}".
+- Links when in progress: `codex/` (resumes by itself), `isles/#continue`, `gems/#continue`, `sketch/` (resumes by itself).
+- Recompute on load and on `pageshow`.
+- Footer hint addition: "On iPhone, games saved in Safari and in the home-screen app are kept separately."
+
+### D. Game-specific corrections
+- **Codex.** The header `.actions` is static HTML: insert the menu button with JS at startup (`insertAdjacentHTML`) and remove the Rules and New game buttons from the static markup. On a 390 px phone the target layout is: row 1 brand on the left and menu button on the right; row 2 the player chips at full width. Codex's own modals (setup, handoff, results, rules, new game) cover the header, so in `renderModal` call `HubKit.setFloating(!m.hidden)`.
+- **Catan.** The topbar is static HTML: replace the existing ☰ button element with the kit button at startup. `items()` on the home screen (detect with `$('#game').hidden`, not `G`) returns Rules only if a rules view exists, else `[]`. "Leave game" becomes "Back to setup" with **no** kit confirm (the game stays saved). Move the old menu's info line (Bank / Dev cards left / Playing to) into the Building costs modal. Floating is on while `#home` is shown **or** while the pass-and-play curtain is visible. Support `#continue`: on boot, if a save exists, run the existing resume path, then `history.replaceState(null,'',location.pathname)`.
+- **Splendor.** "New game" item has **no** kit confirm (the game already shows its own confirm dialog). Setup screen: floating on, `items()` returns "How to play" only. Support `#continue` the same way as Catan, using the existing "Resume saved game" path.
+- **Pictionary.** Remove the header "End game" button; End game lives only in the sheet as a confirm item. The menu button goes where End game was (top-right of `.top`). Floating on for the setup **and** final screens. Play `tick` only when `S.left` changes to a value from 10 down to 1 (the interval runs every 250 ms). Save shape is exactly as in section C; never save `tick`, `wake` or the `Set` itself (`used` is saved as an array). Restore: `secret` and `draw` screens resume at `handover`; `verdict` and `scores` resume as they were. Keep the game's own screen wake lock code as it is.
+- **Chime rule (all games):** play `chime` when control passes from a different player to a human. In pass-and-play, play it when the pass-the-device screen appears, not when the hand is revealed. Never on page load, resume, or the very first turn.
+- **All games** also add `<link rel="manifest" href="../manifest.webmanifest">` and `<link rel="apple-touch-icon" href="../icons/icon-180.png">`.
+
+### E. Acceptance test changes
+- Test 3: "Continue" for Catan and Splendor must land in the running game (via `#continue`), not on the setup screen. Codex shows "Continue" only after the setup choices are made.
+- Test 6: on a 390 px phone the Codex header is two rows (brand + menu, then players), with no horizontal scroll.
+- New test: with `shared/hubkit.js` blocked (Playwright route abort), every game still loads and plays.
+- New test: while the sheet is open, pressing `f`, Ctrl+Z and Esc does not trigger game actions; Esc closes the sheet.
+
+### F. Work split
+1. Kit builder alone first: `shared/hubkit.js`, `shared/demo.html`. Touches nothing else.
+2. Then in parallel, no file overlaps: (a) hub `index.html`, `manifest.webmanifest`, `sw.js`, `icons/`, README; (b) `codex/`; (c) `isles/`; (d) `gems/`; (e) `sketch/`.
+3. Game builders do not edit `shared/hubkit.js`. They report kit bugs to the coordinator.
