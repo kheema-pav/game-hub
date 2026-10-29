@@ -227,6 +227,26 @@ table.scores tr.win td{background:var(--accent-wash)}
 table.scores .sub{display:block;font-size:.72rem;color:var(--muted);font-weight:400;max-width:180px;margin-left:auto}
 .crown{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;background:var(--accent);color:var(--accent-fg);padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700}
 
+/* Online: tabs, waiting room */
+.tabs{display:flex;gap:4px;margin:14px 0 4px;border-bottom:1px solid var(--rule)}
+.tab{background:none;border:0;border-bottom:3px solid transparent;padding:.55em .9em;cursor:pointer;color:var(--muted);font-weight:500;margin-bottom:-1px}
+.tab.on{border-bottom-color:var(--accent);color:var(--ink);font-weight:700}
+.bigcode{margin:12px 0 4px;padding:14px 8px;background:var(--panel-2);border:1px solid var(--rule);border-radius:10px;text-align:center;font-weight:700;font-size:clamp(2.4rem,13vw,3.8rem);line-height:1;letter-spacing:.1em;font-variant-numeric:tabular-nums;user-select:all}
+.plist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column}
+.plist li{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--rule)}
+.plist .dotc{width:14px;height:14px;border-radius:50%;background:var(--pc,var(--rule));flex:none}
+.plist .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plist .tag{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.plist li.empty{color:var(--muted);font-style:italic}
+.plist li.empty .dotc{background:none;border:2px dashed var(--rule)}
+.statusline{margin:12px 0 0;color:var(--muted)}
+.errline{margin:10px 0 0;color:var(--bad);font-weight:700}
+.copyfld{width:100%;box-sizing:border-box;margin-top:8px;padding:.5em .6em;border-radius:6px;border:1px solid var(--rule);background:var(--panel);color:var(--ink);font:inherit}
+a.btn{text-decoration:none;display:inline-block}
+.onrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.onrow input{flex:1;min-width:130px;max-width:260px;padding:.45em .6em;border-radius:6px;border:1px solid var(--rule);background:var(--panel);color:var(--ink);font:inherit}
+#ng-code{letter-spacing:.15em;font-size:1.15rem;font-variant-numeric:tabular-nums}
+
 @media (max-width:860px){
   html,body{height:auto}
   #app{height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto auto;grid-template-areas:"top" "board" "hand" "side"}
@@ -289,6 +309,8 @@ table.scores .sub{display:block;font-size:.72rem;color:var(--muted);font-weight:
 
 <script src="../shared/hubkit.js"></script>
 <script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
+<script src="../shared/firebase-config.js"></script>
+<script src="../shared/online.js"></script>
 <script>
 // ---------- Card data ----------
 const KING=['F','P','A','I'], OBJS=['Q','K','M'], SYMS=[...KING,...OBJS];
@@ -475,10 +497,12 @@ const ic=(s,cls='')=>`<svg class="ic ic-${s} ${cls}" aria-hidden="true"><use hre
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 const cur=()=>S.players[S.turn];
 const humans=()=>S.players.map((p,i)=>p.ai?-1:i).filter(i=>i>=0);
-const canAct=()=>S&&(S.phase==='place'||S.phase==='draw')&&!cur().ai;
+const canAct=()=>S&&(S.phase==='place'||S.phase==='draw')&&(S.online?(S.me>=0&&S.turn===S.me):!cur().ai);
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
-function log(msg){S.log.unshift(msg);S.log.length=Math.min(S.log.length,80);}
+function slog(s,msg){s.log.unshift(msg);s.log.length=Math.min(s.log.length,80);}
+function log(msg){slog(S,msg);}
 function handOwner(){
+  if(S&&S.online) return S.me>=0&&S.players[S.me].ready?S.me:null; // online: only ever your own hand
   if(!S||S.phase==='setup') return null;
   const h=humans();
   if(S.phase==='over') return h.length===1?h[0]:null;
@@ -489,7 +513,7 @@ function handOwner(){
 function newGame(cfg){
   ui.aiToken++;ui.prevPlayer=null;
   const res=shuffle(RES_IDS), gold=shuffle(GOLD_IDS), st=shuffle(START_IDS), objs=shuffle(OBJECTIVES.map(o=>o.id));
-  S={v:1,phase:'setup',turn:0,round:1,setupIdx:0,endTriggered:false,turnsLeft:0,passStreak:0,lastHuman:-1,log:[],
+  S={v:1,gid:'L'+Date.now().toString(36)+Math.floor(Math.random()*1e9).toString(36),first:0,phase:'setup',turn:0,round:1,setupIdx:0,endTriggered:false,turnsLeft:0,passStreak:0,lastHuman:-1,log:[],
      resDeck:res,goldDeck:gold,market:{R:[],G:[]},common:[objs.pop(),objs.pop()],results:null,
      players:cfg.map((c,i)=>({name:c.name,ai:c.ai,level:c.level||'normal',board:{},placedN:0,hand:[],score:0,starter:st[i],secretChoices:[objs.pop(),objs.pop()],secret:null,ready:false}))};
   S.market.R=[res.pop(),res.pop()]; S.market.G=[gold.pop(),gold.pop()];
@@ -516,9 +540,7 @@ function startTurn(){
   const p=cur();
   ui.sel=null;ui.undo=null;ui.aim=null;ui.hover=null;
   if(!p.hand.length||!validSpots(p.board).length){
-    log(`<b>${esc(p.name)}</b> cannot play and passes.`);
-    S.passStreak++;S.phase='pass';
-    if(S.passStreak>=S.players.length*2&&!S.endTriggered){S.endTriggered=true;S.turnsLeft=1;}
+    passOn(S,p);S.phase='pass';
     render();
     return setTimeout(endTurn,300);
   }
@@ -531,15 +553,76 @@ function startTurn(){
   save();render();
   if(p.ai) aiStep();
 }
-function doPlace(id,face,x,y){
-  const p=cur(), card=CARDS[id];
+// ---- Shared engine: local play and the online replay both play moves through these ----
+const nm=p=>`<b>${esc(p.name)}</b>`;
+function placeOn(s,i,id,face,x,y){
+  const p=s.players[i], card=CARDS[id];
   p.board[kxy(x,y)]={id,face,x,y,order:p.placedN++};
   const pts=pointsFor(p.board,id,face,x,y);
   p.score+=pts;
   p.hand=p.hand.filter(h=>h!==id);
+  slog(s,`${nm(p)} played a ${NAMES[card.k]} ${card.type==='G'?'gold':'resource'} card${face==='back'?' face down':''}${pts?` for ${pts} point${pts>1?'s':''}`:''}.`);
+  return pts;
+}
+function drawOptionsOf(s){
+  const o=[];
+  if(s.resDeck.length) o.push({src:'RD'});
+  if(s.goldDeck.length) o.push({src:'GD'});
+  ['R','G'].forEach(t=>s.market[t].forEach((id,i)=>{if(id) o.push({src:t+i,id});}));
+  return o;
+}
+function drawOn(s,i,src){
+  let id, from;
+  if(src==='RD'){id=s.resDeck.pop();from='the resource deck';}
+  else if(src==='GD'){id=s.goldDeck.pop();from='the gold deck';}
+  else{
+    const t=src[0], k=+src[1], m=s.market[t];
+    id=m[k];
+    if(!id) return null;
+    const own=t==='R'?s.resDeck:s.goldDeck, other=t==='R'?s.goldDeck:s.resDeck;
+    m[k]=own.pop()??other.pop()??null;
+    from=`the market (${NAMES[CARDS[id].k]} ${t==='R'?'resource':'gold'})`;
+  }
+  if(!id) return null;
+  s.players[i].hand.push(id);
+  slog(s,`${nm(s.players[i])} drew from ${from}.`);
+  return id;
+}
+function passOn(s,p){
+  slog(s,`${nm(p)} cannot play and passes.`);
+  if(++s.passStreak>=s.players.length*2&&!s.endTriggered){s.endTriggered=true;s.turnsLeft=1;}
+}
+// end the current turn: trigger the final rounds, finish the game, or move to the next seat. True when the game is over.
+function advance(s){
+  const n=s.players.length, i=s.turn, p=s.players[i], first=s.first||0;
+  if(!s.endTriggered){
+    if(p.score>=20||(!s.resDeck.length&&!s.goldDeck.length)){
+      s.endTriggered=true;s.turnsLeft=(n-1-(i-first+n)%n)+n;
+      slog(s,p.score>=20?`${nm(p)} reached 20 points. Finish this round, then play one more.`:'Both decks are empty. Finish this round, then play one more.');
+    }
+  } else s.turnsLeft--;
+  if(s.endTriggered&&s.turnsLeft<=0){finishResults(s);return true;}
+  s.turn=(i+1)%n;
+  if(s.turn===first){s.round++;slog(s,`Round ${s.round}.`);}
+  return false;
+}
+function finishResults(s){
+  s.phase='over';
+  s.results=s.players.map((p,i)=>{
+    const n=counts(p.board);
+    const objs=[...s.common,p.secret].map(oid=>{const o=OBJ_BY_ID[oid],t=objTimes(o,p.board,n);return {oid,times:t,pts:t*o.pts};});
+    const objPts=objs.reduce((a,b)=>a+b.pts,0);
+    return {i,board:p.score,objs,objPts,total:p.score+objPts,done:objs.reduce((a,b)=>a+b.times,0)};
+  }).sort((a,b)=>b.total-a.total||b.done-a.done);
+  const top=s.results[0];
+  const winners=s.results.filter(r=>r.total===top.total&&r.done===top.done).map(r=>s.players[r.i].name);
+  slog(s,`Game over. ${winners.map(esc).join(' and ')} ${winners.length>1?'share the win':'wins'} with ${top.total} points.`);
+}
+
+function doPlace(id,face,x,y){
+  const p=cur(), card=CARDS[id];
+  const pts=placeOn(S,S.turn,id,face,x,y);
   delete ui.faces[id];
-  const kind=card.type==='G'?'gold':'resource';
-  log(`<b>${esc(p.name)}</b> played a ${NAMES[card.k]} ${kind} card${face==='back'?' face down':''}${pts?` for ${pts} point${pts>1?'s':''}`:''}.`);
   ui.fresh={view:S.turn,key:kxy(x,y),pts};
   ui.sel=null;
   sfx('place',p.ai);
@@ -550,14 +633,9 @@ function doPlace(id,face,x,y){
   if(p.ai) aiStep();
   else if(window.innerWidth<=860) $('#marketSec').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
-function drawOptions(){
-  const o=[];
-  if(S.resDeck.length) o.push({src:'RD'});
-  if(S.goldDeck.length) o.push({src:'GD'});
-  ['R','G'].forEach(t=>S.market[t].forEach((id,i)=>{if(id) o.push({src:t+i,id});}));
-  return o;
-}
+const drawOptions=()=>drawOptionsOf(S);
 function placeHuman(x,y){
+  if(S.online) return placeOnline(x,y);
   const face=ui.faces[ui.sel]||'front';
   ui.undo={state:JSON.stringify(S),id:ui.sel,face};
   ui.aim=null;ui.hover=null;
@@ -565,6 +643,7 @@ function placeHuman(x,y){
 }
 // Take back a human placement, allowed only before drawing
 function undoPlace(){
+  if(S&&S.online) return undoOnline();
   const u=ui.undo;
   if(!u||!canAct()||S.phase!=='draw') return;
   S=JSON.parse(u.state);
@@ -573,55 +652,30 @@ function undoPlace(){
   save();render();
 }
 function doDraw(src){
-  const p=cur(); let id, from;
+  const p=cur();
   ui.undo=null;
   const srcEl=document.querySelector(`[data-src="${src}"]`), fromRect=srcEl&&srcEl.getBoundingClientRect();
-  if(src==='RD'){id=S.resDeck.pop();from='the resource deck';}
-  else if(src==='GD'){id=S.goldDeck.pop();from='the gold deck';}
-  else{
-    const t=src[0], i=+src[1], m=S.market[t];
-    id=m[i];
-    const own=t==='R'?S.resDeck:S.goldDeck, other=t==='R'?S.goldDeck:S.resDeck;
-    m[i]=own.pop()??other.pop()??null;
-    from=`the market (${NAMES[CARDS[id].k]} ${t==='R'?'resource':'gold'})`;
-  }
+  const id=drawOn(S,S.turn,src);
   if(!id) return;
-  p.hand.push(id);
   sfx('draw',p.ai);
   ui.flight={id,face:src[1]==='D'?'back':'front',from:fromRect,drawer:S.turn};
   if(src[1]!=='D') ui.refill=src;
-  log(`<b>${esc(p.name)}</b> drew from ${from}.`);
   endTurn();
 }
 function endTurn(){
-  const n=S.players.length, i=S.turn, p=cur();
-  ui.prevPlayer=i;
-  if(!S.endTriggered){
-    if(p.score>=20||(!S.resDeck.length&&!S.goldDeck.length)){
-      S.endTriggered=true;S.turnsLeft=(n-1-i)+n;
-      log(p.score>=20?`<b>${esc(p.name)}</b> reached 20 points. Finish this round, then play one more.`:'Both decks are empty. Finish this round, then play one more.');
-    }
-  } else S.turnsLeft--;
-  if(S.endTriggered&&S.turnsLeft<=0) return finishGame();
-  S.turn=(i+1)%n;
-  if(S.turn===0){S.round++;log(`Round ${S.round}.`);}
+  ui.prevPlayer=S.turn;
+  if(advance(S)) return finishGame();
   startTurn();
 }
 function finishGame(){
   ui.aiToken++;
-  S.phase='over';
-  S.results=S.players.map((p,i)=>{
-    const n=counts(p.board);
-    const objs=[...S.common,p.secret].map(oid=>{const o=OBJ_BY_ID[oid],t=objTimes(o,p.board,n);return {oid,times:t,pts:t*o.pts};});
-    const objPts=objs.reduce((a,b)=>a+b.pts,0);
-    return {i,board:p.score,objs,objPts,total:p.score+objPts,done:objs.reduce((a,b)=>a+b.times,0)};
-  }).sort((a,b)=>b.total-a.total||b.done-a.done);
+  finishResults(S);
   const top=S.results[0];
-  const winners=S.results.filter(r=>r.total===top.total&&r.done===top.done).map(r=>S.players[r.i].name);
-  log(`Game over. ${winners.map(esc).join(' and ')} ${winners.length>1?'share the win':'wins'} with ${top.total} points.`);
   ui.dismissOver=false;
   const humanWon=S.results.some(r=>r.total===top.total&&r.done===top.done&&!S.players[r.i].ai);
   setTimeout(()=>sfx(humanWon?'win':'end'),300);
+  // stats: a game against bots (one human) counts toward the profile on this device
+  if(S.gid&&humans().length===1){const h=humans()[0],r=S.results.find(x=>x.i===h);try{if(r&&HubKit.recordResult) HubKit.recordResult('codex',S.gid,{won:r.total===top.total&&r.done===top.done,score:r.total});}catch(e){}}
   save();render();
 }
 
