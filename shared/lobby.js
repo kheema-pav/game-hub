@@ -3,7 +3,7 @@
  * and the ?room=CODE entry router). Classic script, defines window.HubLobby. Uses only HubOnline and (guarded) HubKit;
  * it holds no game logic. Spec: docs/online-splendor.md (amendments win) and docs/online-plan.md.
  *
- *   HubLobby.openCreateJoin({game, gameName, seatOptions:[2,3,4], accent, onRoom(code), onClose()})   -> {close()}
+ *   HubLobby.openCreateJoin({game, gameName, seatOptions:[2,3,4] (2..8), opts (object or () => object), accent, onRoom(code), onClose()})   -> {close()}
  *   HubLobby.waitingRoom(code, {game, gameName, minToStart:2, accent, onStart(room), onLeave(), onClose()})  -> {close()}
  *   HubLobby.notSeated(code, {gameName, hubUrl:'../', onClose()})                                     -> {close()}
  *   HubLobby.enter(code, {game, gameName, minToStart, accent, hubUrl, onPlay({code, uid, room}), onExit()}) -> {close()}
@@ -226,9 +226,9 @@
   function openCreateJoin(o) {
     o = o || {};
     var game = o.game, gameName = o.gameName || 'this game';
-    var seats = (o.seatOptions || []).filter(function (n) { return n === 2 || n === 3 || n === 4; });
+    var seats = (o.seatOptions || []).filter(function (n) { return Number.isInteger(n) && n >= 2 && n <= 8; });
     if (!seats.length) {
-      var lo = Math.max(2, +o.minSeats || 2), hi = Math.min(4, +o.maxSeats || 4);
+      var lo = Math.max(2, +o.minSeats || 2), hi = Math.min(8, +o.maxSeats || 4);
       for (var n = lo; n <= hi; n++) seats.push(n);
     }
     if (!seats.length) seats = [2, 3, 4];
@@ -273,7 +273,11 @@
       if (!takeName(h, '#hl-msg')) return;
       setBusy(true, 'create');
       try {
-        var r = await HubOnline.rooms.create({ game: game, maxSeats: chosen });
+        // o.opts may be an object or a function returning one, read at create time (room settings such as Catan's mode)
+        var opts = typeof o.opts === 'function' ? o.opts() : o.opts;
+        var req = { game: game, maxSeats: chosen };
+        if (opts && typeof opts === 'object') req.opts = opts;
+        var r = await HubOnline.rooms.create(req);
         if (h.closed) return;
         h.close(true);
         call(o.onRoom, r.code);
