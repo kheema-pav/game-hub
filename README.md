@@ -9,6 +9,8 @@ Fan-made tabletop games for phone and laptop, served as a static site by GitHub 
 | `index.html` | The hub page | Links to every game; shows "Continue" for games in progress |
 | `shared/` | `hubkit.js` and `demo.html` | The shared menu, settings and sound used by the hub and every game |
 | `manifest.webmanifest`, `icons/` | Install info and app icons | Lets phones add the hub to the home screen |
+| `shared/online.js`, `shared/firebase-config.js` | Online play (`window.HubOnline`) and the Firebase web config | Loaded only by pages that use online rooms |
+| `firebase/` | Firestore security rules and their tests | `firestore.rules`, `test/` (emulator tests) |
 | `sw.js` | Service worker | Caches the site so it also works offline |
 | `codex/` | Codex Naturalis | Bots (Easy/Normal/Hard), pass-and-play |
 | `isles/` | Catan | Classic and Seafarers modes, bots, pass-and-play |
@@ -21,6 +23,22 @@ Saved games stay in each player's own browser.
 ## How the shared menu works
 
 Every page loads `shared/hubkit.js`, which adds the same menu button and menu sheet to the hub and each game, plus shared settings (sound, volume, vibration, keep screen awake) stored under one `localStorage` key, synthesised sound effects and a way back to the hub. Each game calls `HubKit.init` with its own menu items and uses `HubKit.sfx` for sounds. The kit also registers `sw.js`. The full API, the sound recipes and the per-game integration rules are in [`docs/hubkit-spec.md`](docs/hubkit-spec.md). When you add a game folder, add it to the precache list in `sw.js` (and bump its version string so old caches are cleared).
+
+## Online play (game codes)
+
+Online games use a six-digit code. Nobody signs in: each browser gets an anonymous Firebase identity, and a profile (name and colour, set under "You" in the shared menu) is kept on the device and mirrored to Firestore. The hub has a "Join a game" box and an "Online games" strip for rooms this device has joined. `shared/online.js` defines `window.HubOnline` and only loads the Firebase SDK (pinned 11.10.0, from gstatic) when an online feature is used, so local play never waits for it. While `shared/firebase-config.js` holds `null`, online features are off and the hub shows "Online play is on the way". The API and rules are in [`docs/online-plan.md`](docs/online-plan.md).
+
+### Owner steps (Firebase, free Spark plan)
+
+1. In the [Firebase console](https://console.firebase.google.com) create a project, add a Web app (the `</>` icon) and copy its `firebaseConfig`.
+2. Build > Authentication > Get started > Sign-in method: enable **Anonymous**.
+3. Build > Firestore Database > Create database in **production mode**.
+4. Firestore > Rules: paste the contents of `firebase/firestore.rules` and **Publish**.
+5. Paste the config into `shared/firebase-config.js` as `window.HUB_FIREBASE_CONFIG = { apiKey: "...", authDomain: "...", projectId: "...", appId: "..." };`, commit and push. (The values are public by design; the rules protect the data. Anonymous sign-in needs no authorised-domain entry. Optionally restrict the API key by HTTP referrer in Google Cloud > Credentials.)
+
+### Testing the rules and online code locally
+
+Needs Node and Java 21. From `firebase/test/`: `npm install`, then `npm test` starts the Firestore emulator (project `demo-game-hub`, port 8180) and runs `rules.test.js`. To try the site against local emulators, run `npx firebase emulators:start --only firestore,auth --project demo-game-hub --config ../firebase.json`, serve the site, and in the browser console set `localStorage['hub.emulator'] = '127.0.0.1:8180:9199'` (host:firestorePort:authPort; remove it to go back to the real project).
 
 ## Adding a game
 

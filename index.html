@@ -101,7 +101,7 @@ h1{font-family:var(--f-display);font-weight:800;font-size:clamp(2.4rem,7vw,4rem)
 .orooms{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))}
 .oroom{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 .oroom .oname{font-weight:600;min-width:0;overflow-wrap:anywhere}
-.oroom .ocode{font-family:var(--f-display);font-weight:800;letter-spacing:.1em;font-variant-numeric:tabular-nums;margin-left:6px;color:var(--muted)}
+.oroom .ocode{font-family:var(--f-display);font-weight:800;letter-spacing:.1em;font-variant-numeric:tabular-nums;margin-left:6px;color:var(--muted);display:inline-block;white-space:nowrap}
 .oroom .ostat{grid-column:1;margin:0;font-size:.9rem;color:var(--muted);min-width:0;overflow-wrap:anywhere}
 .oroom .ostat.turn{color:var(--ink);font-weight:700}
 .oroom .ostat.turn::before{content:"";display:inline-block;width:8px;height:8px;margin-right:7px;border-radius:50%;background:var(--accent)}

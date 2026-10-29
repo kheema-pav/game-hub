@@ -188,8 +188,8 @@
       var m = core.m.fs;
       m.setDoc(m.doc(core.db, 'profiles', api.uid), {
         name: p.real, color: p.color, stats: stats, updatedAt: m.serverTimestamp()
-      }).catch(function (e) { console.warn('mirror failed', e && e.code); lastMirror = ''; });
-    } catch (e) { console.warn('mirror threw', e); lastMirror = ''; }
+      }).catch(function (e) { lastMirror = ''; });
+    } catch (e) { lastMirror = ''; }
   }
   window.addEventListener('hubprofilechange', function () { if (core) scheduleMirror(); });
   window.addEventListener('storage', function (e) { if (core && (e.key === PROFILE_KEY || e.key === null)) scheduleMirror(); });
