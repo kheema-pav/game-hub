@@ -1015,8 +1015,13 @@ function doTrade(s, other, give, get) {
   fx(s, { type: 'trade', a: p, b: other });
   return OK;
 }
-function doOffer(s, to, give, get) { // current (bot) offers to a human
-  if (s.phase !== 'main' || to === s.current) return err('Not now');
+const MAX_OFFERS = 5; // offers per turn (s.offerMade, reset by doEndTurn)
+function cardsOk(c) { return !!c && typeof c === 'object' && RES.every(r => c[r] === undefined || (Number.isInteger(c[r]) && c[r] >= 0)); }
+function doOffer(s, to, give, get) { // current player offers to one other player
+  if (s.phase !== 'main') return err('Not now');
+  if (!Number.isInteger(to) || to < 0 || to >= s.players.length || to === s.current) return err('Pick another player');
+  if (s.offerMade >= MAX_OFFERS) return err('Too many offers this turn');
+  if (!cardsOk(give) || !cardsOk(get)) return err('That trade isn’t possible');
   // only the offerer's cards are checked; the receiver may simply decline
   const ha = s.players[s.current].hand;
   if (handCount(give) === 0 || handCount(get) === 0 || !RES.every(r => (give[r] || 0) <= ha[r])) return err('That trade isn’t possible');
@@ -1033,6 +1038,13 @@ function doRespond(s, accept) {
     log(s, `${nm(s, o.to)} accepts ${nm(s, o.from)}’s trade.`, o.to);
     fx(s, { type: 'trade', a: o.from, b: o.to, offer: true });
   } else log(s, `${nm(s, o.to)} declines ${nm(s, o.from)}’s trade.`, o.to);
+  s.offer = null; s.phase = 'main';
+  return OK;
+}
+function withdrawOffer(s) { // the offerer cancels a pending offer (the caller makes sure only offer.from asks)
+  if (s.phase !== 'offer' || !s.offer) return err('Not now');
+  const o = s.offer;
+  log(s, `${nm(s, o.from)} withdraws the offer to ${nm(s, o.to)}.`, o.from);
   s.offer = null; s.phase = 'main';
   return OK;
 }
@@ -1061,6 +1073,166 @@ function doEndTurn(s) {
   return OK;
 }
 
+/* ---------- Online replay: sanitizer, action map, deterministic replay ---------- */
+/* A record is {k, a, args}: k = global step it applies at, a = action name, args = positional array.
+   Nothing from a record is ever spread into an engine call: every action sanitises into fresh values
+   and then calls the engine with explicit arguments. Failure paths (reject/throw) never touch s.rng. */
+const COLOR_IDS = ['red', 'blue', 'orange', 'white', 'green', 'purple'];
+const isInt = x => Number.isInteger(x);
+const inRange = (x, n) => isInt(x) && x >= 0 && x < n;
+const isRes = x => typeof x === 'string' && RES.includes(x);
+function cleanCards(c) { // plain object, resource keys only, integers 0..19; returns a fresh map or null
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return null;
+  const out = {};
+  for (const key of Object.keys(c)) {
+    if (!RES.includes(key) || !isInt(c[key]) || c[key] < 0 || c[key] > 19) return null;
+  }
+  for (const r of RES) if (Object.prototype.hasOwnProperty.call(c, r)) out[r] = c[r];
+  return out;
+}
+const BUILD_KINDS = ['road', 'ship', 'settlement', 'city'];
+const DEV_PLAYABLE = ['knight', 'road', 'plenty', 'mono'];
+/* Each entry: san(s, p, args) -> clean value (or null = reject), run(s, p, x) -> engine result. */
+const ACTIONS = {
+  setupSettlement: { san: (s, p, a) => a.length === 1 && inRange(a[0], s.board.vertices.length) ? { v: a[0] } : null,
+    run: (s, p, x) => doSetupSettlement(s, x.v) },
+  setupEdge: { san: (s, p, a) => a.length === 2 && inRange(a[0], s.board.edges.length) && (a[1] === 'road' || a[1] === 'ship') ? { e: a[0], kind: a[1] } : null,
+    run: (s, p, x) => doSetupEdge(s, x.e, x.kind) },
+  roll: { san: (s, p, a) => a.length === 0 ? {} : null, run: (s) => doRoll(s) },
+  discard: { san: (s, p, a) => { if (a.length !== 1) return null; const c = cleanCards(a[0]); return c ? { c } : null; },
+    run: (s, p, x) => doDiscard(s, p, x.c) },
+  moveRobber: { san: (s, p, a) => a.length === 1 && inRange(a[0], s.board.hexes.length) ? { h: a[0] } : null,
+    run: (s, p, x) => doMoveRobber(s, x.h) },
+  steal: { san: (s, p, a) => a.length === 1 && inRange(a[0], s.players.length) && a[0] !== p ? { t: a[0] } : null,
+    run: (s, p, x) => doSteal(s, x.t) },
+  gold: { san: (s, p, a) => { if (a.length !== 1) return null; const c = cleanCards(a[0]); return c ? { c } : null; },
+    run: (s, p, x) => doGold(s, p, x.c) },
+  build: { san: (s, p, a) => {
+      if (a.length !== 2 || !BUILD_KINDS.includes(a[0])) return null;
+      const n = a[0] === 'road' || a[0] === 'ship' ? s.board.edges.length : s.board.vertices.length;
+      return inRange(a[1], n) ? { kind: a[0], id: a[1] } : null; },
+    run: (s, p, x) => doBuild(s, x.kind, x.id) },
+  endFreeRoads: { san: (s, p, a) => a.length === 0 ? {} : null, run: (s) => doEndFreeRoads(s) },
+  buyDev: { san: (s, p, a) => a.length === 0 ? {} : null, run: (s) => doBuyDev(s) },
+  playDev: { san: (s, p, a) => {
+      if (a.length < 1 || a.length > 2 || !DEV_PLAYABLE.includes(a[0])) return null;
+      const type = a[0], o = a[1];
+      if (o !== undefined && o !== null && (typeof o !== 'object' || Array.isArray(o))) return null;
+      if (type === 'plenty') {
+        if (!o || !Array.isArray(o.res) || o.res.length !== 2 || !isRes(o.res[0]) || !isRes(o.res[1])) return null;
+        return { type, args: { res: [o.res[0], o.res[1]] } };
+      }
+      if (type === 'mono') return o && isRes(o.res) ? { type, args: { res: o.res } } : null;
+      return { type, args: {} }; },
+    run: (s, p, x) => doPlayDev(s, x.type, x.args) },
+  bankTrade: { san: (s, p, a) => a.length === 2 && isRes(a[0]) && isRes(a[1]) ? { give: a[0], get: a[1] } : null,
+    run: (s, p, x) => doBankTrade(s, x.give, x.get) },
+  offer: { san: (s, p, a) => {
+      if (a.length !== 3 || !inRange(a[0], s.players.length) || a[0] === p) return null;
+      const give = cleanCards(a[1]), get = cleanCards(a[2]);
+      return give && get ? { to: a[0], give, get } : null; },
+    run: (s, p, x) => doOffer(s, x.to, x.give, x.get) },
+  respond: { san: (s, p, a) => a.length === 1 && typeof a[0] === 'boolean' ? { accept: a[0] } : null,
+    run: (s, p, x) => doRespond(s, x.accept) },
+  withdrawOffer: { san: (s, p, a) => a.length === 0 ? {} : null, run: (s) => withdrawOffer(s) },
+  moveShip: { san: (s, p, a) => a.length === 2 && inRange(a[0], s.board.edges.length) && inRange(a[1], s.board.edges.length) ? { from: a[0], to: a[1] } : null,
+    run: (s, p, x) => doMoveShip(s, x.from, x.to) },
+  endTurn: { san: (s, p, a) => a.length === 0 ? {} : null, run: (s) => doEndTurn(s) },
+};
+const ACTION_NAMES = Object.keys(ACTIONS);
+function normArgs(rec) { return rec.args === undefined || rec.args === null ? [] : rec.args; }
+/* sanitizeAction(s, p, rec) -> {a, x} (clean) or null. p = the author's seat. Pure: reads s, never changes it. */
+function sanitizeAction(s, p, rec) {
+  if (!rec || typeof rec !== 'object' || typeof rec.a !== 'string' || !Object.prototype.hasOwnProperty.call(ACTIONS, rec.a)) return null;
+  const args = normArgs(rec);
+  if (!Array.isArray(args)) return null;
+  let x = null;
+  try { x = ACTIONS[rec.a].san(s, p, args); } catch (e) { return null; }
+  return x ? { a: rec.a, x } : null;
+}
+/* applyAction(s, p, clean) -> engine result {ok, err?}; exceptions become {ok:false}. */
+function applyAction(s, p, clean) {
+  try { const r = ACTIONS[clean.a].run(s, p, clean.x); return r && r.ok ? r : { ok: false, err: (r && r.err) || 'Not possible' }; }
+  catch (e) { return { ok: false, err: 'Error' }; }
+}
+
+const SETUP_ACTS = { settlement: ['setupSettlement'], road: ['setupEdge'] };
+/* allowedAt(s) -> [{p, acts, optional?}] in priority order: who may submit what at the current step. */
+function allowedAt(s) {
+  switch (s.phase) {
+    case 'setup': return [{ p: s.current, acts: SETUP_ACTS[s.setup.step] || [] }];
+    case 'roll': return [{ p: s.current, acts: ['roll', 'playDev'] }];
+    case 'main': return [{ p: s.current, acts: ['build', 'buyDev', 'playDev', 'bankTrade', 'offer', 'moveShip', 'endTurn'] }];
+    case 'roadBuilding': return [{ p: s.current, acts: ['build', 'endFreeRoads'] }];
+    case 'robber': return [{ p: s.current, acts: ['moveRobber'] }];
+    case 'steal': return [{ p: s.current, acts: ['steal'] }];
+    case 'discard': return s.discardQ.length ? [{ p: s.discardQ[0].p, acts: ['discard'] }] : [];
+    case 'gold': return s.goldQ.length ? [{ p: s.goldQ[0].p, acts: ['gold'] }] : [];
+    case 'offer': return s.offer ? [{ p: s.offer.to, acts: ['respond'] }, { p: s.offer.from, acts: ['withdrawOffer'], optional: true }] : [];
+    default: return []; // gameover
+  }
+}
+
+/* replayCatan({seed, uids, opts, lists}) -> {state, k, seats, applied, stale, invalid, waitingFor, allowed}
+   seed: uint32 for the room; uids: seated uids (any order); opts: {mode, target, friendly, players?: {uid: {name, color}}};
+   lists: {uid: [record, ...]} each player's own append-only list. Seats = seeded shuffle of the sorted uids, drawn
+   first from the same generator that newGame then continues. Pure and deterministic: no DOM, no clock, no Math.random.
+   applied/stale/invalid: [{p: seat, idx: index in that player's list, ...}]; applied entries also carry
+   a, k (step applied at) and fx (the effects that record emitted; state.fx is left empty). */
+function replayCatan(input) {
+  const seed = input && input.seed, uids = input && input.uids, opts = (input && input.opts) || {}, lists = (input && input.lists) || {};
+  if (typeof seed !== 'number' || !isFinite(seed)) throw new Error('replayCatan: seed must be a number');
+  if (!Array.isArray(uids) || uids.length < 2 || uids.length > 4 || new Set(uids).size !== uids.length || !uids.every(u => typeof u === 'string' && u)) throw new Error('replayCatan: need 2-4 distinct uid strings');
+  const gen = { rng: seed >>> 0 };
+  const seats = shuffle(uids.slice().sort(), gen);
+  const pinfo = opts.players && typeof opts.players === 'object' ? opts.players : {};
+  const used = [];
+  const players = seats.map((uid, i) => {
+    const info = Object.prototype.hasOwnProperty.call(pinfo, uid) && pinfo[uid] && typeof pinfo[uid] === 'object' ? pinfo[uid] : {};
+    let name = typeof info.name === 'string' ? info.name.trim().slice(0, 24) : '';
+    if (!name) name = 'Player ' + (i + 1);
+    let color = COLOR_IDS.includes(info.color) && !used.includes(info.color) ? info.color : COLOR_IDS.find(c => !used.includes(c));
+    used.push(color);
+    return { name, color, bot: false };
+  });
+  const s = newGame({ mode: opts.mode, target: isInt(opts.target) && opts.target >= 5 && opts.target <= 20 ? opts.target : undefined, friendly: !!opts.friendly, seed: gen.rng, players });
+  s.fx = [];
+  const ptr = {}; seats.forEach(u => { ptr[u] = 0; });
+  const applied = [], stale = [], invalid = [];
+  let k = 0;
+  for (;;) {
+    const allowed = allowedAt(s);
+    let pick = null;
+    for (const al of allowed) {
+      const uid = seats[al.p], list = lists[uid];
+      if (!Array.isArray(list)) continue;
+      for (let j = ptr[uid]; j < list.length; j++) {
+        const r = list[j];
+        if (r && typeof r === 'object' && r.k === k && typeof r.a === 'string' && al.acts.includes(r.a)) { pick = { p: al.p, uid, j, rec: r }; break; }
+      }
+      if (pick) break; // allowed is in priority order: the first player with a candidate wins
+    }
+    if (!pick) break;
+    for (let j = ptr[pick.uid]; j < pick.j; j++) stale.push({ p: pick.p, idx: j });
+    ptr[pick.uid] = pick.j + 1;
+    const clean = sanitizeAction(s, pick.p, pick.rec);
+    let res = clean ? applyAction(s, pick.p, clean) : { ok: false, err: 'Rejected' };
+    const fxs = s.fx.splice(0);
+    if (res.ok) { applied.push({ p: pick.p, idx: pick.j, a: pick.rec.a, k, fx: fxs }); k++; }
+    else invalid.push({ p: pick.p, idx: pick.j, a: pick.rec.a, k, err: res.err });
+  }
+  // records that can never apply: skipped earlier (counted above) or carrying a step that has already passed
+  seats.forEach((uid, p) => {
+    const list = lists[uid]; if (!Array.isArray(list)) return;
+    for (let j = ptr[uid]; j < list.length; j++) {
+      const r = list[j];
+      if (!r || typeof r !== 'object' || !isInt(r.k) || r.k < k) stale.push({ p, idx: j });
+    }
+  });
+  const allowed = allowedAt(s);
+  return { state: s, k, seats, applied, stale, invalid, allowed, waitingFor: allowed.filter(a => !a.optional).map(a => a.p) };
+}
+
 return {
   RES, RES_NAME, TERRAIN_NAME, COST, PIPS, DEV_NAME, shuffle, emptyHand, handCount, hasCost,
   newGame, actor, publicVP, hiddenVP, totalVP, tradeRatio, portsOf,
@@ -1069,6 +1241,8 @@ return {
   islandOfVertex, freeBuildPossible,
   doSetupSettlement, doSetupEdge, doRoll, doDiscard, doMoveRobber, doSteal, doGold, doBuild, doEndFreeRoads,
   doBuyDev, doPlayDev, doBankTrade, doTrade, doOffer, doRespond, doMoveShip, doEndTurn,
+  withdrawOffer, doWithdrawOffer: withdrawOffer, MAX_OFFERS,
+  mulberryNext, rand, COLOR_IDS, ACTION_NAMES, sanitizeAction, applyAction, allowedAt, replayCatan,
 };
 
 

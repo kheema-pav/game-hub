@@ -364,6 +364,13 @@ button.card:hover { transform: translateY(-2px); }
 .swatch.back { background: var(--dc); color: #fff; font-size: 10px; }
 .swatch.nob { width: 22px; height: 22px; background: var(--parchment); color: var(--card-ink); }
 
+/* ---------- online ---------- */
+.online-card .row-actions { align-items: center; }
+.notice { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--gilt-soft); border: 1px solid var(--gilt); font-size: 15px; }
+.cdot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--line); }
+.sending { color: var(--muted); font-size: 14px; font-style: italic; }
+.waitbox { max-width: 560px; margin: 0 auto; padding-block: 56px 0; display: grid; gap: 18px; }
+
 @media (max-width: 480px) {
   .bank { gap: 8px; }
   .tok-btn .nm { font-size: 10px; letter-spacing: .04em; }
@@ -943,30 +950,37 @@ let G = null;
 const ui = {
   screen: 'setup', sel: [], hint: null, modal: null, discard: null, nobleChoice: null,
   handoff: false, showOver: true, rules: false, confirmNew: false, lastMove: null, fresh: null, botTimer: null, preview: null,
+  draft: null, notice: '',
+};
+// Online play (see the "Online play" section below). While ON.active nothing here touches local storage.
+const ON = {
+  active: false, code: null, uid: null, me: -1, unsub: null, room: null, players: {}, pending: false, err: null, msg: '',
+  mine: { moves: [] }, built: false, consumed: 0, rec: false, token: 0, deferred: null, flagged: false, badge: false, note: '', shownPending: false, wrote: false,
 };
 
 const isHuman = p => p.type === 'human';
 const curP = () => G.players[G.cur];
 const humanCount = () => G.players.filter(isHuman).length;
-const kindLabel = p => (isHuman(p) ? 'Human' : `Bot · ${LEVEL_LABEL[p.level]}`);
+const kindLabel = p => (ON.active ? (isHuman(p) ? 'You' : 'Online') : isHuman(p) ? 'Human' : `Bot · ${LEVEL_LABEL[p.level]}`);
 const canInteract = () => G && !G.over && ui.screen === 'game' && isHuman(curP()) && !ui.handoff && !ui.discard && !ui.nobleChoice;
 
 // Whose face-down reservations can be shown on this screen.
 function viewerIndex() {
   if (!G || ui.handoff) return -1;
+  if (ON.active) return ON.me; // online: you only ever see your own face-down reservations
   if (isHuman(curP())) return G.cur;
   const humans = G.players.map((p, i) => (isHuman(p) ? i : -1)).filter(i => i >= 0);
   return humans.length === 1 ? humans[0] : -1;
 }
 
 function saveGame() {
-  if (!G) return;
+  if (!G || ON.active) return; // online games never touch the local save
   if (G.over) forget(SAVE_KEY); else store(SAVE_KEY, G);
 }
 
-function addLog(pi, text, tags = {}) {
-  G.log.push({ pi, text, round: G.round, ...tags });
-  if (G.log.length > 200) G.log.shift();
+function addLog(s, pi, text, tags = {}) {
+  s.log.push({ pi, text, round: s.round, ...tags });
+  if (s.log.length > 200) s.log.shift();
 }
 
 const gemList = gems => gems.map(c => GEM_NAME[c]).join(', ');
@@ -996,6 +1010,15 @@ function logTags(m, res) {
     case 'buy': case 'buyR': return { card: res.id };
     default: return {};
   }
+}
+
+// Log lines shared by the local flow and the online replay, so every client writes the same ledger.
+function logReturn(s, pi, back) { addLog(s, pi, `returned ${back.length} token${back.length > 1 ? 's' : ''} (${gemList(back)})`, { lose: back }); }
+function logNoble(s, pi, nid) { addLog(s, pi, `was visited by ${NOBLES[nid].name} (+3 prestige)`, { noble: nid }); }
+function endTurnLogged(s, pi) {
+  const before = s.finalRound;
+  endTurn(s);
+  if (!before && s.finalRound) addLog(s, pi, `reached ${s.players[pi].pts} prestige. Final round: everyone gets an equal number of turns.`);
 }
 
 function previewText(m) {
@@ -1137,7 +1160,7 @@ function perform(m) {
   const pi = G.cur;
   const res = applyMove(G, pi, m);
   const text = describe(m, res);
-  addLog(pi, text, logTags(m, res));
+  addLog(G, pi, text, logTags(m, res));
   ui.lastMove = { pi, text };
   ui.fresh = (m.t === 'buy' || m.t === 'reserve') ? `${m.lv}-${m.i}` : null;
   ui.sel = []; ui.hint = null; ui.modal = null;
@@ -1147,6 +1170,13 @@ function perform(m) {
 }
 
 function humanAct(m) {
+  if (ON.active) {
+    // Online: play the engine's own legal-move object (gems in COLORS order) and start composing this turn's record.
+    m = matchLegal(G, G.cur, m);
+    if (!m) { snd('error'); return; }
+    ON.msg = ''; ON.note = '';
+    ui.draft = { a: recordAction(m), ret: null, noble: null };
+  }
   withFx(G.cur, () => {
     const pi = perform(m);
     if (tokenCount(G.players[pi]) > TOKEN_LIMIT) { ui.discard = emptyTokens(); render(); return; }
@@ -1164,7 +1194,7 @@ function resolveNobles(pi) {
 
 function visit(pi, nid) {
   claimNoble(G, pi, nid);
-  addLog(pi, `was visited by ${NOBLES[nid].name} (+3 prestige)`, { noble: nid });
+  logNoble(G, pi, nid);
   const nd = isHuman(G.players[pi]) ? 250 : botLag() + 400;
   later(nd, () => snd('chime', botVol(pi)));
   later(nd + 100, () => snd('score', botVol(pi)));
@@ -1172,10 +1202,8 @@ function visit(pi, nid) {
 }
 
 function finishTurn() {
-  const before = G.finalRound;
   const pi = G.cur;
-  endTurn(G);
-  if (!before && G.finalRound) addLog(pi, `reached ${G.players[pi].pts} prestige. Final round: everyone gets an equal number of turns.`);
+  endTurnLogged(G, pi);
   ui.nobleChoice = null; ui.discard = null;
   if (G.over) { ui.showOver = true; overSound(pi); }
   else {
@@ -1183,7 +1211,7 @@ function finishTurn() {
     // Your turn: control passed from a different player to a human (in pass-and-play, as the hand-off screen appears).
     if (isHuman(curP()) && G.cur !== pi) later(isHuman(G.players[pi]) ? 0 : sndEnd + 200, () => snd('chime'));
   }
-  saveGame();
+  if (ON.active) commitTurn(); else saveGame();
   render();
   scheduleBot();
 }
@@ -1195,13 +1223,14 @@ function overSound(pi) {
 
 function scheduleBot() {
   clearTimeout(ui.botTimer);
+  if (ON.active) return;
   if (!G || G.over || ui.screen !== 'game' || isHuman(curP())) return;
   ui.botTimer = setTimeout(botTurn, pace().think);
 }
 
 // A bot turn shows its choice on the board first, then plays it out.
 function botTurn() {
-  if (!G || G.over || isHuman(curP())) return;
+  if (ON.active || !G || G.over || isHuman(curP())) return;
   const game = G, pi = G.cur;
   const m = botChoose(G, pi);
   ui.preview = { pi, m };
@@ -1213,7 +1242,7 @@ function botTurn() {
       perform(m);
       const returned = botDiscard(G, pi);
       if (returned.length) {
-        addLog(pi, `returned ${returned.length} token${returned.length > 1 ? 's' : ''} (${gemList(returned)})`, { lose: returned });
+        logReturn(G, pi, returned);
         ui.lastMove.text += ` and returned ${gemList(returned)}`;
         returnSound(pi);
       }
@@ -1225,6 +1254,7 @@ function botTurn() {
 }
 
 function startGame(seats) {
+  if (ON.active) return;
   clearTimeout(ui.botTimer);
   G = newGame(seats);
   Object.assign(ui, { preview: null, screen: 'game', sel: [], hint: null, modal: null, discard: null, nobleChoice: null, showOver: true, rules: false, confirmNew: false, lastMove: null, fresh: null });
@@ -1324,6 +1354,15 @@ function renderSetup() {
       </div>
       <p class="fineprint">With two or more human seats, the game pauses between turns so you can pass the device and keep face-down reservations private.</p>
     </div>
+    ${onlineAvailable() ? `<div class="setup-card online-card">
+      <div class="field"><span class="label">Online</span>
+        <p class="fineprint">Play with friends, each on their own phone. Create a game and share the six-digit code, or join a friend's game with theirs. Games wait for you, so you can close the page between turns.</p></div>
+      <div class="row-actions">
+        <button class="btn primary" data-act="online-open">Create online game</button>
+        <button class="btn" data-act="online-open">Join with a code</button>
+      </div>
+    </div>` : ''}
+    ${ui.notice ? `<p class="notice" role="status">${esc(ui.notice)}</p>` : ''}
   </div>${ui.rules ? rulesDialog() : ''}`;
 }
 
@@ -1371,6 +1410,7 @@ function barHTML(withRecap = true) {
   if (G.over) status = '<b>Game over.</b>';
   else if (ui.handoff) status = `Waiting for <b>${esc(p.name)}</b>.`;
   else if (isHuman(p)) status = `<b>${esc(p.name)}</b>, it’s your turn. Take gems from the bank, or tap a card to buy or reserve it.`;
+  else if (ON.active) status = `Waiting for <b>${esc(p.name)}</b>.`;
   else if (ui.preview) status = `<b class="who">${esc(p.name)}</b> ${esc(previewText(ui.preview.m))}.`;
   else status = `<b>${esc(p.name)}</b> is thinking<span class="thinking"></span>`;
   const last = withRecap ? lastMoveHTML() : '';
@@ -1385,7 +1425,19 @@ function barHTML(withRecap = true) {
       ${ui.sel.length ? '<button class="btn small ghost" data-act="clear">Clear</button>' : ''}
       <button class="btn small primary" data-act="take" ${m ? '' : 'disabled'}>Take gems</button></div>`;
   }
-  return `<div class="bar" aria-live="polite"><div class="status">${status}</div>${last}${pick}${ui.hint ? `<div class="hint">${esc(ui.hint)}</div>` : ''}</div>`;
+  const net = !ON.active ? '' : [
+    ON.msg ? `<div class="hint">${esc(ON.msg)}</div>` : '',
+    ON.err ? `<div class="hint">${ON.err.code === 'offline' ? 'You are offline. Moves are sent when you reconnect.' : 'Having trouble reaching the game server.'}</div>` : '',
+    ON.pending && !ON.err ? '<div class="sending">Sending…</div>' : '',
+    ON.note ? `<div class="last">${esc(ON.note)}</div>` : '',
+  ].join('');
+  return `<div class="bar" aria-live="polite"><div class="status">${status}</div>${last}${pick}${ui.hint ? `<div class="hint">${esc(ui.hint)}</div>` : ''}${net}</div>`;
+}
+
+// One ledger line. System lines (a rejected online move) name the offender inside the sentence.
+function logLine(e) {
+  const name = esc(G.players[e.pi].name);
+  return e.sys ? `A move from <b>${name}</b> ${esc(e.text)}` : `<b>${name}</b> ${esc(e.text)}`;
 }
 
 // Every log entry since this player's own latest one.
@@ -1406,7 +1458,7 @@ function recapHTML(pi) {
     (e.gain || []).forEach(c => tags.push(mini(c)));
     (e.lose || []).forEach(c => tags.push(mini(c, 'minus')));
     if (e.noble != null) tags.push('<span class="swatch nob">3</span>');
-    return `<li><span><b>${esc(G.players[e.pi].name)}</b> ${esc(e.text)}</span>${tags.length ? `<span class="tags" aria-hidden="true">${tags.join('')}</span>` : ''}</li>`;
+    return `<li><span>${logLine(e)}</span>${tags.length ? `<span class="tags" aria-hidden="true">${tags.join('')}</span>` : ''}</li>`;
   }).join('');
   return `<div class="recap"><span class="label">Since your last turn</span><ol>${rows}</ol></div>`;
 }
@@ -1427,7 +1479,7 @@ function playerHTML(p, i, vi) {
   }).join('');
   return `<article class="pl${turn ? ' is-turn' : ''}" data-pi="${i}">
     <div class="pl-head">
-      <div class="pl-who"><div class="pl-name">${turn ? '<span class="turn-dot" aria-hidden="true"></span>' : ''}${esc(p.name)}</div><div class="pl-kind">${kindLabel(p)}</div></div>
+      <div class="pl-who"><div class="pl-name">${turn ? '<span class="turn-dot" aria-hidden="true"></span>' : ''}${ON.active && safeColor(p.color) ? `<span class="cdot" style="background:${safeColor(p.color)}" aria-hidden="true"></span>` : ''}${esc(p.name)}</div><div class="pl-kind">${kindLabel(p)}</div></div>
       <div class="pl-pts"><b>${p.pts}</b><span>prestige</span></div>
     </div>
     <div class="pl-gems" aria-label="Bonuses (cards) and tokens">${gems}</div>
@@ -1438,7 +1490,7 @@ function playerHTML(p, i, vi) {
 }
 
 function logHTML() {
-  const items = G.log.slice(-60).reverse().map(e => `<li><span class="r">R${e.round}</span><b>${esc(G.players[e.pi].name)}</b> ${esc(e.text)}</li>`).join('');
+  const items = G.log.slice(-60).reverse().map(e => `<li><span class="r">R${e.round}</span>${logLine(e)}</li>`).join('');
   return `<section class="log"><h2>Ledger</h2><ol>${items || '<li>No moves yet.</li>'}</ol></section>`;
 }
 
@@ -1468,7 +1520,7 @@ function renderGame() {
     : `<div class="players">${G.players.map((p, i) => playerHTML(p, i, vi)).join('')}</div>${logHTML()}`;
   return `<header class="top">
       <span class="wordmark">Splendor</span>
-      <span class="round">Round ${G.round}</span>
+      <span class="round">Round ${G.round}${ON.active ? ` · Room ${fmtCode(ON.code)}` : ''}</span>
       ${G.finalRound && !G.over ? '<span class="pill">Final round</span>' : ''}
       ${G.over ? '<span class="pill">Game over</span>' : ''}
       <span class="spacer"></span>
@@ -1585,16 +1637,21 @@ function overDialog() {
     ${note ? `<p class="muted">${note}</p>` : ''}
     <table class="standings"><thead><tr><th>Player</th><th class="n">Prestige</th><th class="n">Cards</th><th class="n">Nobles</th></tr></thead><tbody>${body}</tbody></table>
     <p class="muted">Finished after ${G.round} round${G.round > 1 ? 's' : ''}.</p>
-    <div class="dlg-actions">
+    ${ON.active ? `<div class="dlg-actions">
+      <button class="btn ghost" data-act="hide-over">See the board</button>
+      <button class="btn primary" data-act="leave">Leave game</button>
+    </div>` : `<div class="dlg-actions">
       <button class="btn ghost" data-act="hide-over">See the board</button>
       <button class="btn" data-act="setup">Change players</button>
       <button class="btn primary" data-act="rematch">Play again</button>
-    </div>`;
+    </div>`}`;
 }
 
 function overlays() {
   const wrap = (inner, label, closable) => `<div class="scrim" ${closable ? 'data-act="close"' : ''}><div class="dialog" data-act="noop" role="dialog" aria-modal="true" aria-label="${label}">${inner}</div></div>`;
   if (ui.rules) return rulesDialog();
+  if (ui.confirmNew && ON.active) return wrap(`<h2>Leave this game?</h2><p>The game keeps going for the others, and it stays in the hub's Online list. Come back any time with the code ${esc(fmtCode(ON.code))}.</p>
+    <div class="dlg-actions"><button class="btn ghost" data-act="close">Keep playing</button><button class="btn primary" data-act="leave">Leave game</button></div>`, 'Leave game', true);
   if (ui.confirmNew) return wrap(`<h2>Leave this game?</h2><p>The current game will be lost.</p>
     <div class="dlg-actions"><button class="btn ghost" data-act="close">Keep playing</button><button class="btn" data-act="setup">Change players</button><button class="btn primary" data-act="rematch">Restart, same players</button></div>`, 'Leave game', true);
   if (G.over && ui.showOver) return wrap(overDialog(), 'Results', false);
@@ -1612,9 +1669,10 @@ function overlays() {
 }
 
 function render() {
-  app.innerHTML = ui.screen === 'setup' ? renderSetup() : renderGame();
+  app.innerHTML = ui.screen === 'setup' ? renderSetup() : ui.screen === 'online' ? renderConnecting() : renderGame();
   ui.fresh = null;
-  HubKit.setFloating(ui.screen === 'setup');
+  HubKit.setFloating(ui.screen !== 'game');
+  if (ON.active) { signals(); if (ON.deferred && !drafting()) queueMicrotask(flushDeferred); }
 }
 
 // ---------- menu actions (shared by the hub menu and the click handler) ----------
@@ -1625,11 +1683,12 @@ function cyclePace() {
 }
 
 function newGameClick() {
-  if (!G) return;
+  if (!G || ON.active) return;
   if (G.over) { ui.screen = 'setup'; G = null; render(); } else { ui.confirmNew = true; render(); }
 }
 
 function resumeSaved() {
+  if (ON.active) return;
   const saved = load(SAVE_KEY);
   if (!saved || !Array.isArray(saved.players)) { render(); return; }
   G = saved;
@@ -1644,6 +1703,12 @@ HubKit.init({
   id: 'gems', name: 'Splendor', accent: { light: '#94680f', dark: '#d9ae52' }, scheme: 'auto', floating: true,
   items: () => {
     const openRules = () => { ui.rules = true; render(); };
+    if (ON.active) {
+      const items = [{ label: 'Rules', onSelect: openRules }];
+      if (ON.code) items.push({ label: 'Game code', value: fmtCode(ON.code), onSelect: copyLink });
+      items.push({ label: 'Leave game', onSelect: leaveClick });
+      return items;
+    }
     if (ui.screen === 'setup' || !G) return [{ label: 'How to play', onSelect: openRules }];
     const items = [
       { label: 'Rules', onSelect: openRules },
@@ -1671,7 +1736,10 @@ app.addEventListener('click', e => {
       if (!wasHuman && d.k === 'human' && BOT_NAMES.includes(s.name)) s.name = `Player ${+d.i + 1}`;
       store(SETUP_KEY, setup); render(); return;
     }
-    case 'start': store(SETUP_KEY, setup); startGame(seatsFromSetup()); return;
+    case 'start': ui.notice = ''; store(SETUP_KEY, setup); startGame(seatsFromSetup()); return;
+    case 'online-open': openOnlineLobby(); return;
+    case 'leave': leaveOnline(); return;
+    case 'retry': beginOnline(ON.code, ON.uid); return;
     case 'resume': resumeSaved(); return;
     case 'rules': ui.rules = true; render(); return;
     case 'close': ui.rules = false; ui.modal = null; ui.confirmNew = false; render(); return;
@@ -1707,21 +1775,23 @@ app.addEventListener('click', e => {
       const p = curP(), pi = G.cur;
       const back = [];
       for (const c of TOKENS) for (let k = 0; k < ui.discard[c]; k++) back.push(c);
+      if (ON.active && ui.draft) ui.draft.ret = { ...ui.discard };
       ui.discard = null;
       render(); // close the dialog so the tokens can be seen leaving the ledger
       withFx(pi, () => {
         for (const c of back) { p.tokens[c]--; G.bank[c]++; }
-        addLog(pi, `returned ${back.length} token${back.length > 1 ? 's' : ''} (${gemList(back)})`, { lose: back });
+        logReturn(G, pi, back);
         returnSound(pi);
         resolveNobles(pi);
       });
       return;
     }
-    case 'noble': { ui.nobleChoice = null; const pi = G.cur; render(); withFx(pi, () => { visit(pi, +d.n); finishTurn(); }); return; }
+    case 'noble': { ui.nobleChoice = null; if (ON.active && ui.draft) ui.draft.noble = +d.n; const pi = G.cur; render(); withFx(pi, () => { visit(pi, +d.n); finishTurn(); }); return; }
     case 'handoff': ui.handoff = false; render(); return;
     case 'newgame': newGameClick(); return;
-    case 'setup': clearTimeout(ui.botTimer); forget(SAVE_KEY); G = null; ui.screen = 'setup'; ui.confirmNew = false; render(); return;
+    case 'setup': if (ON.active) return; clearTimeout(ui.botTimer); forget(SAVE_KEY); G = null; ui.screen = 'setup'; ui.confirmNew = false; render(); return;
     case 'rematch': {
+      if (ON.active) return;
       // Same players; the seat order rotates so a different player starts.
       const ps = G.players.map(p => ({ name: p.name, type: p.type, level: p.level }));
       ps.push(ps.shift());
