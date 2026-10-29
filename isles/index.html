@@ -1118,6 +1118,8 @@ const ACTIONS = {
       if (a.length < 1 || a.length > 2 || !DEV_PLAYABLE.includes(a[0])) return null;
       const type = a[0], o = a[1];
       if (o !== undefined && o !== null && (typeof o !== 'object' || Array.isArray(o))) return null;
+      const ok = o ? Object.keys(o) : [];
+      if (type === 'plenty' || type === 'mono' ? (ok.length !== 1 || ok[0] !== 'res') : ok.length) return null; // no unknown keys
       if (type === 'plenty') {
         if (!o || !Array.isArray(o.res) || o.res.length !== 2 || !isRes(o.res[0]) || !isRes(o.res[1])) return null;
         return { type, args: { res: [o.res[0], o.res[1]] } };

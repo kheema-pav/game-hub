@@ -955,7 +955,7 @@ const ui = {
 // Online play (see the "Online play" section below). While ON.active nothing here touches local storage.
 const ON = {
   active: false, code: null, uid: null, me: -1, unsub: null, room: null, players: {}, pending: false, err: null, msg: '',
-  mine: { moves: [] }, built: false, consumed: 0, rec: false, token: 0, deferred: null, flagged: false, badge: false, note: '', shownPending: false, wrote: false,
+  mine: { moves: [] }, built: false, consumed: 0, rec: false, token: 0, deferred: null, flagged: false, badge: false, note: '', shownPending: false, wrote: false, fatal: '',
 };
 
 const isHuman = p => p.type === 'human';
@@ -1172,7 +1172,7 @@ function perform(m) {
 function humanAct(m) {
   if (ON.active) {
     // Online: play the engine's own legal-move object (gems in COLORS order) and start composing this turn's record.
-    m = matchLegal(G, G.cur, m);
+    m = humanActOnline(m);
     if (!m) { snd('error'); return; }
     ON.msg = ''; ON.note = '';
     ui.draft = { a: recordAction(m), ret: null, noble: null };
@@ -1195,10 +1195,14 @@ function resolveNobles(pi) {
 function visit(pi, nid) {
   claimNoble(G, pi, nid);
   logNoble(G, pi, nid);
+  nobleSound(pi);
+  ui.lastMove = { pi, text: `${ui.lastMove ? ui.lastMove.text + ', then was' : 'was'} visited by ${NOBLES[nid].name}` };
+}
+
+function nobleSound(pi) {
   const nd = isHuman(G.players[pi]) ? 250 : botLag() + 400;
   later(nd, () => snd('chime', botVol(pi)));
   later(nd + 100, () => snd('score', botVol(pi)));
-  ui.lastMove = { pi, text: `${ui.lastMove ? ui.lastMove.text + ', then was' : 'was'} visited by ${NOBLES[nid].name}` };
 }
 
 function finishTurn() {
@@ -1672,7 +1676,7 @@ function render() {
   app.innerHTML = ui.screen === 'setup' ? renderSetup() : ui.screen === 'online' ? renderConnecting() : renderGame();
   ui.fresh = null;
   HubKit.setFloating(ui.screen !== 'game');
-  if (ON.active) { signals(); if (ON.deferred && !drafting()) queueMicrotask(flushDeferred); }
+  if (ON.active) { ON.shownPending = ON.pending; signals(); if (ON.deferred && !drafting()) queueMicrotask(flushDeferred); }
 }
 
 // ---------- menu actions (shared by the hub menu and the click handler) ----------
@@ -1697,6 +1701,334 @@ function resumeSaved() {
   // A save made mid-discard or mid-noble choice resumes at that step.
   if (isHuman(curP()) && tokenCount(curP()) > TOKEN_LIMIT) ui.discard = emptyTokens();
   render(); scheduleBot();
+}
+
+// ---------- Online play ----------
+// Spec: docs/online-splendor.md (amendments win). The room (seed, seats) and each player's own move list come from
+// HubOnline.rooms.watch. Every client rebuilds the whole game from the seed and those lists, checking every record, so all
+// screens agree; an illegal record is skipped and noted in the ledger. A turn is one record:
+//   { a: action, ret: {w,u,g,r,k,o} | null (tokens returned over 10), noble: id | null (only when several qualify) }
+// Nothing in this section touches local storage, starts a bot or shows the pass-and-play hand-off.
+// Accepted limits: after "reserve from deck" the player sees the hidden card before the turn is sent and could reload to
+// redo it; a turn that has not reached the server when the page closes is lost; face-down reservations of other players
+// are technically readable from the seed (they are shown as backs).
+const OL = { game: 'gems', name: 'Splendor', accent: { light: '#94680f', dark: '#d9ae52' } };
+const onlineAvailable = () => { try { return !!(window.HubOnline && window.HubLobby && HubOnline.available()); } catch (e) { return false; } };
+const fmtCode = c => (c && c.length === 6 ? `${c.slice(0, 3)} ${c.slice(3)}` : (c || ''));
+const safeColor = c => (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c) ? c : '');
+const roomLink = code => `${location.origin}${location.pathname}?room=${code}`;
+
+// Canonical key of an action: t|lv|i|c|gems (gems in COLORS order, as legalMoves produces them).
+const moveKey = m => [m.t, m.lv == null ? '' : m.lv, m.i == null ? '' : m.i, m.c == null ? '' : m.c, Array.isArray(m.gems) ? m.gems.join('') : ''].join('|');
+// The engine's own move object for an action, or null when it is not legal. 'pass' is only legal with no other move.
+function matchLegal(s, pi, m) {
+  if (!m || typeof m !== 'object') return null;
+  const legal = legalMoves(s, pi);
+  if (m.t === 'pass') return legal.length ? null : { t: 'pass' };
+  const k = moveKey(m);
+  return legal.find(x => moveKey(x) === k) || null;
+}
+// Gems tapped in any order become COLORS order before matching (the UI path); records must already be canonical.
+function canonical(m) {
+  return m && m.t === 'take' && Array.isArray(m.gems) ? { ...m, gems: m.gems.slice().sort((a, b) => COLORS.indexOf(a) - COLORS.indexOf(b)) } : m;
+}
+function recordAction(m) {
+  const o = { t: m.t };
+  if (m.lv != null) o.lv = m.lv;
+  if (m.i != null) o.i = m.i;
+  if (m.c != null) o.c = m.c;
+  if (Array.isArray(m.gems)) o.gems = m.gems.slice();
+  return o;
+}
+function humanActOnline(m) { return matchLegal(G, G.cur, canonical(m)); }
+
+// Tokens to give back, in TOKENS order. null when malformed. `need` is the exact number to return (0 when not over the limit).
+function readReturn(p, ret, need) {
+  if (ret == null) return need === 0 ? [] : null;
+  if (typeof ret !== 'object' || Array.isArray(ret)) return null;
+  if (Object.keys(ret).some(k => !TOKENS.includes(k))) return null;
+  const back = [];
+  for (const c of TOKENS) {
+    const n = ret[c] === undefined ? 0 : ret[c];
+    if (!Number.isInteger(n) || n < 0 || n > p.tokens[c]) return null;
+    for (let k = 0; k < n; k++) back.push(c);
+  }
+  return back.length === need ? back : null;
+}
+
+// Plays one whole turn record on `s` (a private copy). Returns what happened, or null when any part is illegal, in which
+// case the caller discards the copy: a record is accepted or ignored as a whole.
+function playRecord(s, pi, rec) {
+  try {
+    if (!rec || typeof rec !== 'object') return null;
+    const m = matchLegal(s, pi, rec.a);
+    if (!m) return null;
+    const p = s.players[pi];
+    const res = applyMove(s, pi, m);
+    let text = describe(m, res);
+    addLog(s, pi, text, logTags(m, res));
+    const back = readReturn(p, rec.ret, Math.max(0, tokenCount(p) - TOKEN_LIMIT));
+    if (!back) return null;
+    if (back.length) {
+      for (const c of back) { p.tokens[c]--; s.bank[c]++; }
+      logReturn(s, pi, back);
+      text += ` and returned ${gemList(back)}`;
+    }
+    const el = eligibleNobles(s, p);
+    let nid = null;
+    if (el.length > 1) { if (!el.includes(rec.noble)) return null; nid = rec.noble; }
+    else if (el.length === 1) nid = el[0];
+    else if (rec.noble != null) return null;
+    if (nid != null) { claimNoble(s, pi, nid); logNoble(s, pi, nid); text = `${text}, then was visited by ${NOBLES[nid].name}`; }
+    endTurnLogged(s, pi);
+    return { pi, m, res, back, noble: nid, text, fresh: (m.t === 'buy' || m.t === 'reserve') ? `${m.lv}-${m.i}` : null };
+  } catch (e) { return null; }
+}
+
+// Rebuild the game from the room. `movesOf(uid)` gives that player's record list. Seats are the room's uids sorted, the
+// random draws follow the seed (decks I, II, III, nobles, then the turn order), seat 0 starts.
+function buildOnline(room, movesOf, myUid) {
+  const seats = (room && room.seats) || {};
+  const uids = Object.keys(seats).sort();
+  const n = uids.length;
+  if (n < 2 || n > 4 || typeof room.seed !== 'number') return null;
+  const r = rng(room.seed);
+  let s = newGame(uids.map(() => ({ name: '', type: 'remote', level: null })), r);
+  const order = sshuffle(uids, r);
+  const base = uids.map((u, i) => String((seats[u] && seats[u].name) || '').replace(/\s+/g, ' ').trim().slice(0, 16) || `Player ${i + 1}`);
+  const nameOf = {};
+  uids.forEach((u, i) => {
+    const k = base.slice(0, i).filter(x => x.toLowerCase() === base[i].toLowerCase()).length;
+    nameOf[u] = k ? `${base[i]} ${k + 1}` : base[i];
+  });
+  s.players.forEach((p, i) => {
+    const u = order[i];
+    p.uid = u; p.name = nameOf[u]; p.color = seats[u] && seats[u].color;
+    p.type = u === myUid ? 'human' : 'remote'; p.level = null;
+  });
+  const moves = order.map(u => { const m = movesOf(u); return Array.isArray(m) ? m : []; });
+  const ptr = order.map(() => 0);
+  let consumed = 0, lastInfo = null;
+  while (!s.over) {
+    const i = s.cur;
+    let got = false;
+    while (ptr[i] < moves[i].length) {
+      const rec = moves[i][ptr[i]++];
+      consumed++;
+      const next = cloneFull(s);
+      const info = playRecord(next, i, rec);
+      if (info) { s = next; lastInfo = info; got = true; break; }
+      lastInfo = null;
+      addLog(s, i, 'broke the rules and was ignored.', { sys: true });
+    }
+    if (!got) break;
+  }
+  return { G: s, me: order.indexOf(myUid), consumed, lastInfo };
+}
+
+// ---- my own turn records ----
+// My list is the longer of the server's copy and what this device has composed (a turn shows at once, before the server
+// confirms it). If the server refuses a write, the overlay is dropped and the game is rebuilt from what the server holds.
+function mineMoves() {
+  const d = ON.players[ON.uid] || {}, sm = Array.isArray(d.moves) ? d.moves : [];
+  return ON.mine.moves.length > sm.length ? ON.mine.moves : sm;
+}
+const turnSummary = () => ({ phase: G.over ? 'over' : 'play', next: G.over ? null : G.players[G.cur].uid });
+function flush() {
+  const code = ON.code, tok = ON.token;
+  HubOnline.rooms.writeMine(code, { moves: mineMoves(), turn: turnSummary() }).then(() => {}, e => {
+    if (tok !== ON.token || !ON.active) return;
+    if (e && e.code === 'denied') {
+      ON.mine = { moves: [] }; ON.msg = "That move couldn't be saved. Please try again.";
+      if (drafting()) ON.deferred = { room: ON.room, players: ON.players, pending: false }; else refresh();
+    }
+  });
+}
+// Called from finishTurn once the whole turn (action, returns, noble, end of turn) has been played locally.
+function commitTurn() {
+  const d = ui.draft;
+  ui.draft = null;
+  if (!d) return;
+  const rec = { a: d.a, ret: d.ret && TOKENS.some(c => d.ret[c]) ? d.ret : null, noble: d.noble == null ? null : d.noble };
+  ON.mine.moves = [...mineMoves(), rec];
+  ON.consumed++;
+  ON.pending = true;
+  flush();
+  recordIfOver();
+}
+
+// ---- watching the room ----
+const drafting = () => ON.active && !!(ui.draft || ui.discard || ui.nobleChoice || ui.sel.length || ui.modal);
+function flushDeferred() {
+  if (!ON.active || !ON.deferred || drafting()) return;
+  const snap = ON.deferred;
+  ON.deferred = null;
+  consume(snap);
+}
+function onSnap(snap) {
+  if (snap.error) {
+    ON.err = snap.error;
+    if (!G) { ON.fatal = snap.error.code === 'offline' ? "You're offline. Reconnect and try again." : "Couldn't reach the game server."; if (ui.screen === 'online') render(); }
+    else if (!drafting()) render();
+    return;
+  }
+  const hadErr = !!ON.err;
+  ON.err = null;
+  if (!snap.room) {
+    if (!G) { ON.fatal = 'No game with that code.'; render(); }
+    return;
+  }
+  if (drafting()) { ON.deferred = snap; return; }
+  consume(snap, hadErr);
+}
+function consume(snap, hadErr) {
+  ON.room = snap.room; ON.players = snap.players || {}; ON.pending = !!snap.pending;
+  const code = ON.code;
+  if (!(ON.room.seats && ON.room.seats[ON.uid])) {
+    leaveOnline();
+    HubLobby.notSeated(code, { gameName: OL.name, accent: OL.accent });
+    return;
+  }
+  if (ON.room.status !== 'playing') { leaveOnline(); enterRoom(code); return; }
+  refresh(hadErr);
+}
+function refresh(forceRender) {
+  const movesOf = u => (u === ON.uid ? mineMoves() : ((ON.players[u] || {}).moves || []));
+  const b = buildOnline(ON.room, movesOf, ON.uid);
+  if (!b || b.me < 0) { ON.fatal = "This game can't be shown."; G = null; ON.built = false; ui.screen = 'online'; render(); return; }
+  const first = !ON.built, old = G;
+  const wasMine = !first && !!old && !old.over && old.cur === ON.me;
+  ON.me = b.me;
+  let changed = false;
+  if (first) {
+    changed = true;
+    G = b.G; ON.consumed = b.consumed; ON.built = true;
+    Object.assign(ui, { screen: 'game', sel: [], hint: null, modal: null, discard: null, nobleChoice: null, handoff: false, showOver: true, confirmNew: false, preview: null, draft: null, fresh: null });
+    ui.lastMove = b.lastInfo ? { pi: b.lastInfo.pi, text: b.lastInfo.text } : null;
+    render();
+  } else if (b.consumed === ON.consumed && fingerprint(b.G) === fingerprint(old)) {
+    // nothing new: keep the current state so the sounds and flights of my own move are not cut off
+  } else {
+    changed = true;
+    if (b.consumed <= ON.consumed) console.warn('Splendor online: the rebuilt game differs from the one on screen', b.consumed, ON.consumed);
+    const info = b.lastInfo;
+    const animate = b.consumed === ON.consumed + 1 && info && info.pi !== ON.me;
+    ON.consumed = b.consumed;
+    sndEnd = 0;
+    if (animate) {
+      withFx(info.pi, () => {
+        G = b.G;
+        Object.assign(ui, { sel: [], hint: null, modal: null, preview: null });
+        ui.lastMove = { pi: info.pi, text: info.text };
+        ui.fresh = info.fresh;
+        moveSounds(info.pi, info.m, info.res);
+        if (info.back.length) returnSound(info.pi);
+        if (info.noble != null) nobleSound(info.pi);
+        if (G.over) { ui.showOver = true; overSound(info.pi); }
+        render();
+      });
+    } else {
+      G = b.G;
+      Object.assign(ui, { sel: [], hint: null, modal: null, preview: null, discard: null, nobleChoice: null, draft: null, fresh: null });
+      if (info) ui.lastMove = { pi: info.pi, text: info.text };
+      if (G.over && !old.over) { ui.showOver = true; overSound(G.cur); }
+      render();
+    }
+  }
+  const mineNow = !G.over && G.cur === ON.me;
+  if (changed && !first && !wasMine && mineNow) { later(sndEnd + 200, () => snd('chime')); ON.flagged = true; }
+  if (!mineNow) ON.flagged = false;
+  recordIfOver();
+  if (!ON.wrote) { // the hub reads the turn summary from my own document, so make sure it exists
+    ON.wrote = true;
+    if (!ON.players[ON.uid] && !ON.mine.moves.length) flush();
+  }
+  if (!changed && (forceRender || ON.pending !== ON.shownPending)) render();
+  ON.shownPending = ON.pending;
+  signals();
+}
+function recordIfOver() {
+  if (!ON.active || !G || !G.over || ON.rec || ON.me < 0) return;
+  ON.rec = true;
+  try {
+    const row = standings(G).find(r => r.i === ON.me);
+    if (row && HubKit.recordResult) HubKit.recordResult(OL.game, `${ON.uid}:${ON.code}`, { won: !!row.winner, score: G.players[ON.me].pts });
+  } catch (e) { /* stats are optional */ }
+}
+function signals() {
+  const on = ON.active && ON.flagged && G && !G.over && G.cur === ON.me;
+  const t = on ? 'Your turn · Splendor' : 'Splendor';
+  if (document.title !== t) document.title = t;
+  if (on !== ON.badge) { ON.badge = on; try { if (HubKit.setBadge) HubKit.setBadge(on); } catch (e) { /* optional */ } }
+}
+
+// ---- entering and leaving ----
+function resetOn() {
+  Object.assign(ON, { active: false, code: null, uid: null, me: -1, room: null, players: {}, pending: false, err: null, msg: '', mine: { moves: [] }, built: false,
+    consumed: 0, rec: false, deferred: null, flagged: false, note: '', shownPending: false, wrote: false, fatal: '' });
+}
+function stopWatch() {
+  ON.token++;
+  if (ON.unsub) { try { ON.unsub(); } catch (e) { /* already stopped */ } ON.unsub = null; }
+}
+function openOnlineLobby() {
+  ui.notice = '';
+  HubLobby.openCreateJoin({ game: OL.game, gameName: OL.name, seatOptions: [2, 3, 4], accent: OL.accent, onRoom: enterRoom });
+}
+// HubLobby looks the room up, joins, shows the waiting room and calls back when the game is on.
+function enterRoom(code) {
+  ui.notice = '';
+  try { history.replaceState(null, '', `${location.pathname}?room=${code}`); } catch (e) { /* ignore */ }
+  HubLobby.enter(code, { game: OL.game, gameName: OL.name, minToStart: 2, accent: OL.accent, onPlay: c => beginOnline(c.code, c.uid), onExit: exitLobby });
+}
+function exitLobby() {
+  try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
+  if (!ON.active) render();
+}
+function beginOnline(code, uid) {
+  stopWatch();
+  clearTimeout(ui.botTimer);
+  resetOn();
+  Object.assign(ON, { active: true, code, uid });
+  G = null;
+  Object.assign(ui, { screen: 'online', sel: [], hint: null, modal: null, discard: null, nobleChoice: null, handoff: false, showOver: true, rules: false, confirmNew: false, lastMove: null, fresh: null, preview: null, draft: null, notice: '' });
+  try { history.replaceState(null, '', `${location.pathname}?room=${code}`); } catch (e) { /* ignore */ }
+  render();
+  const tok = ON.token;
+  ON.unsub = HubOnline.rooms.watch(code, snap => { if (tok === ON.token) onSnap(snap); });
+}
+function leaveClick() {
+  if (G && !G.over && ui.screen === 'game') { ui.confirmNew = true; render(); } else leaveOnline();
+}
+function leaveOnline() {
+  stopWatch();
+  const wasActive = ON.active;
+  resetOn();
+  try { document.title = 'Splendor'; if (HubKit.setBadge) HubKit.setBadge(false); } catch (e) { /* optional */ }
+  try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
+  try { HubLobby.close(); } catch (e) { /* optional */ }
+  clearTimeout(ui.botTimer);
+  G = null;
+  Object.assign(ui, { screen: 'setup', sel: [], hint: null, modal: null, discard: null, nobleChoice: null, handoff: false, showOver: true, rules: false, confirmNew: false, lastMove: null, fresh: null, preview: null, draft: null });
+  if (wasActive) render();
+}
+async function copyLink() {
+  if (!ON.code) return;
+  let ok = false;
+  try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(roomLink(ON.code)); ok = true; } } catch (e) { /* fall through */ }
+  ON.note = ok ? 'Link copied.' : `Share this link: ${roomLink(ON.code)}`;
+  if (!drafting()) render();
+  setTimeout(() => { if (ON.note) { ON.note = ''; if (ON.active && !drafting()) render(); } }, 3000);
+}
+function renderConnecting() {
+  return `<div class="waitbox">
+    <div><h1 class="wordmark">Splendor</h1></div>
+    <div class="setup-card">
+      <span class="label">Online game ${esc(fmtCode(ON.code))}</span>
+      <p class="lede" style="margin:0" role="status">${esc(ON.fatal || 'Connecting to the game server…')}</p>
+      <div class="row-actions">${ON.fatal ? '<button class="btn primary" data-act="retry">Try again</button>' : ''}<button class="btn" data-act="leave">Leave</button></div>
+    </div>
+  </div>${ui.rules ? rulesDialog() : ''}`;
 }
 
 HubKit.init({
@@ -1819,8 +2151,18 @@ document.addEventListener('keydown', e => {
 });
 
 // ---------- boot (keeps a game in progress across live page updates) ----------
-window.claude?.hot?.snapshot?.(() => ({ G, screen: ui.screen, lastMove: ui.lastMove, handoff: ui.handoff, discard: ui.discard, nobleChoice: ui.nobleChoice }));
+window.claude?.hot?.snapshot?.(() => (ON.active ? {} : { G, screen: ui.screen, lastMove: ui.lastMove, handoff: ui.handoff, discard: ui.discard, nobleChoice: ui.nobleChoice }));
 function start(data) {
+  // ?room=CODE opens straight into that room, before #continue or any local save is looked at (join is idempotent)
+  const rc = new URLSearchParams(location.search).get('room');
+  if (rc != null && rc !== '') {
+    const code = rc.replace(/\D/g, '');
+    if (/^[1-9][0-9]{5}$/.test(code) && onlineAvailable()) { render(); enterRoom(code); return; }
+    ui.notice = /^[1-9][0-9]{5}$/.test(code) ? 'Online play is not available right now. You can still play on this device.' : "That link doesn't hold a valid six-digit game code.";
+    try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
+    render();
+    return;
+  }
   if (data && data.G) {
     G = data.G; ui.screen = data.screen || 'game'; ui.lastMove = data.lastMove || null; ui.handoff = !!data.handoff;
     ui.discard = data.discard || null; ui.nobleChoice = data.nobleChoice || null;
