@@ -805,7 +805,7 @@ function objHTML(oid,prog=null){
 }
 
 function render(){
-  if(!S) return;
+  if(!S){if(ON.active) renderShell();return;}
   if(ui.view>=S.players.length) ui.view=0;
   renderTop();renderBoard();renderHand();renderSide();renderModal();
   if(ui.flight){const f=ui.flight;ui.flight=null;launchFlight(f);}
@@ -813,8 +813,8 @@ function render(){
 function renderTop(){
   const live=S.phase!=='setup'&&S.phase!=='over';
   $('#players').dataset.n=S.players.length;
-  $('#players').innerHTML=S.players.map((p,i)=>`<button class="pchip ${live&&i===S.turn?'turn':''} ${i===ui.view?'viewing':''}" data-act="view" data-i="${i}" style="--pc:var(--p${i})" title="View ${esc(p.name)}'s codex">
-    <span class="dot"></span><span class="pname">${esc(p.name)}${p.ai?`<small>${p.level==='hard'?'hard bot':p.level==='easy'?'easy bot':'bot'}</small>`:''}</span><span class="pscore">${p.score}</span>
+  $('#players').innerHTML=S.players.map((p,i)=>`<button class="pchip ${live&&i===S.turn?'turn':''} ${i===ui.view?'viewing':''}" data-act="view" data-i="${i}" style="--pc:${pcol(i)}" title="View ${esc(p.name)}'s codex">
+    <span class="dot"></span><span class="pname">${esc(p.name)}${p.ai?`<small>${p.level==='hard'?'hard bot':p.level==='easy'?'easy bot':'bot'}</small>`:''}${S.online&&i===S.me?'<small>you</small>':''}</span><span class="pscore">${p.score}</span>
     <span class="bar"><span style="width:${Math.min(100,p.score*5)}%"></span></span></button>`).join('');
   $('#roundInfo').textContent=S.phase==='setup'?'Setting up':S.phase==='over'?`Finished after round ${S.round}`:`Round ${S.round} · first to 20 triggers the end`;
 }
@@ -883,10 +883,15 @@ function previewHTML(f){
   return parts.join(' <span class="sep">·</span> ');
 }
 function renderPrompt(){
-  const p=cur(), touch=ui.ptr!=='mouse';
+  const p=cur(), touch=ui.ptr!=='mouse', on=S.online, me=S.me;
   let msg='';
-  if(S.phase==='setup') msg='<strong>Preparing the codices</strong>';
-  else if(S.phase==='over'){const w=S.results[0];msg=`<strong>Game over.</strong> ${esc(S.players[w.i].name)} leads with ${w.total} points. <button class="btn" data-act="results">See scores</button> <span class="hint">Tap an objective to light up the cards that scored it.</span>`;}
+  if(S.phase==='setup'){
+    if(!on) msg='<strong>Preparing the codices</strong>';
+    else if(me>=0&&!S.players[me].ready) msg='<strong>Choose your starter side and secret objective.</strong>';
+    else msg=`<strong>Waiting for ${S.players.filter(q=>!q.ready).map(q=>esc(q.name)).join(', ')} to set up.</strong>`;
+  }
+  else if(S.phase==='over'){const w=S.results[0];msg=`<strong>Game over.</strong> ${esc(S.players[w.i].name)} ${on&&w.i===me?'lead':'leads'} with ${w.total} points. <button class="btn" data-act="results">See scores</button> <span class="hint">Tap an objective to light up the cards that scored it.</span>`;}
+  else if(on&&S.turn!==me) msg=`<strong>Waiting for ${esc(p.name)}.</strong> You can close this page. The game waits until you come back.`;
   else if(S.phase==='handoff') msg=`<strong>Pass the device to ${esc(p.name)}</strong>`;
   else if(p.ai) msg=`<strong>${esc(p.name)} is ${S.phase==='place'?'choosing a card':'drawing'}…</strong>`;
   else if(S.phase==='place'){
@@ -899,7 +904,10 @@ function renderPrompt(){
     }
     else msg='<strong>Your turn.</strong> Choose a card from your hand.';
   }
-  else if(S.phase==='draw') msg='<strong>Draw a card</strong> from the market: a face-up card or the top of a deck.'+(ui.undo?' <button class="btn" data-act="undo">↶ Undo placement</button>':'');
+  else if(S.phase==='draw') msg=(on?'<strong>Draw a card</strong> to finish your turn. Your move is sent when you draw.':'<strong>Draw a card</strong> from the market: a face-up card or the top of a deck.')+(ui.undo?' <button class="btn" data-act="undo">↶ Undo placement</button>':'');
+  if(on&&(ON.sending>0||ON.pending)) msg+=' <span class="hint">Sending…</span>';
+  if(on&&ON.saveErr==='denied') msg+=' <span class="down">That move couldn\'t be saved. Try again.</span>';
+  if(on&&ON.err) msg+=' <span class="down">Lost the connection to the game. Reload the page to reconnect.</span>';
   if(S.endTriggered&&S.phase!=='over') msg+=` <span class="final">Final rounds · ${S.turnsLeft} turn${S.turnsLeft===1?'':'s'} left after this</span>`;
   $('#prompt').innerHTML=msg;
 }
@@ -943,7 +951,8 @@ function renderModal(){
   let h='';
   if(ui.modal==='rules') h=rulesHTML();
   else if(ui.modal==='new') h=newGameHTML();
-  else if(S.phase==='setup') h=setupHTML();
+  else if(!S) h=ON.active?onlineHTML():'';
+  else if(S.phase==='setup') h=S.online&&S.players[S.me]&&S.players[S.me].ready?'':setupHTML();
   else if(S.phase==='handoff') h=`<h2>${esc(cur().name)}, your turn</h2><p class="lede">Pass the device to ${esc(cur().name)}. Other players look away while the hand is shown.</p><div class="mfoot"><button class="btn primary" data-act="handoff-ok">Show my hand</button></div>`;
   else if(S.phase==='over'&&!ui.dismissOver) h=resultsHTML();
   m.hidden=!h;
@@ -951,26 +960,40 @@ function renderModal(){
   if(h&&body.dataset.sig!==h){body.innerHTML=h;body.dataset.sig=h;}
 }
 function setupHTML(){
-  const p=S.players[S.setupIdx];
-  if(humans().length>1&&ui.gateOpen!==S.setupIdx)
+  const on=S.online, p=S.players[on?S.me:S.setupIdx];
+  if(!on&&humans().length>1&&ui.gateOpen!==S.setupIdx)
     return `<h2>${esc(p.name)}, prepare your codex</h2><p class="lede">Pass the device to ${esc(p.name)}. Other players look away: the next screen shows a secret objective.</p><div class="mfoot"><button class="btn" data-act="new">Change players</button><button class="btn primary" data-act="gate-ok">I'm ${esc(p.name)}</button></div>`;
   const s=ui.setup;
   return `<h2>${esc(p.name)}, prepare your codex</h2>
-  <p class="lede">Choose which side of your starter card goes face up, then keep one of two secret objectives. Your opening hand is shown so you can plan.</p>
+  <p class="lede">Choose which side of your starter card goes face up, then keep one of two secret objectives. Your opening hand is shown so you can plan.${on?' Everyone sets up on their own device.':''}</p>
   <h3>Starter card</h3><div class="choices">${['front','back'].map(f=>`<button class="choice ${s.face===f?'on':''}" data-act="su-face" data-face="${f}" aria-pressed="${s.face===f}"><span class="cw">${cardHTML(p.starter,f,'inhand')}</span><span class="cap">${f==='front'?'Centre resources':'Four corner resources'}</span></button>`).join('')}</div>
   <h3>Secret objective (keep one)</h3><div class="choices">${p.secretChoices.map(o=>`<button class="choice ${s.obj===o?'on':''}" data-act="su-obj" data-o="${o}" aria-pressed="${s.obj===o}">${objHTML(o)}</button>`).join('')}</div>
   <h3>Common objectives</h3><div class="olist">${S.common.map(o=>objHTML(o)).join('')}</div>
   <h3>Your opening hand</h3><div class="mini-hand">${p.hand.map(id=>cardHTML(id,'front','inhand')).join('')}</div>
-  <div class="mfoot"><button class="btn" data-act="rules">Rules</button><button class="btn" data-act="new">Change players</button><button class="btn primary" data-act="su-ok" ${s.face&&s.obj?'':'disabled'}>Begin</button></div>`;
+  <div class="mfoot"><button class="btn" data-act="rules">Rules</button>${on?'':'<button class="btn" data-act="new">Change players</button>'}<button class="btn primary" data-act="su-ok" ${s.face&&s.obj?'':'disabled'}>Begin</button></div>`;
 }
 function newGameHTML(){
-  const ng=ui.ng;
-  return `<h2>New game</h2><p class="lede">Two to four naturalists. Bots play on their own; humans take turns on this device.</p>
+  const ng=ui.ng, tab=ng.tab==='online'?'online':'local', canCancel=!!(S||ON.active);
+  const tabs=`<div class="tabs" role="tablist"><button class="tab ${tab==='local'?'on':''}" role="tab" aria-selected="${tab==='local'}" data-act="ng-tab" data-tab="local">On this device</button><button class="tab ${tab==='online'?'on':''}" role="tab" aria-selected="${tab==='online'}" data-act="ng-tab" data-tab="online">Online</button></div>`;
+  const cancel=canCancel?'<button class="btn" data-act="close">Cancel</button>':'';
+  if(tab==='online') return `<h2>New game</h2>${tabs}${onlineTabHTML(cancel)}`;
+  return `<h2>New game</h2>${tabs}<p class="lede">Two to four naturalists. Bots play on their own; humans take turns on this device.</p>
   <h3>Players</h3><div class="seg">${[2,3,4].map(k=>`<button class="segb ${ng.n===k?'on':''}" data-act="ng-n" data-n="${k}">${k} players</button>`).join('')}</div>
   <div class="ngrows">${ng.players.slice(0,ng.n).map((p,i)=>`<div class="ngrow"><span class="dot" style="--pc:var(--p${i})"></span><label class="sr" for="ng-name-${i}">Player ${i+1} name</label><input id="ng-name-${i}" value="${esc(p.name)}" maxlength="16" autocomplete="off">
     <span class="seg"><button class="segb ${!p.ai?'on':''}" data-act="ng-ai" data-i="${i}" data-v="0">Human</button><button class="segb ${p.ai?'on':''}" data-act="ng-ai" data-i="${i}" data-v="1">Bot</button></span>${p.ai?`<span class="seg" aria-label="Bot level">${['easy','normal','hard'].map(l=>`<button class="segb ${(p.level||'normal')===l?'on':''}" data-act="ng-lvl" data-i="${i}" data-v="${l}">${l[0].toUpperCase()+l.slice(1)}</button>`).join('')}</span>`:''}</div>`).join('')}</div>
-  <p class="lede" style="margin-top:14px">Seat 1 plays first. Starting a new game replaces the one in progress.</p>
-  <div class="mfoot">${S?'<button class="btn" data-act="close">Cancel</button>':''}<button class="btn primary" data-act="ng-go">Start game</button></div>`;
+  <p class="lede" style="margin-top:14px">Seat 1 plays first. ${ON.active?'Starting a game on this device leaves the online game; you can come back to it from the hub.':'Starting a new game replaces the one in progress.'}</p>
+  <div class="mfoot">${cancel}<button class="btn primary" data-act="ng-go">Start game</button></div>`;
+}
+function onlineTabHTML(cancel){
+  const ng=ui.ng;
+  if(!hubOK()) return `<h3>Online play is unavailable</h3><p class="lede">Online games need the game server, and it can't be reached from here right now. Playing on this device still works.</p><div class="mfoot">${cancel}<button class="btn primary" data-act="ng-tab" data-tab="local">Play on this device</button></div>`;
+  const prof=!!(window.HubKit&&HubKit.profile&&HubKit.setProfile), dis=ng.busy?'disabled':'';
+  return `<p class="lede">Play with friends on their own phones. Share a six-digit code to bring them in.</p>
+  ${prof?`<h3>Your name</h3><div class="onrow"><label class="sr" for="ng-myname">Your name</label><input id="ng-myname" value="${esc(ng.myName)}" maxlength="16" autocomplete="nickname" placeholder="Name"></div>`:''}
+  <h3>Create a game</h3><div class="onrow"><span class="seg" role="group" aria-label="Seats">${[2,3,4].map(k=>`<button class="segb ${ng.seats===k?'on':''}" data-act="ng-seats" data-n="${k}">${k} seats</button>`).join('')}</span><button class="btn primary" data-act="on-create" ${dis}>${ng.busy==='create'?'Creating…':'Create game'}</button></div>
+  <h3>Join with a code</h3><div class="onrow"><label class="sr" for="ng-code">Game code</label><input id="ng-code" value="${esc(ng.code)}" inputmode="numeric" pattern="[0-9 ]*" maxlength="7" autocomplete="off" placeholder="000 000"><button class="btn primary" data-act="on-join" ${dis}>${ng.busy==='join'?'Joining…':'Join'}</button></div>
+  ${ng.err?`<p class="errline" role="alert">${esc(ng.err)}</p>`:''}
+  <div class="mfoot">${cancel}</div>`;
 }
 function rulesHTML(){
   return `<h2>How to play</h2><p class="lede">Grow your codex one card at a time. Score points from cards as you play them, then from objectives when the game ends.</p>
@@ -980,6 +1003,7 @@ function rulesHTML(){
   <section><h4>Visible symbols</h4><p>A corner symbol counts while no card covers it. Centre symbols always count. The strip above the board shows your totals: ${ic('F','inl')} Fungi, ${ic('P','inl')} Plant, ${ic('A','inl')} Animal, ${ic('I','inl')} Insect, ${ic('Q','inl')} Quill, ${ic('K','inl')} Inkwell, ${ic('M','inl')} Manuscript.</p></section>
   <section><h4>Gold cards</h4><p>To play a gold card face up, your codex must already show the resources along its bottom edge. Gold cards score a flat amount, one point per matching object visible after placing (the card's own counts), or two points per corner the card covers.</p></section>
   <section><h4>Objectives</h4><p>Two common objectives apply to everyone, and each player keeps one secret objective. Each one scores every time you complete it. In a pattern, a card can only be used once per objective.</p></section>
+  <section><h4>Playing online</h4><p>Create a game to get a six-digit code and share the link. Each player sets up and plays on their own device. Your move is sent when you draw, so you can undo a placement until then. Every screen checks every move against these rules, and you can close the page between turns: the game waits for you.</p></section>
   <section><h4>Ending</h4><p>When someone reaches 20 points or both decks run out, finish the round, then play one more full round. Add objective points. Most points wins; a tie goes to whoever completed more objectives.</p></section>
   </div><div class="mfoot"><button class="btn primary" data-act="close">Back to the game</button></div>`;
 }
@@ -995,13 +1019,20 @@ function resultsHTML(){
   const title=wn.length>1?`${wn.map(esc).join(' and ')} share the finest codex`:`${esc(wn[0])} ${wn[0]==='You'?'complete':'completes'} the finest codex`;
   return `<h2>${title}</h2><p class="lede">Board points plus objectives. Ties go to the player who completed more objectives.</p>
   <div class="tablewrap"><table class="scores"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
-  <div class="mfoot"><button class="btn" data-act="close-over">View the codices</button><button class="btn primary" data-act="new">New game</button></div>`;
+  <div class="mfoot"><button class="btn" data-act="close-over">View the codices</button>${S.online?'<a class="btn" href="../">Back to the hub</a>':''}<button class="btn primary" data-act="new">New game</button></div>`;
 }
-function syncNg(){ui.ng.players.slice(0,ui.ng.n).forEach((p,i)=>{const el=document.getElementById('ng-name-'+i);if(el) p.name=el.value.trim()||`Player ${i+1}`;});}
+function syncNg(){
+  const ng=ui.ng;
+  ng.players.slice(0,ng.n).forEach((p,i)=>{const el=document.getElementById('ng-name-'+i);if(el) p.name=el.value.trim()||`Player ${i+1}`;});
+  const nm=document.getElementById('ng-myname'), cd=document.getElementById('ng-code');
+  if(nm) ng.myName=nm.value;
+  if(cd) ng.code=cd.value;
+}
 function openNewGame(){
   const base=[{name:'You',ai:false,level:'normal'},{name:'Moss',ai:true,level:'normal'},{name:'Fern',ai:true,level:'normal'},{name:'Lichen',ai:true,level:'normal'}];
-  if(S) S.players.forEach((p,i)=>{base[i]={name:p.name,ai:p.ai,level:p.level||'normal'};});
-  ui.ng={n:S?S.players.length:2,players:base};
+  if(S&&!S.online) S.players.forEach((p,i)=>{base[i]={name:p.name,ai:p.ai,level:p.level||'normal'};});
+  let myName='';try{myName=(HubKit.profile&&HubKit.profile().name)||'';}catch(e){}
+  ui.ng={n:S&&!S.online?S.players.length:2,players:base,tab:'local',seats:2,code:'',myName,err:'',busy:false};
   ui.modal='new';render();
 }
 
