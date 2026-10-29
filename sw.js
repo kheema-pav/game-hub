@@ -1,8 +1,8 @@
 /* Game Hub service worker: offline play. Spec: docs/hubkit-spec.md (amendment B). */
-const VERSION = 'gh-v1';
+const VERSION = 'gh-v2';
 const CACHE = VERSION;
 const FONTS = 'gh-fonts-v1';
-const PRECACHE = ['./', 'codex/', 'isles/', 'gems/', 'sketch/', 'shared/hubkit.js', 'manifest.webmanifest',
+const PRECACHE = ['./', 'codex/', 'isles/', 'gems/', 'sketch/', 'shared/hubkit.js', 'shared/online.js', 'shared/firebase-config.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -57,6 +57,8 @@ self.addEventListener('fetch', (event) => {
   if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
     event.respondWith(staleWhileRevalidate(req));
   } else if (url.origin === self.location.origin) {
+    // Only same-origin requests and Google Fonts are handled; the Firebase SDK on www.gstatic.com and
+    // the Firebase/Firestore APIs are never intercepted.
     event.respondWith(networkFirst(req));
   }
 });

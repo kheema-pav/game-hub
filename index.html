@@ -92,6 +92,36 @@ h1{font-family:var(--f-display);font-weight:800;font-size:clamp(2.4rem,7vw,4rem)
 .soon h2{margin:0 0 2px;font-family:var(--f-display);font-weight:800;font-size:1.2rem}
 .soon p{margin:0;color:var(--muted)}
 @media (max-width:560px){.soon{grid-template-columns:minmax(0,1fr)}}
+
+/* online: games strip + join box */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.online{margin:0 0 30px}
+.online[hidden],.join[hidden],.soon[hidden]{display:none}
+.online h2,.join h2{margin:0 0 2px;font-family:var(--f-display);font-weight:800;font-size:1.2rem}
+.orooms{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))}
+.oroom{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.oroom .oname{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.oroom .ocode{font-family:var(--f-display);font-weight:800;letter-spacing:.1em;font-variant-numeric:tabular-nums;margin-left:6px;color:var(--muted)}
+.oroom .ostat{grid-column:1;margin:0;font-size:.9rem;color:var(--muted);min-width:0;overflow-wrap:anywhere}
+.oroom .ostat.turn{color:var(--ink);font-weight:700}
+.oroom .ostat.turn::before{content:"";display:inline-block;width:8px;height:8px;margin-right:7px;border-radius:50%;background:var(--accent)}
+.oroom .oact{grid-column:2;grid-row:1 / span 2;display:flex;align-items:center;gap:6px}
+.obtn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--ink);font:600 .92rem var(--f-body);text-decoration:none;cursor:pointer}
+.obtn.open{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-family:var(--f-display);font-weight:800}
+.obtn.rm{color:var(--muted)}
+.join{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);gap:12px 24px;align-items:center;margin-block:40px 18px;padding:18px 20px;border:2px dashed var(--line);border-radius:14px}
+.join p{margin:0;color:var(--muted)}
+.jform{display:flex;gap:8px;align-items:stretch}
+.jform input{width:9.5em;min-height:48px;padding:6px 12px;border:2px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);
+  font:800 1.5rem var(--f-display);letter-spacing:.18em;text-align:center;font-variant-numeric:tabular-nums}
+.jform input::placeholder{color:var(--muted);opacity:.5;font-weight:500}
+.jform input[aria-invalid="true"]{border-color:#c0392b}
+.jform .obtn{min-height:48px;padding:0 20px;font-size:1.05rem}
+.jform .obtn[disabled]{opacity:.6;cursor:default}
+.jerr{grid-column:1 / -1;margin:0;min-height:1.4em;font-weight:600;color:#b3261e}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .jerr{color:#ff9a90}}
+:root[data-theme="dark"] .jerr{color:#ff9a90}
+@media (max-width:560px){.join{grid-template-columns:minmax(0,1fr)}.jform input{flex:1;width:auto;min-width:0}}
 footer{padding-block:12px 40px;color:var(--muted);font-size:.85rem}
 footer p{margin:0;max-width:70ch}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -107,6 +137,11 @@ footer p{margin:0;max-width:70ch}
     </div>
     <p class="tag">Tabletop games for your phone or laptop. Play against bots at three difficulty levels, or pass one device around the table.</p>
   </header>
+
+  <section class="online" id="onlineStrip" aria-label="Online games" hidden>
+    <h2>Online games</h2>
+    <ul class="orooms" id="onlineList"></ul>
+  </section>
 
   <main class="shelf" aria-label="Games">
     <a class="game codex" href="codex/" data-game="codex">
@@ -187,13 +222,24 @@ footer p{margin:0;max-width:70ch}
     </a>
   </main>
 
-  <section class="soon" aria-label="Coming soon">
+  <section class="join" id="joinBox" aria-label="Join a game" hidden>
+    <div><h2>Join a game</h2><p>Got a six-digit code from a friend? Type or paste it here.</p></div>
+    <form class="jform" id="joinForm" novalidate>
+      <label class="sr" for="joinCode">Game code</label>
+      <input id="joinCode" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="000 000" aria-describedby="joinErr">
+      <button type="submit" class="obtn open" id="joinBtn">Join</button>
+    </form>
+    <p class="jerr" id="joinErr" role="alert"></p>
+  </section>
+
+  <section class="soon" id="soonBox" aria-label="Coming soon">
     <span class="code" aria-hidden="true">482 619</span>
     <div><h2>Online play is on the way</h2><p>Start a game, get a six-digit code, and a friend joins from their own phone. No accounts needed.</p></div>
   </section>
 
   <footer><p>Fan-made versions of tabletop games, built for friends. Not affiliated with or endorsed by any game publisher. Games save on your own device.</p></footer>
 </div>
+<script src="shared/firebase-config.js"></script>
 <script src="shared/hubkit.js"></script>
 <script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
 <script>
@@ -253,6 +299,171 @@ footer p{margin:0;max-width:70ch}
   refresh();
   window.addEventListener('pageshow',refresh);
   window.addEventListener('storage',refresh);
+})();
+</script>
+<script>
+(function(){
+  /* Online play: Join box and Online games strip. shared/online.js is loaded only when it is needed. */
+  var FOLDERS={codex:'codex/',isles:'isles/',gems:'gems/',sketch:'sketch/'};
+  var NAMES={codex:'Codex Naturalis',isles:'Catan',gems:'Splendor',sketch:'Pen & Paper Pictionary'};
+  var $=function(id){return document.getElementById(id);};
+  function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+  function configured(){return !!(window.HUB_FIREBASE_CONFIG||lsGet('hub.emulator'));}
+  function fmt(code){return code.length===6?code.slice(0,3)+' '+code.slice(3):code;}
+  function localRooms(){
+    try{var a=JSON.parse(lsGet('hub.rooms'));return Array.isArray(a)?a.filter(function(r){return r&&/^[1-9]\d{5}$/.test(r.code);}):[];}catch(e){return [];}
+  }
+  function forgetLocal(code){
+    try{localStorage.setItem('hub.rooms',JSON.stringify(localRooms().filter(function(r){return r.code!==code;})));}catch(e){}
+  }
+  var loadP=null;
+  function loadOnline(){
+    if(window.HubOnline)return Promise.resolve();
+    if(loadP)return loadP;
+    loadP=new Promise(function(resolve,reject){
+      var s=document.createElement('script');
+      s.src='shared/online.js';
+      s.onload=function(){window.HubOnline?resolve():reject(new Error('missing'));};
+      s.onerror=function(){reject(new Error('load'));};
+      document.head.appendChild(s);
+    });
+    loadP.catch(function(){loadP=null;});
+    return loadP;
+  }
+
+  /* ----- Join box ----- */
+  var box=$('joinBox'),soon=$('soonBox'),form=$('joinForm'),input=$('joinCode'),btn=$('joinBtn'),errEl=$('joinErr');
+  var on=configured();
+  if(box)box.hidden=!on;
+  if(soon)soon.hidden=on;
+  function extract(t){
+    var m=/room=(\d{6})/.exec(t);
+    return m?m[1]:String(t).replace(/\D/g,'').slice(0,6);
+  }
+  function showErr(msg){
+    errEl.textContent=msg||'';
+    if(msg)input.setAttribute('aria-invalid','true');else input.removeAttribute('aria-invalid');
+  }
+  function busy(b){btn.disabled=b;btn.textContent=b?'Looking…':'Join';}
+  function joinMessage(e){
+    var c=e&&e.code;
+    if(c==='offline')return "You're offline";
+    if(c==='missing')return 'No game with that code';
+    if(c==='full')return 'That game is full';
+    if(c==='started')return 'That game has already started';
+    return "Couldn't reach the game server";
+  }
+  if(form&&input){
+    input.addEventListener('input',function(){
+      var d=extract(input.value);
+      var v=d.length>3?d.slice(0,3)+' '+d.slice(3):d;
+      if(input.value!==v)input.value=v;
+      showErr('');
+    });
+    form.addEventListener('submit',function(ev){
+      ev.preventDefault();
+      var code=extract(input.value);
+      if(code.length!==6||code.charAt(0)==='0'){showErr('Enter the 6-digit game code');input.focus();return;}
+      if(navigator.onLine===false){showErr("You're offline");return;}
+      showErr('');busy(true);
+      loadOnline().then(function(){return HubOnline.rooms.lookup(code);}).then(function(r){
+        if(!r.exists){var x=new Error();x.code='missing';throw x;}
+        if(!r.seated){
+          if(r.status!=='open'){var y=new Error();y.code='started';throw y;}
+          if(Object.keys(r.seats||{}).length>=r.maxSeats){var z=new Error();z.code='full';throw z;}
+        }
+        var folder=FOLDERS[r.game];
+        if(!folder){showErr("That game isn't available here");busy(false);return;}
+        location.href=folder+'?room='+code;
+      }).catch(function(e){
+        busy(false);
+        showErr(joinMessage(e&&e.message==='load'?{code:navigator.onLine===false?'offline':'x'}:e));
+      });
+    });
+  }
+  window.addEventListener('pageshow',function(){busy(false);});
+
+  /* ----- Online games strip ----- */
+  var strip=$('onlineStrip'),list=$('onlineList');
+  var unsubs=[],gen=0;
+  function stopWatching(){unsubs.forEach(function(u){try{u();}catch(e){}});unsubs=[];}
+  function el(tag,cls,text){var n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n;}
+  function describe(res,uid){
+    if(res.error)return {text:res.error.code==='offline'?'Offline':"Can't check right now"};
+    var r=res.room;
+    if(!r)return {text:'Game not found',gone:true};
+    var seats=r.seats||{};
+    if(r.status==='open')return {text:'Waiting for players ('+Object.keys(seats).length+' of '+r.maxSeats+')'};
+    var best=null;
+    Object.keys(res.players||{}).forEach(function(u){
+      var t=res.players[u]&&res.players[u].turn;
+      if(t&&typeof t==='object'&&typeof t.at==='number'&&(!best||t.at>best.at))best=t;
+    });
+    if(!best)return {text:'Setting up'};
+    if(best.phase==='over')return {text:'Finished',over:true,at:best.at};
+    if(best.phase==='setup')return {text:'Setting up'};
+    if(best.next===uid)return {text:'Your turn',turn:true};
+    if(best.next){var s=seats[best.next];return {text:'Waiting for '+(s&&typeof s.name==='string'&&s.name?s.name:'another player')};}
+    return {text:'In progress'};
+  }
+  function removeRoom(code){
+    if(window.HubOnline)HubOnline.rooms.forget(code);else forgetLocal(code);
+    initStrip();
+  }
+  function buildRow(entry){
+    var li=el('li','oroom');
+    var name=el('div','oname',NAMES[entry.game]||'Online game');
+    name.appendChild(el('span','ocode',fmt(entry.code)));
+    var stat=el('p','ostat','Checking…');
+    var act=el('div','oact');
+    var folder=FOLDERS[entry.game];
+    if(folder){var a=el('a','obtn open','Open');a.href=folder+'?room='+entry.code;act.appendChild(a);}
+    var rm=el('button','obtn rm','Remove');rm.type='button';
+    rm.setAttribute('aria-label','Remove game '+fmt(entry.code)+' from this list');
+    rm.addEventListener('click',function(){removeRoom(entry.code);});
+    act.appendChild(rm);
+    li.appendChild(name);li.appendChild(stat);li.appendChild(act);
+    return {li:li,stat:stat};
+  }
+  function initStrip(){
+    gen++;var my=gen;
+    stopWatching();
+    if(!strip||!list)return;
+    list.textContent='';
+    var entries=configured()?localRooms():[];
+    if(!entries.length){strip.hidden=true;return;}
+    strip.hidden=false;
+    function show(rows){
+      list.textContent='';
+      rows.forEach(function(r){list.appendChild(r.li);});
+    }
+    function plainRows(msg){
+      show(entries.slice(-8).reverse().map(function(e){var r=buildRow(e);r.stat.textContent=msg;return r;}));
+    }
+    plainRows('Checking…');
+    loadOnline().then(function(){return HubOnline.ready();}).then(function(){
+      if(my!==gen)return;
+      var uid=HubOnline.uid;
+      entries=HubOnline.rooms.mine().slice(0,8);
+      if(!entries.length){strip.hidden=true;list.textContent='';return;}
+      var rows=entries.map(buildRow);
+      show(rows);
+      entries.forEach(function(e,i){
+        unsubs.push(HubOnline.rooms.watch(e.code,function(res){
+          if(my!==gen)return;
+          var d=describe(res,uid);
+          if(d.over&&Date.now()-d.at>7*24*3600*1000){HubOnline.rooms.forget(e.code);initStrip();return;}
+          rows[i].stat.textContent=d.text;
+          rows[i].stat.className='ostat'+(d.turn?' turn':'');
+        }));
+      });
+    }).catch(function(e){
+      if(my!==gen)return;
+      plainRows(e&&e.code==='offline'||navigator.onLine===false?'Offline':"Can't check right now");
+    });
+  }
+  initStrip();
+  window.addEventListener('pageshow',function(ev){if(ev.persisted)initStrip();});
 })();
 </script>
 </body>

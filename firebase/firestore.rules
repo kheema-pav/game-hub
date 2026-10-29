@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function room(code) { return get(/databases/$(db)/documents/rooms/$(code)).data; }
+    function seatOk(s) { return s is map && s.keys().hasOnly(['name','color','joinedAt'])
+      && s.name is string && s.name.size() <= 16 && s.color is string && s.color.size() <= 16; }
+
+    match /profiles/{uid} {
+      // get only: profiles can be looked up by uid but never listed
+      allow get: if signedIn();
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['name','color','updatedAt','stats'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 16
+        && request.resource.data.color is string && request.resource.data.color.size() <= 16;
+    }
+
+    match /rooms/{code} {
+      function n() { return request.resource.data; }
+      function sd() { return n().seats.diff(resource.data.seats); }
+      // Add only yourself while open and not full. The join that fills the last seat may also start the game.
+      function joining() {
+        return n().diff(resource.data).affectedKeys().hasOnly(['seats','status','startedAt'])
+          && sd().addedKeys() == [me()].toSet() && sd().affectedKeys() == sd().addedKeys()
+          && seatOk(n().seats[me()]) && n().seats.size() <= resource.data.maxSeats
+          && (n().status == 'open' || (n().status == 'playing' && n().seats.size() == resource.data.maxSeats));
+      }
+      // A non-host removes only their own seat while the room is open.
+      function leaving() {
+        return me() != resource.data.host
+          && n().diff(resource.data).affectedKeys().hasOnly(['seats'])
+          && sd().removedKeys() == [me()].toSet() && sd().affectedKeys() == sd().removedKeys();
+      }
+      // The host starts early, with at least two seated.
+      function starting() {
+        return me() == resource.data.host && n().status == 'playing' && resource.data.seats.size() >= 2
+          && n().diff(resource.data).affectedKeys().hasOnly(['status','startedAt']);
+      }
+      // get only: rooms are looked up by code, never listed
+      allow get: if signedIn();
+      allow create: if signedIn() && code.matches('[1-9][0-9]{5}')
+        && n().keys().hasOnly(['game','v','host','seed','maxSeats','status','seats','createdAt'])
+        && n().game is string && n().host == me() && n().seed is int && n().status == 'open'
+        && n().maxSeats is int && n().maxSeats >= 2 && n().maxSeats <= 4
+        && n().seats.keys().hasOnly([me()]) && seatOk(n().seats[me()]);
+      allow update: if signedIn() && resource.data.status == 'open' && (joining() || leaving() || starting());
+
+      match /players/{uid} {
+        function member() { let r = room(code); return signedIn() && me() == uid && r.status == 'playing' && uid in r.seats; }
+        function shape() { return request.resource.data.keys().hasOnly(['setup','moves','turn'])
+          && request.resource.data.get('moves', []) is list; }
+        function appendOnly() { let o = resource.data.get('moves', []); let m = request.resource.data.get('moves', []);
+          // m[0:0] raises an index error in rules, so an empty previous list is handled separately
+          return m.size() >= o.size() && (o.size() == 0 || m[0:o.size()] == o); }
+        function setupFixed() { return !('setup' in resource.data) || request.resource.data.setup == resource.data.setup; }
+        // read includes list: the room's players are listed by watch()
+        allow read: if signedIn();
+        allow create: if member() && shape();
+        allow update: if member() && shape() && appendOnly() && setupFixed();
+      }
+    }
+  }
+}

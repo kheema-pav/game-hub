@@ -55,6 +55,88 @@
     if (isOpenNow) render();
   }
 
+  /* ---------- profile, stats, badge (localStorage hub.profile is the source of truth on this device) ---------- */
+  var PKEY = 'hub.profile', DONEKEY = 'hub.statsDone';
+  var COLORS = ['#e4572e', '#f2b632', '#4f9d69', '#3b6fa8', '#7c4d9b', '#e86fa0', '#2bb3b1', '#8d6e4a'];
+  var memProfile = null, memDone = null;
+  var editing = false, draft = null;
+
+  function readProfileRaw() {
+    try {
+      var d = JSON.parse(localStorage.getItem(PKEY));
+      if (d && typeof d === 'object' && !Array.isArray(d)) return d;
+    } catch (e) {}
+    return memProfile && typeof memProfile === 'object' ? memProfile : {};
+  }
+  function writeProfileRaw(p) {
+    memProfile = p;
+    try { localStorage.setItem(PKEY, JSON.stringify(p)); } catch (e) {}
+  }
+  function cleanName(n) { return String(n == null ? '' : n).replace(/\s+/g, ' ').trim().slice(0, 16); }
+  function cleanColor(c) { return typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c) ? c : COLORS[0]; }
+  function profile() {
+    var p = readProfileRaw();
+    return { name: cleanName(p.name), color: cleanColor(p.color) };
+  }
+  function changed() { try { window.dispatchEvent(new Event('hubprofilechange')); } catch (e) {} }
+  function setProfile(o) {
+    o = o || {};
+    var p = readProfileRaw(), cur = profile();
+    p.name = o.name !== undefined ? cleanName(o.name) : cur.name;
+    p.color = o.color !== undefined ? cleanColor(o.color) : cur.color;
+    writeProfileRaw(p);
+    changed();
+    if (isOpenNow) render();
+    return profile();
+  }
+  function readDone() {
+    try {
+      var d = JSON.parse(localStorage.getItem(DONEKEY));
+      if (Array.isArray(d)) return d;
+    } catch (e) {}
+    return memDone || [];
+  }
+  // Idempotent per key. Returns true when the result was counted, false when this key was already recorded.
+  function recordResult(game, key, r) {
+    try {
+      if (!game || typeof game !== 'string') return false;
+      r = r || {};
+      var done = readDone();
+      if (key != null && key !== '') {
+        key = String(key);
+        if (done.indexOf(key) >= 0) return false;
+        done.push(key);
+        if (done.length > 500) done = done.slice(-500);
+        memDone = done;
+        try { localStorage.setItem(DONEKEY, JSON.stringify(done)); } catch (e) {}
+      }
+      var p = readProfileRaw();
+      var stats = p.stats && typeof p.stats === 'object' && !Array.isArray(p.stats) ? p.stats : {};
+      var g = stats[game] && typeof stats[game] === 'object' ? stats[game] : {};
+      var played = (+g.played || 0) + 1, won = (+g.won || 0) + (r.won ? 1 : 0), best = +g.best || 0;
+      if (typeof r.score === 'number' && isFinite(r.score) && r.score > best) best = r.score;
+      stats[game] = { played: played, won: won, best: best };
+      p.stats = stats;
+      writeProfileRaw(p);
+      changed();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  var badgeOn = false, badgeStyle = null;
+  function setBadge(on) {
+    badgeOn = !!on;
+    try {
+      if (!badgeStyle) {
+        badgeStyle = document.createElement('style');
+        badgeStyle.id = 'hubkit-badge-css';
+        badgeStyle.textContent = 'button.hk-menu-btn.hk-menu-btn::after{content:"";position:absolute;top:5px;right:5px;width:10px;height:10px;border-radius:50%;background:#e4572e;box-shadow:0 0 0 2px #fff;pointer-events:none}';
+      }
+      if (badgeOn && document.body) document.body.appendChild(badgeStyle);
+      else if (!badgeOn && badgeStyle.parentNode) badgeStyle.parentNode.removeChild(badgeStyle);
+    } catch (e) {}
+  }
+
   /* ---------- sound engine ---------- */
   var ctx = null, master = null, noiseBuf = null, lastPlayed = {};
   var UNLOCK = ['pointerup', 'touchend', 'click', 'keydown'];
@@ -268,6 +350,18 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
 #hubkit-root button:focus-visible,#hubkit-root input:focus-visible{outline:2px solid var(--hk-accent);outline-offset:2px}
 #hubkit-root .hk-foot{margin:14px 2px 0;font-size:13px;line-height:1.45;color:var(--hk-muted)}
 #hubkit-root .hk-foot+.hk-foot{margin-top:6px}
+#hubkit-root .hk-you{display:flex;align-items:center;gap:10px;min-width:0}
+#hubkit-root .hk-you .hk-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hubkit-root .hk-you .hk-nm.hk-ph{color:var(--hk-muted)}
+#hubkit-root .hk-dot{flex:none;width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 2px rgba(0,0,0,.18)}
+#hubkit-root .hk-edit{padding:12px 14px;border-radius:12px;background:var(--hk-row);display:flex;flex-direction:column;gap:10px}
+#hubkit-root .hk-edit label{display:flex;flex-direction:column;gap:4px;color:var(--hk-muted);font-size:13px}
+#hubkit-root .hk-edit input.hk-in{width:100%;min-height:44px;margin:0;padding:8px 12px;border:1px solid var(--hk-line);border-radius:10px;background:var(--hk-bg);color:var(--hk-text);font:400 16px/1.3 ${FONT};-webkit-appearance:none;appearance:none}
+#hubkit-root .hk-colors{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+#hubkit-root button.hk-col{appearance:none;-webkit-appearance:none;display:flex;align-items:center;justify-content:center;min-height:44px;padding:0;margin:0;border:2px solid transparent;border-radius:12px;background:transparent;cursor:pointer;transform:none;box-shadow:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+#hubkit-root button.hk-col .hk-dot{width:28px;height:28px}
+#hubkit-root button.hk-col[aria-checked="true"]{border-color:var(--hk-text)}
+#hubkit-root .hk-edit .hk-prim{margin:0}
 #hubkit-root .hk-toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:5000;transform:translate(-50%,8px);padding:10px 18px;border-radius:999px;background:rgba(20,24,34,.94);color:#fff;font:500 15px/1.3 ${FONT};white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s,transform .15s}
 #hubkit-root .hk-toast.hk-show{opacity:1;transform:translate(-50%,0)}
 `;
@@ -343,6 +437,32 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
       '><span>' + label + '</span><span class="hk-sw"></span></button>';
   }
 
+  function youHTML() {
+    var p = profile();
+    if (!editing) {
+      return '<button type="button" class="hk-row" data-hk-do="you" data-hk-id="you"><span class="hk-you"><i class="hk-dot" style="background:' + p.color +
+        '"></i><span class="hk-nm' + (p.name ? '' : ' hk-ph') + '">' + esc(p.name || 'Set your name') + '</span></span><span class="hk-val">You</span></button>';
+    }
+    var d = draft || p, sw = '';
+    COLORS.forEach(function (c, i) {
+      sw += '<button type="button" class="hk-col" role="radio" aria-checked="' + (c === d.color) + '" aria-label="Colour ' + (i + 1) +
+        '" data-hk-color="' + c + '" data-hk-id="c' + i + '"><i class="hk-dot" style="background:' + c + '"></i></button>';
+    });
+    return '<div class="hk-edit"><label>Your name<input class="hk-in" type="text" maxlength="16" autocomplete="nickname" autocapitalize="words" spellcheck="false" data-hk-name data-hk-id="name" value="' +
+      esc(d.name) + '"></label><div class="hk-colors" role="radiogroup" aria-label="Your colour">' + sw + '</div>' +
+      '<div class="hk-prim"><button type="button" class="hk-btn" data-hk-do="you-cancel" data-hk-id="ycancel">Cancel</button>' +
+      '<button type="button" class="hk-btn hk-go" data-hk-do="you-save" data-hk-id="ysave">Save</button></div></div>';
+  }
+  function saveYou() {
+    if (!editing) return;
+    var d = draft || profile();
+    editing = false; draft = null;
+    setProfile({ name: d.name, color: d.color });
+    var row = sheet && sheet.querySelector('[data-hk-id="you"]');
+    if (row) row.focus({ preventScroll: true });
+    toast('Saved');
+  }
+
   function render() {
     if (!sheet) return;
     var active = document.activeElement, fid = active && sheet.contains(active) ? active.getAttribute('data-hk-id') : null;
@@ -368,7 +488,7 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
       });
       h += '</div>';
     }
-    h += '<h3 class="hk-sec">Settings</h3><div class="hk-list">' + toggleRow('sound', 'data-hk-set="sound"', 'Sound', settings.sound) +
+    h += '<h3 class="hk-sec">Settings</h3><div class="hk-list">' + youHTML() + toggleRow('sound', 'data-hk-set="sound"', 'Sound', settings.sound) +
       '<label class="hk-vol"><span class="hk-lab">Volume</span><input type="range" min="0" max="100" step="5" data-hk-vol data-hk-id="vol" aria-label="Volume" value="' +
       Math.round(settings.volume * 100) + '"' + (settings.sound ? '' : ' disabled') + '><output>' + Math.round(settings.volume * 100) + '</output></label>';
     if (navigator.vibrate) h += toggleRow('vibrate', 'data-hk-set="vibrate"', 'Vibration', settings.vibrate);
@@ -394,10 +514,14 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
   function clearArm() { clearTimeout(armTimer); armed = -1; }
 
   function onRootClick(e) {
-    var t = e.target.closest && e.target.closest('[data-hk-do],[data-hk-item],[data-hk-set]');
+    var t = e.target.closest && e.target.closest('[data-hk-do],[data-hk-item],[data-hk-set],[data-hk-color]');
     if (!t || !root.contains(t)) return;
     var d = t.getAttribute('data-hk-do');
     if (d === 'close') close();
+    else if (d === 'you') { editing = true; draft = profile(); render(); var ni = sheet.querySelector('[data-hk-name]'); if (ni) ni.focus(); }
+    else if (d === 'you-cancel') { editing = false; draft = null; render(); }
+    else if (d === 'you-save') saveYou();
+    else if (t.hasAttribute('data-hk-color')) { if (draft) draft.color = t.getAttribute('data-hk-color'); render(); }
     else if (d === 'hub') { call(cfg.onLeave); location.href = HUB_URL; }
     else if (t.hasAttribute('data-hk-item')) onItem(+t.getAttribute('data-hk-item'));
     else if (t.hasAttribute('data-hk-set')) {
@@ -420,6 +544,7 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
   }
 
   function onRootInput(e) {
+    if (e.target.hasAttribute && e.target.hasAttribute('data-hk-name')) { if (draft) draft.name = e.target.value; return; }
     if (!e.target.hasAttribute || !e.target.hasAttribute('data-hk-vol')) return;
     settings.volume = Math.min(1, Math.max(0, Math.round(+e.target.value / 5) * 5 / 100));
     save();
@@ -444,6 +569,7 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
   function close() {
     if (!isOpenNow) return;
     isOpenNow = false;
+    editing = false; draft = null;
     clearArm();
     layer.hidden = true;
     // The game may have re-rendered its header while the sheet was open: find the live button.
@@ -477,6 +603,7 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
       // Nothing behind the sheet may react to keys (game shortcuts, Ctrl+Z, ...).
       e.stopImmediatePropagation();
       if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'Enter' && editing && e.target && e.target.hasAttribute && e.target.hasAttribute('data-hk-name')) { e.preventDefault(); saveYou(); }
       else if (e.key === 'Tab') {
         var f = focusables(), a = document.activeElement;
         if (!f.length) { e.preventDefault(); return; }
@@ -515,7 +642,10 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
   /* ---------- lifecycle ---------- */
   window.addEventListener('pagehide', close);
   window.addEventListener('pageshow', function () { load(); applySettings(); });
-  window.addEventListener('storage', function (e) { if (e.key === KEY || e.key === null) { load(); applySettings(); } });
+  window.addEventListener('storage', function (e) {
+    if (e.key === KEY || e.key === null) { load(); applySettings(); }
+    if ((e.key === PKEY || e.key === null) && isOpenNow && !editing) render();
+  });
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) return;
     try { if (ctx && ctx.state !== 'running') ctx.resume().catch(function () {}); } catch (e) {}  // Safari may leave it 'interrupted'
@@ -548,7 +678,11 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
     sfx: sfx,
     buzz: buzz,
     refresh: function () { if (isOpenNow) render(); },
-    setFloating: setFloating
+    setFloating: setFloating,
+    profile: profile,
+    setProfile: setProfile,
+    recordResult: recordResult,
+    setBadge: setBadge
   };
   Object.defineProperty(api, 'settings', {
     enumerable: true,
