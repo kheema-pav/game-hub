@@ -20,6 +20,7 @@
   var ROOMS_KEY = 'hub.rooms';
   var PROFILE_KEY = 'hub.profile';
   var CODE_RE = /^[1-9][0-9]{5}$/;
+  var POLL_MIN = 6000, POLL_MAX = 30000;   // backup server check while a room is open (ms)
 
   /* ---------- small helpers ---------- */
   function err(code, message, cause) {
@@ -55,6 +56,12 @@
       return o;
     }
     return v;
+  }
+
+  function stable(v) {                    // JSON with sorted keys, for comparing two copies of a document
+    if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
+    if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + stable(v[k]); }).join(',') + '}';
+    return JSON.stringify(v === undefined ? null : v);
   }
 
   /* ---------- configuration ---------- */
@@ -104,7 +111,11 @@
     var app = m.app.initializeApp(config());
     var auth = m.auth.getAuth(app);
     if (e) m.auth.connectAuthEmulator(auth, 'http://' + e.host + ':' + e.auth, { disableWarnings: true });
-    var db = m.fs.getFirestore(app);                 // default memory cache
+    // Long polling instead of the streaming channel: on some phones and mobile networks the stream connects but
+    // never delivers updates, so the page only changed on reload. Memory cache as before.
+    var db;
+    try { db = m.fs.initializeFirestore(app, { experimentalForceLongPolling: true }); }
+    catch (x) { db = m.fs.getFirestore(app); }
     if (e) m.fs.connectFirestoreEmulator(db, e.host, e.fs);
     core = { m: m, app: app, auth: auth, db: db };
     return core;
@@ -332,10 +343,33 @@
     catch (e) { throw fsErr(e); }
   }
 
+  /* ---------- waking watchers ---------- */
+  // Every live watcher registers a wake(reason) hook. When the page comes back into view, the browser goes back
+  // online or the window regains focus, each watcher checks the server, because a sleeping phone can drop the
+  // live connection without noticing.
+  var wakers = [];
+  var wakeT = null;
+  function wakeAll(reason) {
+    clearTimeout(wakeT);
+    wakeT = setTimeout(function () { wakers.slice().forEach(function (w) { try { w(reason); } catch (e) {} }); }, 300);
+  }
+  function addWaker(w) {
+    wakers.push(w);
+    return function () { var i = wakers.indexOf(w); if (i >= 0) wakers.splice(i, 1); };
+  }
+  var hiddenAt = 0;
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    wakeAll(hiddenAt && Date.now() - hiddenAt > 5000 ? 'resume' : 'visible');
+  });
+  window.addEventListener('pageshow', function (e) { if (e.persisted) wakeAll('resume'); });
+  window.addEventListener('online', function () { wakeAll('resume'); });
+  window.addEventListener('focus', function () { wakeAll('visible'); });
+
   function watch(code, cb) {
     code = norm(code);
-    var stopped = false, unsubs = [];
-    var st = { room: undefined, players: undefined, roomPending: false, playersPending: false, fromCache: false };
+    var stopped = false, unsubs = [], unWake = null, pollT = null, gap = POLL_MIN, polling = false;
+    var st = { room: undefined, players: undefined, roomPending: false, playersPending: false, fromCache: false, serverAt: 0 };
     function out(error) {
       if (stopped || typeof cb !== 'function') return;
       try {
@@ -354,38 +388,95 @@
       Promise.resolve().then(function () { st.room = null; st.players = {}; emit(); });
       return function () { stopped = true; };
     }
-    ready().then(function () {
+    function roomData(snap) {
+      var d = plain(snap.data({ serverTimestamps: 'estimate' }));
+      d.code = code;
+      if (d.seats && d.seats[api.uid]) remember(code, d.game);     // a seated player opening the room is remembered
+      return d;
+    }
+    function playersData(snap) {
+      var players = {};
+      snap.forEach(function (d) {
+        var x = plain(d.data({ serverTimestamps: 'estimate' }));
+        if (!Array.isArray(x.moves)) x.moves = [];
+        players[d.id] = x;
+      });
+      return players;
+    }
+    function subscribe() {
+      unsubs.forEach(function (u) { try { u(); } catch (e) {} });
+      unsubs = [];
       if (stopped) return;
       var fs = core.m.fs, ref = roomRef(code);
       unsubs.push(fs.onSnapshot(ref, { includeMetadataChanges: true }, function (snap) {
         st.roomPending = snap.metadata.hasPendingWrites;
         st.fromCache = snap.metadata.fromCache;
+        if (!snap.metadata.fromCache) st.serverAt = Date.now();
         if (!snap.exists()) {
           if (snap.metadata.fromCache) return;                      // not confirmed by the server yet
           st.room = null;
-        } else {
-          var d = plain(snap.data({ serverTimestamps: 'estimate' }));
-          d.code = code;
-          st.room = d;
-          if (d.seats && d.seats[api.uid]) remember(code, d.game);   // a seated player opening the room is remembered
-        }
+        } else st.room = roomData(snap);
         emit();
       }, fail));
       unsubs.push(fs.onSnapshot(fs.collection(ref, 'players'), { includeMetadataChanges: true }, function (snap) {
         st.playersPending = snap.metadata.hasPendingWrites;
+        if (!snap.metadata.fromCache) st.serverAt = Date.now();
         if (snap.metadata.fromCache && snap.size === 0 && !snap.metadata.hasPendingWrites) return;   // wait for the server
-        var players = {};
-        snap.forEach(function (d) {
-          var x = plain(d.data({ serverTimestamps: 'estimate' }));
-          if (!Array.isArray(x.moves)) x.moves = [];
-          players[d.id] = x;
-        });
-        st.players = players;
+        st.players = playersData(snap);
         emit();
       }, fail));
+    }
+    // Backup check: read the room straight from the server now and then. If it shows something the live
+    // listeners missed, use it and reconnect them. Quiet checks back off to POLL_MAX to save reads.
+    function schedule(ms) {
+      clearTimeout(pollT);
+      if (!stopped) pollT = setTimeout(poll, ms);
+    }
+    function poll(reason) {
+      if (stopped || polling) return;
+      if (document.hidden || offlineNow()) { schedule(gap); return; }
+      polling = true;
+      var fs = core.m.fs, ref = roomRef(code), t0 = Date.now();
+      Promise.all([fs.getDocFromServer(ref), fs.getDocsFromServer(fs.collection(ref, 'players'))]).then(function (r) {
+        if (stopped) return;
+        // Skip if a live update landed while we were reading, or our own write is still on its way.
+        if (st.serverAt > t0 || st.roomPending || st.playersPending) return;
+        var room = r[0].exists() ? roomData(r[0]) : null;
+        var players = playersData(r[1]), cur = st.players || {}, missed = false;
+        Object.keys(cur).forEach(function (id) {                   // move lists only grow: never go backwards
+          var a = cur[id], b = players[id];
+          if (b && a && a.moves.length > b.moves.length) players[id] = a;
+        });
+        if (stable(room) !== stable(st.room === undefined ? null : st.room)) missed = true;
+        Object.keys(players).forEach(function (id) {
+          var a = cur[id], b = players[id];
+          if (!a || b.moves.length !== a.moves.length || stable(b.setup || null) !== stable(a.setup || null)) missed = true;
+        });
+        if (missed) {
+          try { console.warn('HubOnline: live updates missed; reconnecting'); } catch (e) {}
+          st.room = room; st.players = players; st.fromCache = false; st.serverAt = Date.now();
+          emit();
+          subscribe();
+          gap = POLL_MIN;
+        } else gap = Math.min(POLL_MAX, Math.round(gap * 1.5));
+      }).catch(function () {}).then(function () { polling = false; schedule(gap); });
+    }
+    ready().then(function () {
+      if (stopped) return;
+      subscribe();
+      schedule(POLL_MIN);
+      unWake = addWaker(function (reason) {
+        if (stopped) return;
+        if (reason === 'resume') subscribe();                       // the old connection may be dead after a sleep
+        gap = POLL_MIN;
+        clearTimeout(pollT);
+        poll(reason);
+      });
     }, fail);
     return function () {
       stopped = true;
+      clearTimeout(pollT);
+      if (unWake) unWake();
       unsubs.forEach(function (u) { try { u(); } catch (e) {} });
       unsubs = [];
     };
@@ -471,7 +562,9 @@
       Promise.resolve().then(function () { out([], null); });
       return function () { stopped = true; };
     }
-    ready().then(function () {
+    var unWake = null;
+    function sub() {
+      if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
       if (stopped) return;
       var fs = core.m.fs;
       unsub = fs.onSnapshot(fs.query(fs.collection(core.db, 'rooms', code, 'draw'), fs.where('t', '==', t)), function (snap) {
@@ -484,9 +577,15 @@
         list.sort(function (a, b) { return a.i - b.i; });
         out(list, null);
       }, fail);
+    }
+    ready().then(function () {
+      if (stopped) return;
+      sub();
+      unWake = addWaker(function (reason) { if (!stopped && reason === 'resume') sub(); });
     }, fail);
     return function () {
       stopped = true;
+      if (unWake) unWake();
       if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
     };
   }

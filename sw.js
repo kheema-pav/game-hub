@@ -1,5 +1,5 @@
 /* Game Hub service worker: offline play. Spec: docs/hubkit-spec.md (amendment B). */
-const VERSION = 'gh-v3';
+const VERSION = 'gh-v4';
 const CACHE = VERSION;
 const FONTS = 'gh-fonts-v1';
 const PRECACHE = ['./', 'codex/', 'isles/', 'gems/', 'sketch/', 'shared/hubkit.js', 'shared/online.js', 'shared/lobby.js', 'shared/firebase-config.js', 'manifest.webmanifest',
