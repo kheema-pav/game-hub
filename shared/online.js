@@ -366,9 +366,71 @@
   window.addEventListener('online', function () { wakeAll('resume'); });
   window.addEventListener('focus', function () { wakeAll('visible'); });
 
+  // Backup reads go over plain fetch (Firestore REST) instead of the SDK. The SDK's getDocFromServer reuses the
+  // listener's own query target, so when the live stream is wedged it just hands back the same stale snapshot
+  // (or hangs behind the dead channel). A separate transport sees what the server really holds.
+  function restMillis(t) {                // same arithmetic as Timestamp.toMillis(), so both sources compare equal
+    var m = /^(.*T\d\d:\d\d:\d\d)(?:\.(\d+))?Z$/.exec(String(t));
+    if (!m) return Date.parse(t);
+    return Date.parse(m[1] + 'Z') / 1000 * 1000 + Number(((m[2] || '') + '000000000').slice(0, 9)) / 1e6;
+  }
+  function restValue(v) {
+    if (!v || typeof v !== 'object') return null;
+    if ('stringValue' in v) return v.stringValue;
+    if ('integerValue' in v) return Number(v.integerValue);
+    if ('doubleValue' in v) return Number(v.doubleValue);
+    if ('booleanValue' in v) return v.booleanValue;
+    if ('timestampValue' in v) return restMillis(v.timestampValue);
+    if ('mapValue' in v) return restFields(v.mapValue.fields);
+    if ('arrayValue' in v) return (v.arrayValue.values || []).map(restValue);
+    return null;
+  }
+  function restFields(f) {
+    var o = {};
+    Object.keys(f || {}).forEach(function (k) { o[k] = restValue(f[k]); });
+    return o;
+  }
+  function restGet(path) {
+    var c = core, e = emulator(), cfg = config();
+    if (!c || !c.auth.currentUser || !cfg || typeof fetch !== 'function') return Promise.reject(err('unavailable', 'No REST'));
+    return c.auth.currentUser.getIdToken().then(function (tok) {
+      var base = e ? 'http://' + e.host + ':' + e.fs + '/v1' : 'https://firestore.googleapis.com/v1';
+      var url = base + '/projects/' + encodeURIComponent(cfg.projectId) + '/databases/(default)/documents/' + path;
+      var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      var t = setTimeout(function () { if (ctl) ctl.abort(); }, 10000);
+      return fetch(url, { headers: { Authorization: 'Bearer ' + tok }, signal: ctl ? ctl.signal : undefined, cache: 'no-store' }).then(function (r) {
+        clearTimeout(t);
+        if (!r.ok) throw err('denied', 'REST ' + r.status);   // incl. 404: let the SDK read decide whether the room is gone
+        return r.json();
+      }, function (x) { clearTimeout(t); throw x; });
+    });
+  }
+  // -> {room: plain|null, players: {uid: plain}} read from the server over REST
+  function restRead(code) {
+    return Promise.all([restGet('rooms/' + code), restGet('rooms/' + code + '/players?pageSize=100')]).then(function (r) {
+      var room = null, players = {};
+      if (r[0] && r[0].fields) { room = restFields(r[0].fields); room.code = code; }
+      var docs = (r[1] && r[1].documents) || [];
+      docs.forEach(function (d) {
+        var x = restFields(d.fields);
+        if (!Array.isArray(x.moves)) x.moves = [];
+        players[d.name.split('/').pop()] = x;
+      });
+      return { room: room, players: players };
+    });
+  }
+  // Tear down and rebuild Firestore's network streams: a wedged long-poll channel does not recover by itself.
+  var lastRestart = 0;
+  function restartNetwork() {
+    if (!core || Date.now() - lastRestart < 15000) return;
+    lastRestart = Date.now();
+    var fs = core.m.fs, db = core.db;
+    fs.disableNetwork(db).then(function () { return fs.enableNetwork(db); }).catch(function () { try { fs.enableNetwork(db); } catch (e) {} });
+  }
+
   function watch(code, cb) {
     code = norm(code);
-    var stopped = false, unsubs = [], unWake = null, pollT = null, gap = POLL_MIN, polling = false;
+    var stopped = false, unsubs = [], unWake = null, pollT = null, gap = POLL_MIN, polling = false, skipCache = { room: false, players: false };
     var st = { room: undefined, players: undefined, roomPending: false, playersPending: false, fromCache: false, serverAt: 0 };
     function out(error) {
       if (stopped || typeof cb !== 'function') return;
@@ -409,6 +471,10 @@
       if (stopped) return;
       var fs = core.m.fs, ref = roomRef(code);
       unsubs.push(fs.onSnapshot(ref, { includeMetadataChanges: true }, function (snap) {
+        if (skipCache.room) {                                       // after a backup recovery, wait for the server's word
+          if (snap.metadata.fromCache && !snap.metadata.hasPendingWrites) return;
+          if (!snap.metadata.fromCache) skipCache.room = false;
+        }
         st.roomPending = snap.metadata.hasPendingWrites;
         st.fromCache = snap.metadata.fromCache;
         if (!snap.metadata.fromCache) st.serverAt = Date.now();
@@ -419,6 +485,10 @@
         emit();
       }, fail));
       unsubs.push(fs.onSnapshot(fs.collection(ref, 'players'), { includeMetadataChanges: true }, function (snap) {
+        if (skipCache.players) {
+          if (snap.metadata.fromCache && !snap.metadata.hasPendingWrites) return;
+          if (!snap.metadata.fromCache) skipCache.players = false;
+        }
         st.playersPending = snap.metadata.hasPendingWrites;
         if (!snap.metadata.fromCache) st.serverAt = Date.now();
         if (snap.metadata.fromCache && snap.size === 0 && !snap.metadata.hasPendingWrites) return;   // wait for the server
@@ -436,13 +506,19 @@
       if (stopped || polling) return;
       if (document.hidden || offlineNow()) { schedule(gap); return; }
       polling = true;
-      var fs = core.m.fs, ref = roomRef(code), t0 = Date.now();
-      Promise.all([fs.getDocFromServer(ref), fs.getDocsFromServer(fs.collection(ref, 'players'))]).then(function (r) {
+      var t0 = Date.now();
+      // REST first; if that is unavailable (blocked, not allowed) fall back to the SDK's server reads.
+      var read = restRead(code).catch(function () {
+        var fs = core.m.fs, ref = roomRef(code);
+        return Promise.all([fs.getDocFromServer(ref), fs.getDocsFromServer(fs.collection(ref, 'players'))]).then(function (r) {
+          return { room: r[0].exists() ? roomData(r[0]) : null, players: playersData(r[1]) };
+        });
+      });
+      read.then(function (r) {
         if (stopped) return;
         // Skip if a live update landed while we were reading, or our own write is still on its way.
         if (st.serverAt > t0 || st.roomPending || st.playersPending) return;
-        var room = r[0].exists() ? roomData(r[0]) : null;
-        var players = playersData(r[1]), cur = st.players || {}, missed = false;
+        var room = r.room, players = r.players, cur = st.players || {}, missed = false;
         Object.keys(cur).forEach(function (id) {                   // move lists only grow: never go backwards
           var a = cur[id], b = players[id];
           if (b && a && a.moves.length > b.moves.length) players[id] = a;
@@ -455,7 +531,9 @@
         if (missed) {
           try { console.warn('HubOnline: live updates missed; reconnecting'); } catch (e) {}
           st.room = room; st.players = players; st.fromCache = false; st.serverAt = Date.now();
+          skipCache = { room: true, players: true };               // the restarted listeners first replay the (older) cache
           emit();
+          restartNetwork();
           subscribe();
           gap = POLL_MIN;
         } else gap = Math.min(POLL_MAX, Math.round(gap * 1.5));
