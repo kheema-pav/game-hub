@@ -12,7 +12,7 @@
     '.hs-root *{box-sizing:border-box}.hs-root [hidden]{display:none!important}',
     '.hs-root button{font:inherit;font-weight:650;color:inherit;cursor:pointer;border:1px solid var(--hs-line);border-radius:12px;background:var(--hs-button);padding:10px 14px;min-height:44px;touch-action:manipulation}',
     '.hs-root button:disabled{opacity:.55;cursor:wait}.hs-root button:focus-visible,.hs-root [tabindex]:focus-visible{outline:3px solid #d6a52c;outline-offset:3px}',
-    '.hs-launch{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:12px;z-index:4700;box-shadow:0 2px 8px #0002;font-size:13px!important;min-height:36px!important;padding:6px 12px!important}',
+    '.hs-launch{margin:12px}',
     '.hs-layer{position:fixed;inset:0;background:#0009;z-index:6100;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;overscroll-behavior:contain}',
     '.hs-panel{background:var(--hs-bg);border:1px solid var(--hs-line);border-radius:20px;padding:20px;width:100%;max-width:460px;max-height:calc(100dvh - 32px);overflow:auto;box-shadow:0 12px 44px #0006}',
     '.hs-panel h2{font:750 22px/1.2 ui-sans-serif,system-ui,sans-serif;margin:0 0 10px;color:inherit}.hs-panel p{margin:10px 0}.hs-muted{color:var(--hs-muted)}',
@@ -54,7 +54,7 @@
     if (!/^[1-9]\d{5}$/.test(code)) return { update: function () { return false; }, close: function () {} };
     var id = 'hs-title-' + (++sequence);
     var root = node('div', 'hs-root');
-    var launch = node('button', 'hs-launch', 'Room ' + label(code));
+    var launch = node('button', 'hs-launch', 'Online room');
     launch.type = 'button'; launch.setAttribute('aria-haspopup', 'dialog'); launch.setAttribute('aria-expanded', 'false');
     var layer = node('div', 'hs-layer'); layer.hidden = true;
     var panel = node('section', 'hs-panel');
@@ -64,6 +64,11 @@
     document.body.appendChild(root);
     var snap = {}, room = null, blocked = '', terminal = false, opened = false, busy = false, closed = false, confirmation = '', message = '', presenceError = null;
     var stopPresence = null, previousFocus = null, inerted = [];
+    var removeMenuItem = null;
+    if (window.HubKit && typeof window.HubKit.addMenuItem === 'function') {
+      removeMenuItem = window.HubKit.addMenuItem({ label: 'Online room', onSelect: show });
+      launch.hidden = true;
+    }
 
     function uid() { return window.HubOnline && HubOnline.uid; }
     function seated() { return !!(room && room.seats && room.seats[uid()]); }
@@ -220,7 +225,7 @@
     }
     function close() {
       if (closed) return;
-      closed = true; presenceOff(); clearInterval(timer); document.removeEventListener('focusin', focusin); thaw(); root.remove();
+      closed = true; presenceOff(); if (removeMenuItem) removeMenuItem(); clearInterval(timer); document.removeEventListener('focusin', focusin); thaw(); root.remove();
     }
     return { update: update, close: close };
   }

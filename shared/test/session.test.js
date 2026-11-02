@@ -44,7 +44,7 @@ function harness(overrides = {}) {
     ...overrides.rooms
   }};
   const location = { pathname: '/gems/', reload: () => calls.push(['reload']) };
-  const context = { window: { HubOnline: online }, HubOnline: online, document, navigator: { onLine: true }, location, console, Promise, Date, setInterval: fn => { const id = ++timerId; timers.set(id, fn); return id; }, clearInterval: id => timers.delete(id) };
+  const context = { window: { HubOnline: online, HubKit: overrides.hubkit }, HubOnline: online, document, navigator: { onLine: true }, location, console, Promise, Date, setInterval: fn => { const id = ++timerId; timers.set(id, fn); return id; }, clearInterval: id => timers.delete(id) };
   vm.runInNewContext(source, context);
   const instance = context.window.HubSession.mount({ code: '123456', onExit: () => calls.push(['exit']), onRestart: code => calls.push(['restart', code]) });
   const room = { game: 'gems', v: 2, status: 'playing', host: 'host', seats: { host: { name: 'Pat' }, guest: { name: '<img src=x onerror=alert(1)>' } } };
@@ -138,4 +138,26 @@ test('Escape closes ordinary controls but cannot uncover a terminal board', () =
   h.instance.update(h.snapshot({ room: { ...h.room, status: 'ended' } }));
   h.root().children[1].dispatch('keydown', { key: 'Escape' }); assert.equal(h.game.inert, true);
   h.instance.close();
+});
+
+
+test('online room controls live in the menu, stay hidden during updates and are removed on exit', () => {
+  const items = [];
+  const h = harness({ hubkit: { addMenuItem(item) {
+    items.push(item);
+    return () => items.splice(items.indexOf(item), 1);
+  } } });
+  h.instance.update(h.snapshot());
+  assert.equal(h.root().children[0].hidden, true, 'no room button overlays the board');
+  assert.equal(h.root().children[1].hidden, true);
+  assert.equal(items[0].label, 'Online room');
+  items[0].onSelect();
+  assert.equal(h.root().children[1].hidden, false);
+  assert.match(h.root().textContent, /123 456/);
+  h.action('hide').click();
+  h.instance.update(h.snapshot());
+  assert.equal(h.root().children[1].hidden, true, 'new snapshots do not reopen controls');
+  assert.equal(h.game.inert, false);
+  h.instance.close();
+  assert.equal(items.length, 0, 'local games cannot retain the previous room menu item');
 });
