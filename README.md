@@ -15,9 +15,14 @@ Fan-made tabletop games for phone and laptop, served as a static site by GitHub 
 | `codex/` | Codex Naturalis | Bots (Easy/Normal/Hard), pass-and-play |
 | `isles/` | Catan | Classic and Seafarers modes, bots, pass-and-play |
 | `gems/` | Splendor | Bots (Easy/Medium/Hard), pass-and-play |
-| `sketch/` | Pen & Paper Pictionary | One phone runs words and timer for 2–4 teams |
+| `sketch/` | Pictionary | One-device teams or online drawing and guessing |
+| `ticket/` | Ticket to Ride | USA Classic / Europe Classic, bots, same-device, online |
+| `ludo/` | Ludo | 2-4 players, documented house rules, bots, same-device, online |
+| `connect4/` | Four in a Row | 2 players, three bot levels, same-device, online |
+| `azul/` | Azul | Standard coloured wall, 2-4 players, bots, same-device, online |
+| `shared/tabletop*.js`, `shared/tabletop.css` | New-game shell | Local saves, private handover, authored online replay and setup |
 
-Each game is a single `index.html` that also loads the shared menu from `shared/hubkit.js` (only Google Fonts load from outside the site), so it runs from any static host. The service worker `sw.js` and the manifest sit in the site root, and the games keep working if `hubkit.js` fails to load.
+Each game has a small `index.html`, `style.css`, `engine.js` (rules/data) and `game.js` (screen and game flow). Catan also has `bot.js`. These are classic scripts with no build step. Shared menus load from `shared/hubkit.js`; online play lazily loads the Firebase SDK from gstatic. The site runs from any static host. The service worker `sw.js` and the manifest sit in the site root, and the games keep working if `hubkit.js` fails to load.
 Saved games stay in each player's own browser.
 
 ## How the shared menu works
@@ -41,6 +46,29 @@ Rules update for bigger rooms and drawing (platform v2): rooms may now have 2 to
 ### Testing the rules and online code locally
 
 Needs Node and Java 21. From `firebase/test/`: `npm install`, then `npm test` starts the Firestore emulator (project `demo-game-hub`, port 8180) and runs `rules.test.js`. To try the site against local emulators, run `npx firebase emulators:start --only firestore,auth --project demo-game-hub --config ../firebase.json`, serve the site, and in the browser console set `localStorage['hub.emulator'] = '127.0.0.1:8180:9199'` (host:firestorePort:authPort; remove it to go back to the real project).
+
+## Room recovery, versions and release checks
+
+The in-game **Room** button shows advisory player presence and recovery actions. The host can cancel an open room or end a started game after confirmation. Terminal rooms retain their history and reject further moves. Any seated player can create a separate replacement room with the same settings, even if the host is absent; share its new invitation. Other players are not silently moved and the old game is unchanged.
+
+Presence writes at most once per minute per visible active tab, never from hub room listings. "Not seen recently" is advisory, not a forfeit. Clearing browser data or changing browser loses the anonymous identity and its seat. Closing a tab does not mark other tabs with the same identity offline.
+
+New rooms fix platform and game versions from `shared/versions.js`. Existing v1 rooms remain supported because their engines have not changed. Unsupported versions are blocked before joining or replay. Old cached clients cannot be forcibly upgraded; ask all players to update before a session. Increment a game's version whenever a rules/replay change would interpret old move histories differently.
+
+Direct mode links use `?mode=solo`, `?mode=local` and `?mode=online`. Room invitations and `#continue` take priority. Pictionary supports local and online modes only.
+
+**Deployment order:**
+
+1. Run the checks below and publish `firebase/firestore.rules` to the existing Firebase project first. This repository does not deploy rules automatically. The new room schema and recovery writes require the updated rules; old clients and v1 rooms remain accepted by them.
+2. Deploy the complete static site, including every extracted CSS/JS file and shared scripts. Bump `VERSION` in `sw.js` for each shipped asset change.
+3. Close all Game Hub tabs and reopen to activate an available new service worker. A running game keeps its cached release until tabs close. The next release installs only if every required asset downloads successfully; executable files are served from one complete release rather than refreshed individually.
+4. Check a new room, a legacy invitation, host cancellation, a guest replacement, a backgrounded phone and an offline local reload.
+
+Dependency-free checks: `node --test test/*.test.js shared/test/*.test.js isles/test/entry-modes.test.js sketch/test/*.test.js connect4/test/*.test.js ludo/test/*.test.js azul/*.test.js ticket/test/*.test.js` and `node isles/test/engine.test.js`. Firestore checks: `cd firebase/test && npm ci && npm test` (Node and Java 21). GitHub Actions runs these on pushes and pull requests.
+
+The four added games are implemented. Ticket edition details and adapted MIT data credits are in [ticket/README.md](ticket/README.md); Azul uses the standard coloured-wall rules; Ludo house rules are explicit in [ludo/README.md](ludo/README.md).
+
+See [the reviewed implementation plan](docs/implementation-plan.md) and [new-game candidates](docs/game-candidates.md).
 
 ## Adding a game
 

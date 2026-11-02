@@ -1,7 +1,7 @@
 // Firestore security rules tests. Run with `npm test` (starts the emulator via firebase emulators:exec).
 const { test, before, after, beforeEach } = require('node:test');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
-const { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where } = require('firebase/firestore');
+const { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, serverTimestamp } = require('firebase/firestore');
 const { setLogLevel } = require('firebase/firestore');
 setLogLevel('silent');
 const assert = require('node:assert');
@@ -426,4 +426,75 @@ test('profiles: oversized name or colour, wrong types and extra fields are rejec
 test('anything outside the known paths is denied', async () => {
   await assertFails(setDoc(doc(db('u1'), 'other', 'x'), { a: 1 }));
   await assertFails(getDoc(doc(db('u1'), 'other', 'x')));
+});
+
+/* ---------- lifecycle, compatibility metadata and advisory presence ---------- */
+test('version metadata: v2 requires a positive gameVersion; legacy v1 is accepted', async () => {
+  await assertSucceeds(setDoc(doc(db('host'), 'rooms', '482619'), roomDoc({ v: 2, gameVersion: 1 })));
+  await assertSucceeds(setDoc(doc(db('host'), 'rooms', '482620'), roomDoc()));
+  for (const over of [{v: 2}, {v: 2, gameVersion: 0}, {v: 2, gameVersion: '1'}, {v: 3, gameVersion: 1}]) {
+    await assertFails(setDoc(doc(db('host'), 'rooms', '482621'), roomDoc(over)));
+  }
+  await assertFails(updateDoc(doc(db('host'), 'rooms', '482619'), {gameVersion: 2}));
+  await assertFails(updateDoc(doc(db('p2'), 'rooms', '482619'), {'seats.p2': seat(), v: 1}));
+});
+test('lifecycle: host can cancel open room and end playing room with server metadata', async () => {
+  await seed('482619', roomDoc());
+  await assertSucceeds(updateDoc(doc(db('host'), 'rooms', '482619'), {status:'cancelled', endedBy:'host', endedAt:serverTimestamp()}));
+  const final = (await getDoc(doc(db('host'), 'rooms', '482619'))).data();
+  assert.equal(final.status, 'cancelled');
+  assert.equal(final.seed, 12345);
+  await seed('482620', roomDoc({status:'playing', seats:{host:seat(),p2:seat()}}), {host:{moves:[{a:'roll'}]}});
+  await assertSucceeds(updateDoc(doc(db('host'), 'rooms', '482620'), {status:'ended',endedBy:'host',endedAt:serverTimestamp()}));
+  assert.deepEqual((await getDoc(doc(db('host'), 'rooms', '482620', 'players', 'host'))).data().moves,[{a:'roll'}]);
+});
+test('lifecycle: non-host, signed-out, wrong transition and forged metadata are denied', async () => {
+  await seed('482619', roomDoc({seats:{host:seat(),p2:seat()}}));
+  const end = {status:'cancelled',endedBy:'host',endedAt:serverTimestamp()};
+  await assertFails(updateDoc(doc(db('p2'), 'rooms', '482619'), {...end,endedBy:'p2'}));
+  await assertFails(updateDoc(doc(anon(), 'rooms', '482619'), end));
+  await assertFails(updateDoc(doc(db('host'), 'rooms', '482619'), {...end,status:'ended'}));
+  await assertFails(updateDoc(doc(db('host'), 'rooms', '482619'), {...end,endedBy:'p2'}));
+  await assertFails(updateDoc(doc(db('host'), 'rooms', '482619'), {...end,endedAt:1}));
+  await assertFails(updateDoc(doc(db('host'), 'rooms', '482619'), {...end,seed:999}));
+});
+test('lifecycle: cancelled and ended rooms cannot reopen, join, move, draw or heartbeat', async () => {
+  for (const [code,status] of [['482619','cancelled'],['482620','ended']]) {
+    await seed(code, roomDoc({status,seats:{host:seat(),p2:seat()},endedBy:'host',endedAt:1}), {host:{moves:[]}});
+    await assertFails(updateDoc(doc(db('host'), 'rooms', code), {status:'open'}));
+    await assertFails(updateDoc(doc(db('host'), 'rooms', code), {status:'playing',startedAt:serverTimestamp()}));
+    await assertFails(updateDoc(doc(db('p3'), 'rooms', code), {'seats.p3':seat()}));
+    await assertFails(setDoc(doc(db('p2'), 'rooms', code, 'players', 'p2'), {moves:[{a:'roll'}]}));
+    await assertFails(updateDoc(doc(db('host'), 'rooms', code, 'players', 'host'), {moves:[{a:'roll'}]}));
+    await assertFails(setDoc(doc(db('host'), 'rooms', code, 'draw', 'host_0_0'), {t:0,i:0,d:'x'}));
+    await assertFails(setDoc(doc(db('host'), 'rooms', code, 'presence', 'host'), {at:serverTimestamp(),state:'here'}));
+    await assertFails(deleteDoc(doc(db('host'), 'rooms', code)));
+    await assertSucceeds(getDoc(doc(db('p2'), 'rooms', code)));
+  }
+});
+test('presence: only a seated caller can write their own timestamped heartbeat', async () => {
+  await seed('482619', roomDoc({seats:{host:seat(),p2:seat()}}));
+  const p = (uid,as=uid) => doc(db(as),'rooms','482619','presence',uid);
+  await assertSucceeds(setDoc(p('host'), {at:serverTimestamp(),state:'here'}));
+  await assertSucceeds(setDoc(p('p2'), {at:serverTimestamp(),state:'here'}));
+  await assertSucceeds(setDoc(p('host'), {at:serverTimestamp(),state:'here'}));
+  await assertFails(setDoc(p('host','p2'), {at:serverTimestamp(),state:'here'}));
+  await assertFails(setDoc(p('stranger'), {at:serverTimestamp(),state:'here'}));
+  await assertFails(setDoc(p('host'), {at:1,state:'here'}));
+  await assertFails(setDoc(p('host'), {at:serverTimestamp(),state:'away'}));
+  await assertFails(setDoc(p('host'), {at:serverTimestamp(),state:'here',admin:true}));
+  await assertFails(setDoc(doc(anon(),'rooms','482619','presence','host'), {at:serverTimestamp(),state:'here'}));
+  await assertFails(deleteDoc(p('host')));
+  await assertSucceeds(getDocs(collection(db('p2'),'rooms','482619','presence')));
+});
+
+test('new tabletop rooms accept fixed Ticket editions and reject unsupported edition settings', async () => {
+  await assertSucceeds(setDoc(doc(db('host'),'rooms','482611'),roomDoc({game:'ticket',v:2,gameVersion:1,maxSeats:5,opts:{edition:'usa'}})));
+  await assertSucceeds(setDoc(doc(db('host'),'rooms','482612'),roomDoc({game:'ticket',v:2,gameVersion:1,opts:{edition:'europe'}})));
+  await assertFails(setDoc(doc(db('host'),'rooms','482613'),roomDoc({game:'ticket',v:2,gameVersion:1,opts:{edition:'unknown'}})));
+  await assertFails(updateDoc(doc(db('host'),'rooms','482611'),{opts:{edition:'europe'}}));
+  for (const game of ['connect4','ludo','azul']) {
+    await assertSucceeds(setDoc(doc(db('host'),'rooms','482614'),roomDoc({game,v:2,gameVersion:1,opts:{}})));
+    await env.clearFirestore();
+  }
 });

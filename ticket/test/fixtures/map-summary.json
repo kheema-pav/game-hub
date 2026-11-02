@@ -1,0 +1,22 @@
+{
+  "usa": {
+    "cities": 36,
+    "routes": 100,
+    "tickets": 30,
+    "long": 0,
+    "spaces": 309,
+    "ferries": 0,
+    "locomotives": 0,
+    "tunnels": 0
+  },
+  "europe": {
+    "cities": 47,
+    "routes": 101,
+    "tickets": 46,
+    "long": 6,
+    "spaces": 300,
+    "ferries": 13,
+    "locomotives": 17,
+    "tunnels": 18
+  }
+}

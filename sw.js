@@ -1,64 +1,71 @@
-/* Game Hub service worker: offline play. Spec: docs/hubkit-spec.md (amendment B). */
-const VERSION = 'gh-v4';
+/* One complete cached release at a time. Bump VERSION whenever shipped assets change. */
+const VERSION = 'gh-v6';
 const CACHE = VERSION;
 const FONTS = 'gh-fonts-v1';
-const PRECACHE = ['./', 'codex/', 'isles/', 'gems/', 'sketch/', 'shared/hubkit.js', 'shared/online.js', 'shared/lobby.js', 'shared/firebase-config.js', 'manifest.webmanifest',
-  'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
+const PRECACHE = [
+  './', 'codex/', 'isles/', 'gems/', 'sketch/', 'ticket/', 'ludo/', 'connect4/', 'azul/',
+  ...['codex', 'isles', 'gems', 'sketch'].flatMap(game =>
+    ['style.css', 'engine.js', 'game.js'].map(file => game + '/' + file)),
+  ...['ticket', 'ludo', 'connect4', 'azul'].flatMap(game => ['style.css', 'engine.js', 'game.js'].map(file => game + '/' + file)),
+  'ticket/data.js', 'shared/tabletop-core.js', 'shared/tabletop.js', 'shared/tabletop.css',
+  'isles/bot.js', 'shared/hubkit.js', 'shared/online.js', 'shared/lobby.js',
+  'shared/session.js', 'shared/versions.js', 'shared/firebase-config.js',
+  'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-180.png',
+  'icons/icon-192.png', 'icons/icon-512.png'
+];
 
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
-  event.waitUntil(caches.open(CACHE).then((cache) =>
-    // One missing file must not block the install, so add each on its own.
-    Promise.all(PRECACHE.map((u) => cache.add(new Request(u, { cache: 'reload' })).catch(() => {})))
-  ));
+self.addEventListener('install', event => {
+  // A missing asset rejects installation, leaving the previous complete release active.
+  // Do not skipWaiting: running games must finish with the code they started with.
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(
+    PRECACHE.map(path => new Request(path, { cache: 'reload' }))
+  )));
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== FONTS).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys().then(keys => Promise.all(
+    keys.filter(key => key.startsWith('gh-') && key !== CACHE && key !== FONTS)
+      .map(key => caches.delete(key))
+  )).then(() => self.clients.claim()));
 });
 
-function networkFirst(request) {
-  return new Promise((resolve) => {
-    let settled = false;
-    const fromCache = () => caches.match(request, { ignoreSearch: true });
-    const fallback = () => fromCache().then((hit) => { if (!settled) { settled = true; resolve(hit || Response.error()); } });
-    const timer = setTimeout(fallback, 3000);
-    fetch(request).then((res) => {
-      clearTimeout(timer);
-      if (res && res.ok) {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
-      }
-      if (!settled) { settled = true; resolve(res); }
-    }).catch(() => { clearTimeout(timer); fallback(); });
-  });
+function pageKey(url) {
+  // Query parameters carry room/mode intent, not different HTML. Only known document
+  // routes are canonicalised. Scripts and styles always use exact cache keys.
+  const root = new URL('./', self.location.href);
+  const relative = url.pathname.slice(root.pathname.length);
+  const page = relative === 'index.html' || relative === '' ? './'
+    : /^(codex|isles|gems|sketch|ticket|ludo|connect4|azul)\/(index\.html)?$/.test(relative)
+      ? relative.split('/')[0] + '/' : null;
+  return page ? new URL(page, root).href : null;
 }
 
-function staleWhileRevalidate(request) {
-  return caches.open(FONTS).then((cache) =>
-    cache.match(request).then((hit) => {
-      const net = fetch(request).then((res) => {
-        if (res && (res.ok || res.type === 'opaque')) cache.put(request, res.clone()).catch(() => {});
-        return res;
-      }).catch(() => hit || Response.error());
-      return hit || net;
-    })
-  );
+async function releaseAsset(request) {
+  const cache = await caches.open(CACHE);
+  const url = new URL(request.url);
+  const documentKey = request.mode === 'navigate' ? pageKey(url) : null;
+  const hit = await cache.match(documentKey || request);
+  // Do not replace cached executable assets individually with a newer release.
+  // A new service-worker install fetches and validates the complete next release.
+  return hit || fetch(request);
 }
 
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    event.respondWith(staleWhileRevalidate(req));
-  } else if (url.origin === self.location.origin) {
-    // Only same-origin requests and Google Fonts are handled; the Firebase SDK on www.gstatic.com and
-    // the Firebase/Firestore APIs are never intercepted.
-    event.respondWith(networkFirst(req));
+async function fontAsset(request) {
+  const cache = await caches.open(FONTS);
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  const response = await fetch(request);
+  if (response.ok || response.type === 'opaque') await cache.put(request, response.clone());
+  return response;
+}
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin === self.location.origin) event.respondWith(releaseAsset(request));
+  else if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    event.respondWith(fontAsset(request));
   }
+  // Firebase SDK and APIs are deliberately left to the browser.
 });

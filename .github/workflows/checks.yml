@@ -1,0 +1,48 @@
+name: Game Hub checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test test/*.test.js shared/test/*.test.js isles/test/entry-modes.test.js sketch/test/*.test.js connect4/test/*.test.js ludo/test/*.test.js azul/*.test.js ticket/test/*.test.js
+      - run: node isles/test/engine.test.js
+  firestore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: firebase/test/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+        working-directory: firebase/test
+      - run: npm test
+        working-directory: firebase/test
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --prefix "$RUNNER_TEMP/browser-deps" --no-save playwright@1.56.1
+      - run: $RUNNER_TEMP/browser-deps/node_modules/.bin/playwright install --with-deps chromium
+      - run: NODE_PATH="$RUNNER_TEMP/browser-deps/node_modules" node test/browser-smoke.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: game-hub-browser-screenshots
+          path: artifacts/screenshots

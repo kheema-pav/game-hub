@@ -64,6 +64,30 @@
     return JSON.stringify(v === undefined ? null : v);
   }
 
+  /* Room metadata is fixed at creation. Legacy v1 rooms use the unchanged game engines. */
+  function versions() { return window.HubGameVersions || { platform: 2, games: { codex: 1, isles: 1, gems: 1, sketch: 1, connect4: 1, ludo: 1, azul: 1, ticket: 1 } }; }
+  function terminal(room) { return !!room && (room.status === 'cancelled' || room.status === 'ended'); }
+  function compatibility(room) {
+    var v = versions(), game = room && room.game;
+    if (!room || !Object.prototype.hasOwnProperty.call(v.games, game)) return { ok: false, message: 'This game is not supported by this version of Game Hub.' };
+    if (room.v === 1 && (room.gameVersion === undefined || room.gameVersion === v.games[game])) return { ok: true, legacy: true };
+    if (room.v === v.platform && room.gameVersion === v.games[game]) return { ok: true, legacy: false };
+    return { ok: false, message: 'This room uses a different game version. Refresh Game Hub, or ask your friends to create a new room.' };
+  }
+  function requireCompatible(room) {
+    var c = compatibility(room);
+    if (!c.ok) throw err('version', c.message);
+  }
+  function requireActive(room) {
+    requireCompatible(room);
+    if (terminal(room)) throw err('ended', room.status === 'cancelled' ? 'This room was cancelled.' : 'This game has ended.');
+  }
+  function featureError(e) {
+    var x = fsErr(e);
+    return x.code === 'denied' ? err('rules-update', 'The game server needs its rules updated for room recovery and presence. Ask the owner to publish firebase/firestore.rules.', e) : x;
+  }
+  var roomCache = {};
+
   /* ---------- configuration ---------- */
   // localStorage['hub.emulator'] = "host:firestorePort:authPort" switches to the local emulators (tests only).
   function emulator() {
@@ -232,6 +256,8 @@
   async function create(o) {
     o = o || {};
     var game = o.game, maxSeats = o.maxSeats;
+    var vs = versions();
+    if (!Object.prototype.hasOwnProperty.call(vs.games, game)) throw err('invalid', 'Unsupported game');
     if (typeof game !== 'string' || !/^[a-z][a-z0-9_-]{0,23}$/.test(game)) throw err('invalid', 'create needs a game id');
     if (!(typeof maxSeats === 'number' && maxSeats % 1 === 0 && maxSeats >= 2 && maxSeats <= 8)) throw err('invalid', 'maxSeats must be a whole number from 2 to 8');
     var opts = null;
@@ -256,7 +282,7 @@
           var seats = {};
           seats[api.uid] = seat;
           var data = {
-            game: game, v: 1, host: api.uid, seed: 1 + randInt(2147483646), maxSeats: maxSeats,
+            game: game, v: vs.platform, gameVersion: vs.games[game], host: api.uid, seed: 1 + randInt(2147483646), maxSeats: maxSeats,
             status: 'open', seats: seats, createdAt: fs.serverTimestamp()
           };
           if (opts) data.opts = opts;
@@ -266,7 +292,7 @@
         return { code: code };
       } catch (e) {
         if (e === COLLISION) continue;
-        throw fsErr(e);
+        throw featureError(e);
       }
     }
     throw err('denied', 'Could not find a free game code');
@@ -287,9 +313,10 @@
       }
       if (!snap.exists()) return { exists: false, code: code };
       var d = plain(snap.data());
+      roomCache[code] = d;
       var seats = d.seats && typeof d.seats === 'object' ? d.seats : {};
       return {
-        exists: true, code: code, game: d.game, status: d.status, maxSeats: d.maxSeats, host: d.host,
+        exists: true, code: code, game: d.game, v: d.v, gameVersion: d.gameVersion, status: d.status, maxSeats: d.maxSeats, host: d.host,
         seats: seats, seated: !!seats[api.uid], opts: d.opts && typeof d.opts === 'object' ? d.opts : {}
       };
     })(), 8000, 'timeout');
@@ -307,6 +334,7 @@
         if (!snap.exists()) throw err('missing', 'No game with that code');
         var d = snap.data(), seats = d.seats || {};
         game = d.game;
+        requireActive(d);
         if (seats[uid]) return;                                   // already seated: fine, even after the start
         if (d.status !== 'open') throw err('started', 'That game has already started');
         var n = Object.keys(seats).length;
@@ -338,9 +366,122 @@
     if (!CODE_RE.test(code)) throw err('missing', 'No game with that code');
     if (offlineNow()) throw err('offline', 'Offline');
     await ready().catch(readyErrFor('room'));
-    var fs = core.m.fs;
-    try { await withTimeout(fs.updateDoc(roomRef(code), { status: 'playing', startedAt: fs.serverTimestamp() }), 12000, 'offline'); }
+    var fs = core.m.fs, ref = roomRef(code);
+    try {
+      await withTimeout(fs.runTransaction(core.db, async function (tx) {
+        var snap = await tx.get(ref);
+        if (!snap.exists()) throw err('missing', 'No game with that code');
+        var room = snap.data();
+        requireActive(room);
+        if (room.host !== api.uid) throw err('denied', 'Only the host can start this room.');
+        if (room.status === 'playing') return;
+        if (Object.keys(room.seats || {}).length < 2) throw err('invalid', 'At least two players are needed.');
+        tx.update(ref, { status: 'playing', startedAt: fs.serverTimestamp() });
+      }), 12000, 'offline');
+    } catch (e) { throw fsErr(e); }
+  }
+
+  async function endRoom(code) {
+    code = norm(code);
+    if (!CODE_RE.test(code)) throw err('missing', 'No game with that code');
+    if (offlineNow()) throw err('offline', 'Offline');
+    await ready().catch(readyErrFor('room'));
+    var fs = core.m.fs, ref = roomRef(code), status;
+    try {
+      await withTimeout(fs.runTransaction(core.db, async function (tx) {
+        var snap = await tx.get(ref);
+        if (!snap.exists()) throw err('missing', 'No game with that code');
+        var room = snap.data();
+        if (room.host !== api.uid) throw err('host-only', 'Only the host can end this room.');
+        if (terminal(room)) { status = room.status; return; }
+        requireCompatible(room);
+        status = room.status === 'open' ? 'cancelled' : 'ended';
+        tx.update(ref, { status: status, endedAt: fs.serverTimestamp(), endedBy: api.uid });
+      }), 12000, 'offline');
+    } catch (e) { throw e && e.isHub ? e : featureError(e); }
+    if (roomCache[code]) roomCache[code].status = status;
+    stopPresence(code);
+    return { status: status };
+  }
+
+  async function replacement(code) {
+    code = norm(code);
+    if (!CODE_RE.test(code)) throw err('missing', 'No game with that code');
+    if (offlineNow()) throw err('offline', 'Offline');
+    await ready().catch(readyErrFor('room'));
+    var snap;
+    try { snap = await withTimeout(core.m.fs.getDocFromServer(roomRef(code)), 10000, 'offline'); }
     catch (e) { throw fsErr(e); }
+    if (!snap.exists()) throw err('missing', 'No game with that code');
+    var room = snap.data();
+    if (!room.seats || !room.seats[api.uid]) throw err('denied', 'Only a seated player can create a replacement.');
+    // No mutation of the old room, no automatic invitation or move migration.
+    var result = await create({ game: room.game, maxSeats: room.maxSeats, opts: room.opts || {} });
+    return result;
+  }
+
+  /* Presence is advisory, reference counted per tab, and never writes an offline marker.
+     A hidden/closed tab therefore cannot mark the same user's other tab away. */
+  var presenceTrackers = {};
+  function stopPresence(code) {
+    var p = presenceTrackers[code];
+    if (p) { p.stopped = true; clearTimeout(p.timer); }
+  }
+  function trackPresence(code, onError) {
+    code = norm(code);
+    if (!CODE_RE.test(code)) return function () {};
+    var p = presenceTrackers[code];
+    if (!p || p.stopped) {
+      p = { count: 0, timer: null, last: 0, busy: false, stopped: false, callbacks: [] };
+      presenceTrackers[code] = p;
+      p.notify = function (e) { p.callbacks.slice().forEach(function (cb) { try { cb(e); } catch (_) {} }); };
+      p.schedule = function (ms) { clearTimeout(p.timer); if (!p.stopped && p.count && !document.hidden) p.timer = setTimeout(p.beat, ms); };
+      p.beat = async function () {
+        if (p.stopped || !p.count || p.busy) return;
+        if (document.hidden || offlineNow()) { p.schedule(60000); return; }
+        if (Date.now() - p.last < 60000) { p.schedule(60000 - (Date.now() - p.last)); return; }
+        p.busy = true;
+        try {
+          await ready();
+          if (p.stopped || document.hidden) return;
+          var r = roomCache[code];
+          if (!r) {
+            var snap = await core.m.fs.getDocFromServer(roomRef(code));
+            r = snap.exists() ? plain(snap.data()) : null;
+          }
+          if (p.stopped || document.hidden) return;
+          if (!r || terminal(r) || !r.seats || !r.seats[api.uid] || !compatibility(r).ok) { stopPresence(code); return; }
+          var fs = core.m.fs;
+          // Rate-limit attempts as well as successful writes on an unavailable connection.
+          p.last = Date.now();
+          await withTimeout(fs.setDoc(fs.doc(core.db, 'rooms', code, 'presence', api.uid), { at: fs.serverTimestamp(), state: 'here' }), 10000, 'offline');
+          p.notify(null);
+        } catch (e) {
+          var error = featureError(e);
+          p.notify({ code: error.code, message: error.message });
+          if (error.code === 'rules-update') stopPresence(code);
+        } finally { p.busy = false; p.schedule(60000); }
+      };
+      p.visible = function () { if (!document.hidden) p.beat(); else clearTimeout(p.timer); };
+      document.addEventListener('visibilitychange', p.visible);
+      window.addEventListener('online', p.visible);
+    }
+    p.count++;
+    if (typeof onError === 'function') p.callbacks.push(onError);
+    p.beat();
+    var done = false;
+    return function () {
+      if (done) return;
+      done = true;
+      if (typeof onError === 'function') { var i = p.callbacks.indexOf(onError); if (i >= 0) p.callbacks.splice(i, 1); }
+      p.count--;
+      if (!p.count) {
+        p.stopped = true; clearTimeout(p.timer);
+        document.removeEventListener('visibilitychange', p.visible);
+        window.removeEventListener('online', p.visible);
+        if (presenceTrackers[code] === p) delete presenceTrackers[code];
+      }
+    };
   }
 
   /* ---------- waking watchers ---------- */
@@ -407,7 +548,7 @@
   }
   // -> {room: plain|null, players: {uid: plain}} read from the server over REST
   function restRead(code) {
-    return Promise.all([restGet('rooms/' + code), restGet('rooms/' + code + '/players?pageSize=100')]).then(function (r) {
+    return Promise.all([restGet('rooms/' + code), restGet('rooms/' + code + '/players?pageSize=100'), restGet('rooms/' + code + '/presence?pageSize=100').catch(function () { return null; })]).then(function (r) {
       var room = null, players = {};
       if (r[0] && r[0].fields) { room = restFields(r[0].fields); room.code = code; }
       var docs = (r[1] && r[1].documents) || [];
@@ -416,7 +557,9 @@
         if (!Array.isArray(x.moves)) x.moves = [];
         players[d.name.split('/').pop()] = x;
       });
-      return { room: room, players: players };
+      var presence = null;
+      if (r[2]) { presence = {}; ((r[2] && r[2].documents) || []).forEach(function (d) { presence[d.name.split('/').pop()] = restFields(d.fields); }); }
+      return { room: room, players: players, presence: presence };
     });
   }
   // Tear down and rebuild Firestore's network streams: a wedged long-poll channel does not recover by itself.
@@ -431,12 +574,12 @@
   function watch(code, cb) {
     code = norm(code);
     var stopped = false, unsubs = [], unWake = null, pollT = null, gap = POLL_MIN, polling = false, skipCache = { room: false, players: false };
-    var st = { room: undefined, players: undefined, roomPending: false, playersPending: false, fromCache: false, serverAt: 0 };
+    var st = { room: undefined, players: undefined, presence: {}, presenceError: null, roomPending: false, playersPending: false, fromCache: false, serverAt: 0 };
     function out(error) {
       if (stopped || typeof cb !== 'function') return;
       try {
         cb({
-          room: st.room || null, players: st.players || {},
+          room: st.room || null, players: st.players || {}, presence: st.presence, presenceError: st.presenceError,
           pending: !!(st.roomPending || st.playersPending), fromCache: !!st.fromCache, error: error || null
         });
       } catch (e) { try { console.error(e); } catch (_) {} }
@@ -453,6 +596,8 @@
     function roomData(snap) {
       var d = plain(snap.data({ serverTimestamps: 'estimate' }));
       d.code = code;
+      roomCache[code] = d;
+      if (terminal(d)) stopPresence(code);
       if (d.seats && d.seats[api.uid]) remember(code, d.game);     // a seated player opening the room is remembered
       return d;
     }
@@ -495,6 +640,14 @@
         st.players = playersData(snap);
         emit();
       }, fail));
+      unsubs.push(fs.onSnapshot(fs.collection(ref, 'presence'), function (snap) {
+        var presence = {};
+        snap.forEach(function (d) { presence[d.id] = plain(d.data({ serverTimestamps: 'estimate' })); });
+        st.presence = presence; st.presenceError = null; emit();
+      }, function (e) {
+        var x = featureError(e);
+        st.presenceError = { code: x.code, message: x.message }; emit();
+      }));
     }
     // Backup check: read the room straight from the server now and then. If it shows something the live
     // listeners missed, use it and reconnect them. Quiet checks back off to POLL_MAX to save reads.
@@ -519,6 +672,7 @@
         // Skip if a live update landed while we were reading, or our own write is still on its way.
         if (st.serverAt > t0 || st.roomPending || st.playersPending) return;
         var room = r.room, players = r.players, cur = st.players || {}, missed = false;
+        if (r.presence && stable(r.presence) !== stable(st.presence)) { st.presence = r.presence; emit(); }
         Object.keys(cur).forEach(function (id) {                   // move lists only grow: never go backwards
           var a = cur[id], b = players[id];
           if (b && a && a.moves.length > b.moves.length) players[id] = a;
@@ -530,6 +684,7 @@
         });
         if (missed) {
           try { console.warn('HubOnline: live updates missed; reconnecting'); } catch (e) {}
+          if (room) { roomCache[code] = room; if (terminal(room)) stopPresence(code); }
           st.room = room; st.players = players; st.fromCache = false; st.serverAt = Date.now();
           skipCache = { room: true, players: true };               // the restarted listeners first replay the (older) cache
           emit();
@@ -680,7 +835,7 @@
 
   api.available = available;
   api.ready = ready;
-  api.rooms = { create: create, lookup: lookup, join: join, leave: leave, start: start, watch: watch, writeMine: writeMine, mine: mine, forget: forget };
+  api.rooms = { compatibility: compatibility, end: endRoom, replacement: replacement, trackPresence: trackPresence, create: create, lookup: lookup, join: join, leave: leave, start: start, watch: watch, writeMine: writeMine, mine: mine, forget: forget };
   api.draw = { add: drawAdd, watch: drawWatch };
   window.HubOnline = api;
 })();
