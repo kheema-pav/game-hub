@@ -477,6 +477,7 @@ function botChoose(s, pi, w = W) {
   const moves = legalMoves(view, pi);
   if (!moves.length) return { t: 'pass' };
   if (level === 'easy') return easyChoose(view, pi, moves);
+  if (level === 'expert') return expertChoose(view, pi, moves, w);
   // Medium looks one move ahead with a little noise; Hard looks two of its own moves
   // ahead and avoids leaving an opponent a winning (or big) purchase.
   let best = moves[0], bestV = -Infinity;
@@ -494,6 +495,75 @@ function botChoose(s, pi, w = W) {
       v += Math.random() * 0.35;
     }
     if (v > bestV) { bestV = v; best = m; }
+  }
+  return best;
+}
+
+
+// Expert follows the other seats around the table before planning its next purchase.
+// Unknown refills and face-down reservations stay unknown throughout the search.
+// The eight best first moves bound the search independently of wall-clock speed.
+function expertChoose(view, pi, moves, w = W) {
+  function value(s) {
+    if (s.over) {
+      const rows = standings(s), me = rows.find(r => r.i === pi);
+      return (me.winner ? 1000 : -1000) + s.players[pi].pts;
+    }
+    return evaluate(s, pi, w) - opponentThreat(s, pi);
+  }
+  const candidates = moves.map(m => {
+    const next = simulate(view, pi, m);
+    // Retain Hard's two-own-move economic plan when shortlisting candidates.
+    let rank = evaluate(next, pi, w);
+    if (next.players[pi].pts < WIN_POINTS) {
+      let follow = -Infinity;
+      for (const m2 of legalMoves(next, pi)) follow = Math.max(follow, evaluate(simulate(next, pi, m2), pi, w));
+      if (follow > -Infinity) rank = (1 - w.blend) * rank + w.blend * follow;
+    }
+    rank -= opponentThreat(next, pi);
+    endTurn(next);
+    return { m, next, value: next.over ? value(next) : rank };
+  }).sort((a, b) => b.value - a.value).slice(0, 8);
+  let best = candidates[0].m, bestV = -Infinity;
+  for (const candidate of candidates) {
+    let future = candidate.next;
+    // Each opponent picks its best visible move. Do not give the simulated opponent
+    // access to our hidden reservations, even though the real bot knows its own cards.
+    for (let turns = 0; !future.over && future.cur !== pi && turns < view.players.length; turns++) {
+      const j = future.cur, seen = botView(future, j);
+      const replies = legalMoves(seen, j);
+      let reply = { t: 'pass' }, replyV = -Infinity;
+      for (const m of replies) {
+        const trial = simulate(seen, j, m);
+        const v = evaluate(trial, j, w) - opponentThreat(trial, j);
+        if (v > replyV) { replyV = v; reply = m; }
+      }
+      future = simulate(future, j, reply);
+      endTurn(future);
+    }
+    let v = value(future);
+    if (!future.over) {
+      const followMoves = legalMoves(future, pi).map(m => {
+        const trial = simulate(future, pi, m);
+        return { trial, value: value(trial) };
+      }).sort((a, b) => b.value - a.value);
+      let follow = -Infinity;
+      for (const option of followMoves.slice(0, 3)) {
+        const trial = option.trial;
+        endTurn(trial);
+        let score = value(trial);
+        if (!trial.over && !trial.finalRound) {
+          // One extra economic planning step for the three strongest continuations.
+          let nextBest = -Infinity;
+          for (const m of legalMoves(trial, pi)) nextBest = Math.max(nextBest, value(simulate(trial, pi, m)));
+          if (nextBest > -Infinity) score = .6 * score + .4 * nextBest;
+        }
+        follow = Math.max(follow, score);
+      }
+      if (follow > -Infinity) v = (1 - w.blend) * v + w.blend * follow;
+    }
+    if (!future.over) v = .55 * candidate.value + .45 * v;
+    if (v > bestV) { bestV = v; best = candidate.m; }
   }
   return best;
 }

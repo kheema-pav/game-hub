@@ -82,6 +82,57 @@
     }
     return best;
   }
+  // Expert keeps a completed Hard result as its fallback. A deterministic node budget,
+  // rather than a timer, makes identical saved positions produce identical decisions.
+  function expertChoice(board, player, fallback, hardDepth, empty) {
+    var nodes = 0, budget = 40000, table = new Map(), interrupted = {};
+    function search(turn, depth, alpha, beta, ply) {
+      if (++nodes > budget) throw interrupted;
+      var columns = available(board);
+      if (!columns.length) return 0;
+      var key = turn + ':' + board.map(function (row) { return row.map(function (n) { return n === null ? '.' : n; }).join(''); }).join('');
+      var cached = table.get(key), originalAlpha = alpha, originalBeta = beta;
+      if (cached && cached.depth >= depth) {
+        if (cached.flag === 'exact') return cached.value;
+        if (cached.flag === 'lower') alpha = Math.max(alpha, cached.value);
+        if (cached.flag === 'upper') beta = Math.min(beta, cached.value);
+        if (alpha >= beta) return cached.value;
+      }
+      // Resolve immediate wins even at the horizon, avoiding a tempting but lost leaf.
+      for (var w = 0; w < columns.length; w++) if (winningDrop(board, columns[w], turn)) return turn === player ? 100000 - ply : -100000 + ply;
+      if (depth <= 0) return evaluate(board, player);
+      if (cached && columns.includes(cached.column)) columns = [cached.column].concat(columns.filter(function (c) { return c !== cached.column; }));
+      var maximize = turn === player, best = maximize ? -Infinity : Infinity, choice = columns[0];
+      for (var i = 0; i < columns.length; i++) {
+        var c = columns[i], r = rowFor(board, c), value;
+        board[r][c] = turn;
+        try { value = search(1 - turn, depth - 1, alpha, beta, ply + 1); }
+        finally { board[r][c] = null; }
+        if (maximize ? value > best : value < best) { best = value; choice = c; }
+        if (maximize) alpha = Math.max(alpha, best); else beta = Math.min(beta, best);
+        if (beta <= alpha) break;
+      }
+      table.set(key, { depth: depth, value: best, column: choice, flag: best <= originalAlpha ? 'upper' : best >= originalBeta ? 'lower' : 'exact' });
+      return best;
+    }
+    var chosen = fallback;
+    for (var depth = hardDepth + 1; depth <= Math.min(10, empty); depth++) {
+      var columns = [chosen].concat(available(board).filter(function (c) { return c !== chosen; }));
+      var best = -Infinity, candidate = chosen;
+      try {
+        for (var i = 0; i < columns.length; i++) {
+          var c = columns[i], r = rowFor(board, c), value;
+          board[r][c] = player;
+          try { value = search(1 - player, depth - 1, best, Infinity, 1); }
+          finally { board[r][c] = null; }
+          if (value > best) { best = value; candidate = c; }
+        }
+      } catch (error) { if (error !== interrupted) throw error; break; }
+      chosen = candidate;
+      if (Math.abs(best) > 90000) break;
+    }
+    return chosen;
+  }
   function bot(state, player, level) {
     var actions = legal(state, player); if (!actions.length) return null;
     var board = clone(state.board), columns = available(board);
@@ -90,7 +141,7 @@
     if (win !== undefined) return { type: 'drop', column: win };
     var block = columns.find(function (c) { return winningDrop(board, c, 1 - player); });
     if (block !== undefined) return { type: 'drop', column: block };
-    if (level !== 'hard') {
+    if (level !== 'hard' && level !== 'expert') {
       var safe = columns.filter(function (c) {
         var r = rowFor(board, c); board[r][c] = player;
         var danger = available(board).some(function (n) { return winningDrop(board, n, 1 - player); }); board[r][c] = null; return !danger;
@@ -103,6 +154,7 @@
       var value = minimax(board, 1 - player, player, depth - 1, best, Infinity); board[r][c] = null;
       if (value > best) { best = value; choice = c; }
     }
+    if (level === 'expert') choice = expertChoice(board, player, choice, depth, ROWS * COLS - state.moves);
     return { type: 'drop', column: choice };
   }
   function result(state) { return state.over ? state.winner === null ? 'A draw. The board is full.' : state.players[state.winner].name + ' connected four!' : 'Connect four discs in a row.'; }

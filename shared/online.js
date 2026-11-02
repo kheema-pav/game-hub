@@ -65,7 +65,7 @@
   }
 
   /* Room metadata is fixed at creation. Legacy v1 rooms use the unchanged game engines. */
-  function versions() { return window.HubGameVersions || { platform: 2, games: { codex: 1, isles: 1, gems: 1, sketch: 1, connect4: 1, ludo: 1, azul: 1, ticket: 1 } }; }
+  function versions() { return window.HubGameVersions || { platform: 2, games: { codex: 1, isles: 1, gems: 1, sketch: 1, connect4: 1, ludo: 1, azul: 1, ticket: 1, reversi: 1, yahtzee: 1 } }; }
   function terminal(room) { return !!room && (room.status === 'cancelled' || room.status === 'ended'); }
   function compatibility(room) {
     var v = versions(), game = room && room.game;

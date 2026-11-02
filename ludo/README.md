@@ -17,6 +17,6 @@ These rules are intentionally explicit because regional Ludo rules differ, parti
 
 ## Engine and tests
 
-`engine.js` exposes `HubEngines.ludo` in browsers and CommonJS exports for Node tests. `apply` is pure and validates the action author's seat, phase, token and exact action shape. Randomness is seeded and stored in state. The bot uses the same legal actions as a human: Easy moves the first legal token, Normal prioritises captures and progress, Hard also considers safe squares and capture risk.
+`engine.js` exposes `HubEngines.ludo` in browsers and CommonJS exports for Node tests. `apply` is pure and validates the action author's seat, phase, token and exact action shape. Randomness is seeded and stored in state. The bot uses the same legal actions as a human: Easy moves the first legal token, Normal prioritises captures and progress, Hard also considers safe squares and capture risk. Expert weighs the progress lost in a capture, chances of being captured across all its exposed tokens, leaving the yard and entering the home lane. Its estimates use visible tokens and equally likely die faces, never the stored RNG or future rolls. Dice remain identical across levels, so skill cannot eliminate luck.
 
 Run `node --test ludo/test/engine.test.js` from the repository root. Tests cover capturing, safe squares, exact finish, third-six forfeits, input immutability, seeded determinism, injected actions and complete bot games for all player counts and difficulty levels.

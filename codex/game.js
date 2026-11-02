@@ -16,7 +16,20 @@ const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(M
 const cur=()=>S.players[S.turn];
 const humans=()=>S.players.map((p,i)=>p.ai?-1:i).filter(i=>i>=0);
 const canAct=()=>S&&(S.phase==='place'||S.phase==='draw')&&(S.online?(S.me>=0&&S.turn===S.me):!cur().ai);
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function save(){
+  if(!S||S.online) return;
+  try{
+    if(window.HubGameNight){
+      HubGameNight.touch(S);
+      if(S.phase==='over'&&S.results&&S.results.length){
+        const top=S.results[0], levels=[...new Set(S.players.filter(p=>p.ai).map(p=>p.level||'normal'))];
+        HubGameNight.finish('codex',S,{players:S.players.map((p,i)=>({name:p.name,bot:!!p.ai,score:S.results.find(r=>r.i===i).total})),
+          winners:S.results.filter(r=>r.total===top.total&&r.done===top.done).map(r=>r.i),mode:S.players.filter(p=>!p.ai).length<=1&&S.players.some(p=>p.ai)?'solo':'local',level:levels.length===1?levels[0]:levels.length?'mixed':undefined,summary:'Round '+S.round});
+      }
+    }
+  }catch(e){}
+  try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+}
 function slog(s,msg){s.log.unshift(msg);s.log.length=Math.min(s.log.length,80);}
 function log(msg){slog(S,msg);}
 function handOwner(){
@@ -37,13 +50,19 @@ function newGame(cfg){
   S.market.R=[res.pop(),res.pop()]; S.market.G=[gold.pop(),gold.pop()];
   S.players.forEach(p=>{
     p.hand=[res.pop(),res.pop(),gold.pop()];
-    if(p.ai){placeStarter(p,Math.random()<.5?'front':'back');p.secret=p.secretChoices[Math.random()<.5?0:1];p.ready=true;}
+    if(p.ai){aiSetup(p);p.ready=true;}
   });
   log('A new codex is opened.');
   ui.sel=null;ui.faces={};ui.undo=null;ui.aim=null;ui.hover=null;ui.hlObj=null;ui.origin=null;ui.gateOpen=-1;ui.dismissOver=false;ui.modal=null;
   setupNext();
 }
 function placeStarter(p,face){p.board={[kxy(0,0)]:{id:p.starter,face,x:0,y:0,order:0}};p.placedN=1;}
+function rematchLocal(){
+  if(!S||S.online||S.phase!=='over') return;
+  const players=S.players.map(p=>({name:p.name,ai:p.ai,level:p.level||'normal'}));
+  players.push(players.shift());
+  newGame(players);
+}
 function setupNext(){
   const i=S.players.findIndex(p=>!p.ready);
   if(i<0){
@@ -203,6 +222,7 @@ const LEVELS={
   easy:{obj:.4,partial:.5,secret:1,noise:2.5,gb:1.4,gp:.3,gm:.35,mkt:0},
   normal:{obj:1,partial:1,secret:1,noise:.15,gb:1.4,gp:.3,gm:.35,mkt:0},
   hard:{obj:1,partial:.5,secret:1,noise:0,gb:.6,gp:.15,gm:.15,mkt:.4},
+  expert:{obj:1,partial:.6,secret:1,noise:0,gb:.6,gp:.15,gm:.15,mkt:.4},
 };
 function potential(p,board,playedId,w=LEVELS.normal){
   const n=counts(board); let v=0;
@@ -224,6 +244,7 @@ function potential(p,board,playedId,w=LEVELS.normal){
   return v+.04*validSpots(board).length;
 }
 function aiChoose(p){
+  if(p.level==='expert') return aiChooseExpert(p);
   const L=p.level||'normal', spots=validSpots(p.board), n=counts(p.board), moves=[];
   for(const id of p.hand) for(const face of ['front','back']){
     if(face==='front'&&!meetsReq(n,CARDS[id])) continue;
@@ -248,6 +269,7 @@ function kingdomInterest(p,k){
     ||p.hand.some(h=>CARDS[h].type==='G'&&CARDS[h].req[k]);
 }
 function aiDraw(p){
+  if(p.level==='expert') return aiDrawExpert(p);
   const L=p.level||'normal', opts=drawOptions();
   if(!opts.length) return null;
   if(L==='easy'&&Math.random()<.5) return opts[Math.floor(Math.random()*opts.length)].src;
@@ -264,6 +286,75 @@ function aiDraw(p){
     if(!best||v>best.v) best={...o,v};
   }
   return best.src;
+}
+// Expert searches a short list of promising placements, then the next card in its
+// own hand. All search inputs are its own codex/hand and public objectives/market.
+function expertPlacements(p, maxEvaluations=Infinity){
+  const w=LEVELS.expert, n=counts(p.board), base=potential(p,p.board,null,w), out=[];
+  const spots=validSpots(p.board);
+  let checked=0;
+  // Iterate spots first so a bounded second ply considers each card and both faces.
+  for(const [x,y] of spots) for(const id of p.hand) for(const face of ['front','back']){
+    if(face==='front'&&!meetsReq(n,CARDS[id])) continue;
+    if(checked++>=maxEvaluations) return out.sort((a,b)=>b.v-a.v);
+    const board={...p.board,[kxy(x,y)]:{id,face,x,y,order:p.placedN}};
+    const gain=pointsFor(board,id,face,x,y);
+    const v=gain+potential(p,board,id,w)-base-(face==='back'?(CARDS[id].type==='G'?2.5:.6):0);
+    out.push({id,face,x,y,v,gain,board});
+  }
+  return out.sort((a,b)=>b.v-a.v);
+}
+function aiChooseExpert(p){
+  // In the last personal turn, score every legal move by its actual objective result.
+  const last=S.endTriggered&&S.turnsLeft<=S.players.length;
+  const ranked=expertPlacements(p), choices=last?ranked:ranked.slice(0,5);
+  if(!choices.length) return null;
+  let best=choices[0], value=-Infinity;
+  for(const choice of choices){
+    let v=choice.v;
+    if(last){
+      const n=counts(choice.board);
+      v=choice.gain+[...S.common,p.secret].reduce((sum,id)=>sum+objTimes(OBJ_BY_ID[id],choice.board,n)*OBJ_BY_ID[id].pts,0);
+    } else {
+      const next={...p,board:choice.board,placedN:p.placedN+1,hand:p.hand.filter(id=>id!==choice.id)};
+      const follow=expertPlacements(next,100)[0];
+      if(follow) v+=.65*follow.v;
+    }
+    if(v>value){value=v;best=choice;}
+  }
+  return {id:best.id,face:best.face,x:best.x,y:best.y,v:value};
+}
+function aiDrawExpert(p){
+  const opts=drawOptions();
+  let best=null, bestV=-Infinity;
+  for(const o of opts){
+    // Hidden deck faces are not inspected. Prefer a visible card with a concrete plan.
+    let v=o.src==='RD'?1:1.2-p.hand.filter(id=>CARDS[id].type==='G').length;
+    if(o.id){
+      const candidate={...p,hand:[o.id]};
+      const choice=expertPlacements(candidate,160)[0];
+      v=choice?choice.v:-3;
+      const card=CARDS[o.id], lack=missing(card,counts(p.board));
+      if(card.type==='G'&&lack) v=Math.max(v,card.points*.5-lack*.65);
+    }
+    if(v>bestV){bestV=v;best=o.src;}
+  }
+  return best;
+}
+function aiSetup(p){
+  if(p.level!=='expert'){
+    placeStarter(p,Math.random()<.5?'front':'back');
+    p.secret=p.secretChoices[Math.random()<.5?0:1];
+    return;
+  }
+  let best=null;
+  for(const face of ['front','back']) for(const secret of p.secretChoices){
+    const trial={...p,secret,placedN:1,board:{'0,0':{id:p.starter,face,x:0,y:0,order:0}}};
+    const opening=expertPlacements(trial,100)[0];
+    const value=potential(trial,trial.board,null,LEVELS.expert)+(opening?opening.v:0);
+    if(!best||value>best.value)best={face,secret,value};
+  }
+  placeStarter(p,best.face);p.secret=best.secret;
 }
 function aiStep(){
   const token=ui.aiToken, p=cur();
@@ -346,7 +437,7 @@ function renderTop(){
   const live=S.phase!=='setup'&&S.phase!=='over';
   $('#players').dataset.n=S.players.length;
   $('#players').innerHTML=S.players.map((p,i)=>`<button class="pchip ${live&&i===S.turn?'turn':''} ${i===ui.view?'viewing':''}" data-act="view" data-i="${i}" style="--pc:${pcol(i)}" title="View ${esc(p.name)}'s codex">
-    <span class="dot"></span><span class="pname">${esc(p.name)}${p.ai?`<small>${p.level==='hard'?'hard bot':p.level==='easy'?'easy bot':'bot'}</small>`:''}${S.online&&i===S.me?'<small>you</small>':''}</span><span class="pscore">${p.score}</span>
+    <span class="dot"></span><span class="pname">${esc(p.name)}${p.ai?`<small>${p.level==='expert'?'expert bot':p.level==='hard'?'hard bot':p.level==='easy'?'easy bot':'bot'}</small>`:''}${S.online&&i===S.me?'<small>you</small>':''}</span><span class="pscore">${p.score}</span>
     <span class="bar"><span style="width:${Math.min(100,p.score*5)}%"></span></span></button>`).join('');
   $('#roundInfo').textContent=S.phase==='setup'?'Setting up':S.phase==='over'?`Finished after round ${S.round}`:`Round ${S.round} · first to 20 triggers the end`;
 }
@@ -513,7 +604,7 @@ function newGameHTML(){
   return `<h2>New game</h2>${tabs}<p class="lede">Two to four naturalists. Bots play on their own; humans take turns on this device.</p>
   <h3>Players</h3><div class="seg">${[2,3,4].map(k=>`<button class="segb ${ng.n===k?'on':''}" data-act="ng-n" data-n="${k}">${k} players</button>`).join('')}</div>
   <div class="ngrows">${ng.players.slice(0,ng.n).map((p,i)=>`<div class="ngrow"><span class="dot" style="--pc:var(--p${i})"></span><label class="sr" for="ng-name-${i}">Player ${i+1} name</label><input id="ng-name-${i}" value="${esc(p.name)}" maxlength="16" autocomplete="off">
-    <span class="seg"><button class="segb ${!p.ai?'on':''}" data-act="ng-ai" data-i="${i}" data-v="0">Human</button><button class="segb ${p.ai?'on':''}" data-act="ng-ai" data-i="${i}" data-v="1">Bot</button></span>${p.ai?`<span class="seg" aria-label="Bot level">${['easy','normal','hard'].map(l=>`<button class="segb ${(p.level||'normal')===l?'on':''}" data-act="ng-lvl" data-i="${i}" data-v="${l}">${l[0].toUpperCase()+l.slice(1)}</button>`).join('')}</span>`:''}</div>`).join('')}</div>
+    <span class="seg"><button class="segb ${!p.ai?'on':''}" data-act="ng-ai" data-i="${i}" data-v="0">Human</button><button class="segb ${p.ai?'on':''}" data-act="ng-ai" data-i="${i}" data-v="1">Bot</button></span>${p.ai?`<span class="seg" aria-label="Bot level">${['easy','normal','hard','expert'].map(l=>`<button class="segb ${(p.level||'normal')===l?'on':''}" data-act="ng-lvl" data-i="${i}" data-v="${l}">${l[0].toUpperCase()+l.slice(1)}</button>`).join('')}</span>`:''}</div>`).join('')}</div>
   <p class="lede" style="margin-top:14px">Seat 1 plays first. ${ON.active?'Starting a game on this device leaves the online game; you can come back to it from the hub.':'Starting a new game replaces the one in progress.'}</p>
   <div class="mfoot">${cancel}<button class="btn primary" data-act="ng-go">Start game</button></div>`;
 }
@@ -552,7 +643,7 @@ function resultsHTML(){
   const title=wn.length>1?`${wn.map(esc).join(' and ')} share the finest codex`:`${esc(wn[0])} ${wn[0]==='You'?'complete':'completes'} the finest codex`;
   return `<h2>${title}</h2><p class="lede">Board points plus objectives. Ties go to the player who completed more objectives.</p>
   <div class="tablewrap"><table class="scores"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
-  <div class="mfoot"><button class="btn" data-act="close-over">View the codices</button>${S.online?'<a class="btn" href="../">Back to the hub</a>':''}<button class="btn primary" data-act="new">New game</button></div>`;
+  <div class="mfoot"><button class="btn" data-act="close-over">View the codices</button>${S.online?'<a class="btn" href="../">Back to the hub</a>':'<button class="btn primary" data-act="rematch">Rematch, same players</button>'}<button class="btn" data-act="new">Change players</button></div>`;
 }
 function syncNg(){
   const ng=ui.ng;
@@ -604,6 +695,7 @@ document.addEventListener('click',e=>{
     case 'close': ui.modal=null; render(); break;
     case 'close-over': ui.dismissOver=true; render(); break;
     case 'results': ui.dismissOver=false; render(); break;
+    case 'rematch': rematchLocal(); break;
     case 'gate-ok': ui.gateOpen=S.setupIdx; render(); break;
     case 'su-face': ui.setup.face=d.face; render(); break;
     case 'su-obj': ui.setup.obj=d.o; render(); break;

@@ -14,9 +14,19 @@ function pickWord(){
 const sfx=(n,o)=>{try{HubKit.sfx(n,o)}catch(e){}};
 async function keepAwake(){try{S.wake=await navigator.wakeLock.request("screen")}catch(e){}}
 
-function go(screen){S.screen=screen;if(screen==="final")sfx("win");render()}
+function go(screen){S.screen=screen;if(screen==="final"){recordLocalResult();sfx("win")}render()}
 function startGame(){
+  clearInterval(S.tick);delete S._night;S.word=null;S.reveal=false;S.paused=false;S.left=S.secs;S.skipsLeft=1;
   S.scores=S.teams.map(()=>0);S.turn=0;S.used.clear();keepAwake();go("handover");
+}
+function recordLocalResult(){
+  if(ON.active||S.screen!=="final"||S.turn<total())return;
+  try{
+    if(window.HubGameNight){
+      const best=Math.max(...S.scores);
+      HubGameNight.finish('sketch',S,{players:S.teams.map((name,i)=>({name,bot:false,score:S.scores[i]})),winners:S.scores.map((score,i)=>score===best?i:-1).filter(i=>i>=0),mode:'local',summary:S.rounds+' rounds · '+S.secs+'s turns'});
+    }
+  }catch(e){}
 }
 function beginDraw(){pickWord();S.skipsLeft=1;S.reveal=false;S.left=S.secs;S.paused=false;go("secret")}
 function startTimer(){
@@ -101,7 +111,7 @@ function render(noClear){
     const max=Math.max(...S.scores), w=S.teams.filter((_,i)=>S.scores[i]===max);
     h=`<div class="stage big"><span class="label">Final</span><h1>${w.length>1?"It's a tie":esc(w[0])+" wins"}</h1>
     ${w.length>1?`<p class="muted">${w.map(esc).join(" and ")}</p>`:''}${scoreList(-1)}</div>
-    <div class="row"><button id="again" class="primary">Play again</button><button id="setup">Change teams</button></div>`;
+    <div class="row"><button id="again" class="primary">Rematch, same teams</button><button id="setup">Change teams</button></div>`;
   }
   if(S.screen==="setup"||S.screen==="final")h='<div class="fl"></div>'+h;
   a.classList.toggle("clock-paused",S.screen==="draw"&&S.paused);
@@ -112,7 +122,9 @@ function render(noClear){
 const SAVE_KEY="pictionary.save.v1";
 function clearSave(){try{localStorage.removeItem(SAVE_KEY)}catch(e){}}
 function save(){
-  try{localStorage.setItem(SAVE_KEY,JSON.stringify({v:1,screen:S.screen,teams:S.teams,scores:S.scores,turn:S.turn,rounds:S.rounds,secs:S.secs,used:[...S.used],skipsLeft:S.skipsLeft}))}catch(e){}
+  if(ON.active)return;
+  try{if(window.HubGameNight)HubGameNight.touch(S)}catch(e){}
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify({v:1,screen:S.screen,teams:S.teams,scores:S.scores,turn:S.turn,rounds:S.rounds,secs:S.secs,used:[...S.used],skipsLeft:S.skipsLeft,_night:S._night}))}catch(e){}
 }
 function restore(){
   try{
@@ -129,6 +141,7 @@ function restore(){
     S.teams=d.teams.slice();S.scores=d.scores.slice();S.turn=d.turn;S.rounds=d.rounds;S.secs=d.secs;S.left=d.secs;
     S.used=new Set(d.used);S.skipsLeft=d.skipsLeft===0?0:1;S.reveal=false;S.paused=false;
     S.word=c?{c,w}:null;S.screen=screen;
+    S._night=d._night;
     keepAwake();
     return true;
   }catch(e){return false}

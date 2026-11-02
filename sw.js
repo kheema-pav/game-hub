@@ -1,15 +1,15 @@
 /* One complete cached release at a time. Bump VERSION whenever shipped assets change. */
-const VERSION = 'gh-v8';
+const VERSION = 'gh-v9';
 const CACHE = VERSION;
 const FONTS = 'gh-fonts-v1';
 const PRECACHE = [
-  './', 'codex/', 'isles/', 'gems/', 'sketch/', 'ticket/', 'ludo/', 'connect4/', 'azul/',
+  './', 'codex/', 'isles/', 'gems/', 'sketch/', 'ticket/', 'ludo/', 'connect4/', 'azul/', 'reversi/', 'yahtzee/',
   ...['codex', 'isles', 'gems', 'sketch'].flatMap(game =>
     ['style.css', 'engine.js', 'game.js'].map(file => game + '/' + file)),
-  ...['ticket', 'ludo', 'connect4', 'azul'].flatMap(game => ['style.css', 'engine.js', 'game.js'].map(file => game + '/' + file)),
+  ...['ticket', 'ludo', 'connect4', 'azul', 'reversi', 'yahtzee'].flatMap(game => ['style.css', 'engine.js', 'game.js'].map(file => game + '/' + file)),
   'ticket/data.js', 'ticket/geography.js', 'shared/tabletop-core.js', 'shared/tabletop.js', 'shared/tabletop.css',
   'isles/bot.js', 'shared/hubkit.js', 'shared/online.js', 'shared/lobby.js',
-  'shared/session.js', 'shared/versions.js', 'shared/firebase-config.js',
+  'shared/game-night.js', 'shared/game-night-hub.js', 'shared/session.js', 'shared/versions.js', 'shared/firebase-config.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-180.png',
   'icons/icon-192.png', 'icons/icon-512.png'
 ];
@@ -35,7 +35,7 @@ function pageKey(url) {
   const root = new URL('./', self.location.href);
   const relative = url.pathname.slice(root.pathname.length);
   const page = relative === 'index.html' || relative === '' ? './'
-    : /^(codex|isles|gems|sketch|ticket|ludo|connect4|azul)\/(index\.html)?$/.test(relative)
+    : /^(codex|isles|gems|sketch|ticket|ludo|connect4|azul|reversi|yahtzee)\/(index\.html)?$/.test(relative)
       ? relative.split('/')[0] + '/' : null;
   return page ? new URL(page, root).href : null;
 }

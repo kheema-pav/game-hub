@@ -4,7 +4,7 @@ const app = document.getElementById('app');
 const SAVE_KEY = 'gemguild-game-v1';
 const SETUP_KEY = 'gemguild-setup-v1';
 const BOT_NAMES = ['Marco', 'Lucia', 'Tommaso', 'Beatrice'];
-const LEVEL_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+const LEVEL_LABEL = { easy: 'Easy', medium: 'Normal', hard: 'Hard', expert: 'Expert' };
 const ROMAN = ['I', 'II', 'III'];
 const PACES = {
   slow: { label: 'Slow', think: 900, show: 2200, fly: 950 },
@@ -80,6 +80,16 @@ function viewerIndex() {
 
 function saveGame() {
   if (!G || ON.active) return; // online games never touch the local save
+  try {
+    if (window.HubGameNight) {
+      HubGameNight.touch(G);
+      if (G.over) {
+        const rows = standings(G), levels = [...new Set(G.players.filter(p => !isHuman(p)).map(p => p.level === 'medium' ? 'normal' : p.level || 'normal'))];
+        HubGameNight.finish('gems', G, { players: G.players.map(p => ({ name: p.name, bot: !isHuman(p), score: p.pts })),
+          winners: rows.filter(r => r.winner).map(r => r.i), mode: G.players.filter(isHuman).length <= 1 && G.players.some(p => !isHuman(p)) ? 'solo' : 'local', level: levels.length === 1 ? levels[0] : levels.length ? 'mixed' : undefined, summary: 'Round ' + G.round });
+      }
+    }
+  } catch (e) { /* Results storage must not interrupt a game. */ }
   if (G.over) forget(SAVE_KEY); else store(SAVE_KEY, G);
 }
 
@@ -442,7 +452,7 @@ function renderSetup() {
       <span class="seat-n">${i + 1}</span>
       <input type="text" id="seat-name-${i}" data-seat="${i}" value="${esc(s.name)}" maxlength="18" aria-label="Seat ${i + 1} name">
       <div class="seg" role="group" aria-label="Seat ${i + 1} player">
-        ${['human', 'easy', 'medium', 'hard'].map(k => `<button data-act="kind" data-i="${i}" data-k="${k}" aria-pressed="${s.kind === k}">${k === 'human' ? 'Human' : LEVEL_LABEL[k] + ' bot'}</button>`).join('')}
+        ${['human', 'easy', 'medium', 'hard', 'expert'].map(k => `<button data-act="kind" data-i="${i}" data-k="${k}" aria-pressed="${s.kind === k}">${k === 'human' ? 'Human' : LEVEL_LABEL[k] + ' bot'}</button>`).join('')}
       </div>
     </div>`).join('');
   return `<div class="setup">
@@ -462,6 +472,7 @@ function renderSetup() {
         ${saved ? '<button class="btn" data-act="resume">Resume saved game</button>' : ''}
         <button class="btn ghost" data-act="rules">How to play</button>
       </div>
+      ${saved && window.HubGameNight ? `<p class="fineprint">${esc(HubGameNight.describe('gems', saved))}</p>` : ''}
       <p class="fineprint">With two or more human seats, the game pauses between turns so you can pass the device and keep face-down reservations private.</p>
     </div>
     ${onlineAvailable() ? `<div class="setup-card online-card">
@@ -753,7 +764,7 @@ function overDialog() {
     </div>` : `<div class="dlg-actions">
       <button class="btn ghost" data-act="hide-over">See the board</button>
       <button class="btn" data-act="setup">Change players</button>
-      <button class="btn primary" data-act="rematch">Play again</button>
+      <button class="btn primary" data-act="rematch">Rematch, same players</button>
     </div>`}`;
 }
 

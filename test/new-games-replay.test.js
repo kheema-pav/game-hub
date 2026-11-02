@@ -2,12 +2,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const C = require('../shared/tabletop-core');
-for (const id of ['connect4', 'ludo', 'azul', 'ticket']) {
+for (const id of ['connect4', 'ludo', 'azul', 'ticket', 'reversi', 'yahtzee']) {
   const E = require('../' + id + '/engine');
   for (const edition of id === 'ticket' ? ['usa', 'europe'] : ['base']) {
     test(`${id} ${edition}: complete authored online replay agrees across viewers and ignores other players' injected records`, () => {
       const room = { game: id, seed: 39017, opts: id === 'ticket' ? { edition } : {}, seats: { uidA: { name: 'Ada', color: '#e4572e' }, uidB: { name: 'Bram', color: '#3b6fa8' } } };
-      const config = { id, engine: E, minPlayers: 2, maxPlayers: id === 'connect4' ? 2 : id === 'ticket' ? 5 : 4 };
+      const config = { id, engine: E, minPlayers: 2, maxPlayers: ['connect4','reversi'].includes(id) ? 2 : id === 'ticket' ? 5 : 4 };
       const ids = C.seats(room), people = ids.map(uid => ({ ...room.seats[uid], bot: false }));
       let state = E.create({ seed: room.seed, players: people, options: room.opts });
       const docs = Object.fromEntries(ids.map(uid => [uid, { moves: [] }]));

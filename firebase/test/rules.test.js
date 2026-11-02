@@ -493,7 +493,7 @@ test('new tabletop rooms accept fixed Ticket editions and reject unsupported edi
   await assertSucceeds(setDoc(doc(db('host'),'rooms','482612'),roomDoc({game:'ticket',v:2,gameVersion:1,opts:{edition:'europe'}})));
   await assertFails(setDoc(doc(db('host'),'rooms','482613'),roomDoc({game:'ticket',v:2,gameVersion:1,opts:{edition:'unknown'}})));
   await assertFails(updateDoc(doc(db('host'),'rooms','482611'),{opts:{edition:'europe'}}));
-  for (const game of ['connect4','ludo','azul']) {
+  for (const game of ['connect4','ludo','azul','reversi','yahtzee']) {
     await assertSucceeds(setDoc(doc(db('host'),'rooms','482614'),roomDoc({game,v:2,gameVersion:1,opts:{}})));
     await env.clearFirestore();
   }

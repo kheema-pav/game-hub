@@ -89,6 +89,10 @@ h1{font-family:var(--f-display);font-weight:800;font-size:clamp(2.4rem,7vw,4rem)
 .prog[hidden]{display:none}
 .prog::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent)}
 
+/* Saved tables and results stay compact above/below the game shelf. */
+.night-panel{margin:0 0 24px;padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.night-panel[hidden],.night-controls [hidden]{display:none}.night-panel h2{font-size:1.2rem;margin:0 0 12px}.night-panel summary{cursor:pointer;font-weight:700;min-height:28px}.night-tables{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.night-table{display:grid;gap:5px;text-decoration:none;border:1px solid var(--line);border-radius:10px;padding:12px;min-height:64px}.night-table:hover{background:var(--wall-2)}.night-table small,.night-muted{color:var(--muted)}.night-table small{overflow-wrap:anywhere;line-height:1.4}.night-results{list-style:none;margin:0;padding:0;max-height:440px;overflow-y:auto}.night-results li{display:grid;gap:4px;padding:14px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.night-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}.night-controls button{font:inherit;min-height:44px;padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--wall);color:var(--ink);cursor:pointer}.night-panel p{font-size:.9rem}.reversi .lid{background:#173d31}.reversi .title{font-family:Georgia,serif;color:#f6ead2;font-size:2rem}.yahtzee .lid{background:#6c303b}.yahtzee .title{font-family:Fredoka,sans-serif;color:#fff2cf;font-size:2rem}
+@media(max-width:600px){.night-tables{grid-template-columns:1fr}.night-panel{padding:14px}.prog{font-size:.8rem;line-height:1.4}}
 /* per-game lids */
 .codex .lid{background:#dce3d3}
 .codex .title{font-family:"IM Fell English SC",Georgia,serif;font-weight:400;font-size:1.7rem;color:#23261d}
@@ -175,7 +179,7 @@ footer p{margin:0;max-width:70ch}
         <a class="obtn" href="codex/?mode=online">Codex Naturalis</a>
         <a class="obtn" href="isles/?mode=online">Catan</a>
         <a class="obtn" href="gems/?mode=online">Splendor</a>
-        <a class="obtn" href="sketch/?mode=online">Pictionary</a><a class="obtn" href="ticket/?mode=online">Ticket to Ride</a><a class="obtn" href="ludo/?mode=online">Ludo</a><a class="obtn" href="connect4/?mode=online">Four in a Row</a><a class="obtn" href="azul/?mode=online">Azul</a>
+        <a class="obtn" href="sketch/?mode=online">Pictionary</a><a class="obtn" href="ticket/?mode=online">Ticket to Ride</a><a class="obtn" href="ludo/?mode=online">Ludo</a><a class="obtn" href="connect4/?mode=online">Four in a Row</a><a class="obtn" href="azul/?mode=online">Azul</a><a class="obtn" href="reversi/?mode=online">Reversi</a><a class="obtn" href="yahtzee/?mode=online">Yahtzee</a>
       </nav>
     </details>
     <section class="join" id="joinBox" aria-label="Join a game" hidden>
@@ -200,6 +204,7 @@ footer p{margin:0;max-width:70ch}
     <ul class="orooms" id="onlineList"></ul>
   </section>
 
+  <section id="savedTables" class="night-panel" aria-label="Saved tables" hidden></section>
   <main class="shelf" aria-label="Games">
     <article class="game codex" data-game="codex" aria-labelledby="codex-title">
       <div class="lid">
@@ -297,7 +302,7 @@ footer p{margin:0;max-width:70ch}
     </article>
     <article class="game connect4" data-game="connect4" aria-labelledby="connect4-title">
       <div class="lid"><svg class="art" viewBox="0 0 400 300" aria-hidden="true"><g transform="translate(170 30)"><rect width="200" height="170" rx="16" fill="#2b5fa1"/><circle cx="18" cy="18" r="10" fill="#f0c94c"/><circle cx="45" cy="18" r="10" fill="#ec675c"/><circle cx="72" cy="18" r="10" fill="#102d50"/><circle cx="99" cy="18" r="10" fill="#f0c94c"/><circle cx="126" cy="18" r="10" fill="#ec675c"/><circle cx="153" cy="18" r="10" fill="#102d50"/><circle cx="180" cy="18" r="10" fill="#f0c94c"/><circle cx="18" cy="45" r="10" fill="#102d50"/><circle cx="45" cy="45" r="10" fill="#f0c94c"/><circle cx="72" cy="45" r="10" fill="#ec675c"/><circle cx="99" cy="45" r="10" fill="#102d50"/><circle cx="126" cy="45" r="10" fill="#f0c94c"/><circle cx="153" cy="45" r="10" fill="#ec675c"/><circle cx="180" cy="45" r="10" fill="#102d50"/><circle cx="18" cy="72" r="10" fill="#ec675c"/><circle cx="45" cy="72" r="10" fill="#102d50"/><circle cx="72" cy="72" r="10" fill="#f0c94c"/><circle cx="99" cy="72" r="10" fill="#ec675c"/><circle cx="126" cy="72" r="10" fill="#102d50"/><circle cx="153" cy="72" r="10" fill="#f0c94c"/><circle cx="180" cy="72" r="10" fill="#ec675c"/><circle cx="18" cy="99" r="10" fill="#f0c94c"/><circle cx="45" cy="99" r="10" fill="#ec675c"/><circle cx="72" cy="99" r="10" fill="#102d50"/><circle cx="99" cy="99" r="10" fill="#f0c94c"/><circle cx="126" cy="99" r="10" fill="#ec675c"/><circle cx="153" cy="99" r="10" fill="#102d50"/><circle cx="180" cy="99" r="10" fill="#f0c94c"/><circle cx="18" cy="126" r="10" fill="#102d50"/><circle cx="45" cy="126" r="10" fill="#f0c94c"/><circle cx="72" cy="126" r="10" fill="#ec675c"/><circle cx="99" cy="126" r="10" fill="#102d50"/><circle cx="126" cy="126" r="10" fill="#f0c94c"/><circle cx="153" cy="126" r="10" fill="#ec675c"/><circle cx="180" cy="126" r="10" fill="#102d50"/><circle cx="18" cy="153" r="10" fill="#ec675c"/><circle cx="45" cy="153" r="10" fill="#102d50"/><circle cx="72" cy="153" r="10" fill="#f0c94c"/><circle cx="99" cy="153" r="10" fill="#ec675c"/><circle cx="126" cy="153" r="10" fill="#102d50"/><circle cx="153" cy="153" r="10" fill="#f0c94c"/><circle cx="180" cy="153" r="10" fill="#ec675c"/></g></svg><h2 class="title" id="connect4-title">Four in a Row</h2></div>
-      <div class="info"><p class="pitch">Drop a disc and connect four. Challenge a friend or sharpen your tactics against three bot levels.</p><div class="chips"><span class="chip">2 players</span><span class="chip">Bots</span><span class="chip online-chip">Online</span><span class="chip">5–10 min</span></div><span class="prog" hidden></span>
+      <div class="info"><p class="pitch">Drop a disc and connect four. Challenge a friend or sharpen your tactics against four bot levels.</p><div class="chips"><span class="chip">2 players</span><span class="chip">Bots</span><span class="chip online-chip">Online</span><span class="chip">5–10 min</span></div><span class="prog" hidden></span>
         <a class="play" href="connect4/"><span class="pl">Play</span><span class="arr">→</span></a>
         <nav class="modes" aria-label="Four in a Row play modes"><a href="connect4/?mode=solo">Solo</a><a href="connect4/?mode=local">Same device</a><a class="online-mode" href="connect4/?mode=online">Online</a></nav>
       </div>
@@ -309,11 +314,28 @@ footer p{margin:0;max-width:70ch}
         <nav class="modes" aria-label="Azul play modes"><a href="azul/?mode=solo">Solo</a><a href="azul/?mode=local">Same device</a><a class="online-mode" href="azul/?mode=online">Online</a></nav>
       </div>
     </article>
+    <article class="game reversi" data-game="reversi" aria-labelledby="reversi-title">
+      <div class="lid"><svg class="art" viewBox="0 0 400 300" aria-hidden="true"><g transform="translate(170 24)"><rect width="190" height="190" rx="12" fill="#287657"/><path d="M47 0v190M95 0v190M143 0v190M0 47h190M0 95h190M0 143h190" stroke="#153f30" stroke-width="3"/><g stroke="#18372d" stroke-width="3"><circle cx="71" cy="71" r="19" fill="#f7f2e6"/><circle cx="119" cy="71" r="19" fill="#192724"/><circle cx="71" cy="119" r="19" fill="#192724"/><circle cx="119" cy="119" r="19" fill="#f7f2e6"/></g></g></svg><h2 class="title" id="reversi-title">Reversi</h2></div>
+      <div class="info"><p class="pitch">Surround and flip your rival’s discs. Control the corners and finish with the most pieces on the board.</p><div class="chips"><span class="chip">2 players</span><span class="chip">4 bot levels</span><span class="chip online-chip">Online</span><span class="chip">15–30 min</span></div><span class="prog" hidden></span>
+        <a class="play" href="reversi/"><span class="pl">Play</span><span class="arr">→</span></a>
+        <nav class="modes" aria-label="Reversi play modes"><a href="reversi/?mode=solo">Solo</a><a href="reversi/?mode=local">Same device</a><a class="online-mode" href="reversi/?mode=online">Online</a></nav>
+      </div>
+    </article>
+    <article class="game yahtzee" data-game="yahtzee" aria-labelledby="yahtzee-title">
+      <div class="lid"><svg class="art" viewBox="0 0 400 300" aria-hidden="true"><g transform="translate(195 30) rotate(12 70 70)"><rect x="0" y="0" width="90" height="90" rx="16" fill="#fff7e8" stroke="#9b6138" stroke-width="3"/><rect x="70" y="85" width="90" height="90" rx="16" fill="#fff7e8" stroke="#9b6138" stroke-width="3"/><g fill="#7c3930"><circle cx="24" cy="24" r="8"/><circle cx="66" cy="24" r="8"/><circle cx="45" cy="45" r="8"/><circle cx="24" cy="66" r="8"/><circle cx="66" cy="66" r="8"/><circle cx="94" cy="109" r="8"/><circle cx="136" cy="109" r="8"/><circle cx="94" cy="151" r="8"/><circle cx="136" cy="151" r="8"/></g></g></svg><h2 class="title" id="yahtzee-title">Yahtzee</h2></div>
+      <div class="info"><p class="pitch">Roll five dice, keep your favourites and fill your scorecard. Chase a full house, a straight or five of a kind.</p><div class="chips"><span class="chip">2–4 players</span><span class="chip">4 bot levels</span><span class="chip online-chip">Online</span><span class="chip">20–30 min</span></div><span class="prog" hidden></span>
+        <a class="play" href="yahtzee/"><span class="pl">Play</span><span class="arr">→</span></a>
+        <nav class="modes" aria-label="Yahtzee play modes"><a href="yahtzee/?mode=solo">Solo</a><a href="yahtzee/?mode=local">Same device</a><a class="online-mode" href="yahtzee/?mode=online">Online</a></nav>
+      </div>
+    </article>
   </main>
+  <details id="recentResults" class="night-panel"></details>
 
   <footer><p>Fan-made versions of tabletop games, built for friends. Not affiliated with or endorsed by any game publisher. Local games save on your device. Online rooms use the game server.</p></footer>
 </div>
 <script src="shared/versions.js"></script>
+<script src="shared/game-night.js"></script>
+<script src="shared/game-night-hub.js"></script>
 <script src="shared/firebase-config.js"></script>
 <script src="shared/hubkit.js"></script>
 <script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
@@ -356,7 +378,7 @@ footer p{margin:0;max-width:70ch}
       return n&&r?'Turn '+(t+1)+' of '+(n*r):'Turn '+(t+1);
     }}
   };
-  ['ticket','ludo','connect4','azul'].forEach(function(id){
+  ['ticket','ludo','connect4','azul','reversi','yahtzee'].forEach(function(id){
     GAMES[id]={href:id+'/#continue',check:function(){
       var d=read('hub.'+id+'.save.v1');
       if(!d||d.v!==1||d.game!==id||!d.state||d.state.over!==false)return null;
@@ -371,6 +393,7 @@ footer p{margin:0;max-width:70ch}
       try{label=GAMES[k].check();}catch(e){label=null;}
       var line=a.querySelector('.prog'),pl=a.querySelector('.pl'),play=a.querySelector('.play');
       if(label!==null){
+        if(window.HubGameNight){var key={codex:'naturalists-codex-v1',isles:'sti.save.v1',gems:'gemguild-game-v1',sketch:'pictionary.save.v1'}[k]||'hub.'+k+'.save.v1';label=HubGameNight.describe(k,read(key))||label;}
         line.textContent=label?'In progress \u00b7 '+label:'In progress';
         line.hidden=false;pl.textContent='Continue';play.setAttribute('href',GAMES[k].href);play.setAttribute('aria-label','Continue '+a.querySelector('.title').textContent);
       }else{
@@ -386,8 +409,8 @@ footer p{margin:0;max-width:70ch}
 <script>
 (function(){
   /* Online play: Join box and Online games strip. shared/online.js is loaded only when it is needed. */
-  var FOLDERS={codex:'codex/',isles:'isles/',gems:'gems/',sketch:'sketch/',ticket:'ticket/',ludo:'ludo/',connect4:'connect4/',azul:'azul/'};
-  var NAMES={codex:'Codex Naturalis',isles:'Catan',gems:'Splendor',sketch:'Pictionary',ticket:'Ticket to Ride',ludo:'Ludo',connect4:'Four in a Row',azul:'Azul'};
+  var FOLDERS={codex:'codex/',isles:'isles/',gems:'gems/',sketch:'sketch/',ticket:'ticket/',ludo:'ludo/',connect4:'connect4/',azul:'azul/',reversi:'reversi/',yahtzee:'yahtzee/'};
+  var NAMES={codex:'Codex Naturalis',isles:'Catan',gems:'Splendor',sketch:'Pictionary',ticket:'Ticket to Ride',ludo:'Ludo',connect4:'Four in a Row',azul:'Azul',reversi:'Reversi',yahtzee:'Yahtzee'};
   var $=function(id){return document.getElementById(id);};
   function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
   function configured(){return !!(window.HUB_FIREBASE_CONFIG||lsGet('hub.emulator'));}

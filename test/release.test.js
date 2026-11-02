@@ -67,7 +67,7 @@ test('all shipped classic scripts parse and every local HTML dependency exists',
 test('a complete release can launch all games and mode/room links offline', async () => {
   const worker = serviceWorker({ offline: true });
   await worker.event('install');
-  for (const game of ['codex', 'isles', 'gems', 'sketch', 'ticket', 'ludo', 'connect4', 'azul']) {
+  for (const game of ['codex', 'isles', 'gems', 'sketch', 'ticket', 'ludo', 'connect4', 'azul', 'reversi', 'yahtzee']) {
     for (const suffix of ['?room=123456', '?mode=online', 'index.html?mode=solo']) {
       const response = await worker.request(game + '/' + suffix);
       assert.equal(response.status, 200);
@@ -85,7 +85,7 @@ test('missing core asset rejects the next install without deleting the previous 
   worker.stores.set('gh-v4', new Map([['old', 'still available']]));
   await assert.rejects(worker.event('install'), /Unavailable asset/);
   assert.equal(worker.stores.get('gh-v4').get('old'), 'still available');
-  assert.equal(worker.stores.get('gh-v8').size, 0, 'partial install was not populated');
+  assert.equal(worker.stores.get('gh-v9').size, 0, 'partial install was not populated');
 });
 
 test('cached assets stay in their release and query-versioned scripts never alias', async () => {
@@ -100,7 +100,7 @@ test('cached assets stay in their release and query-versioned scripts never alia
 
 test('activation removes only obsolete Game Hub caches', async () => {
   const worker = serviceWorker();
-  for (const name of ['gh-v4', 'gh-v8', 'gh-fonts-v1', 'other-application']) worker.stores.set(name, new Map());
+  for (const name of ['gh-v4', 'gh-v9', 'gh-fonts-v1', 'other-application']) worker.stores.set(name, new Map());
   await worker.event('activate');
-  assert.deepEqual([...worker.stores.keys()].sort(), ['gh-fonts-v1', 'gh-v8', 'other-application']);
+  assert.deepEqual([...worker.stores.keys()].sort(), ['gh-fonts-v1', 'gh-v9', 'other-application']);
 });

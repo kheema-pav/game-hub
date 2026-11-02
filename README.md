@@ -12,14 +12,17 @@ Fan-made tabletop games for phone and laptop, served as a static site by GitHub 
 | `shared/online.js`, `shared/firebase-config.js` | Online play (`window.HubOnline`) and the Firebase web config | Loaded only by pages that use online rooms |
 | `firebase/` | Firestore security rules and their tests | `firestore.rules`, `test/` (emulator tests) |
 | `sw.js` | Service worker | Caches the site so it also works offline |
-| `codex/` | Codex Naturalis | Bots (Easy/Normal/Hard), pass-and-play |
+| `codex/` | Codex Naturalis | Bots (Easy/Normal/Hard/Expert), pass-and-play |
 | `isles/` | Catan | Classic and Seafarers modes, bots, pass-and-play |
-| `gems/` | Splendor | Bots (Easy/Medium/Hard), pass-and-play |
+| `gems/` | Splendor | Bots (Easy/Normal/Hard/Expert), pass-and-play |
 | `sketch/` | Pictionary | One-device teams or online drawing and guessing |
 | `ticket/` | Ticket to Ride | USA Classic / Europe Classic, bots, same-device, online |
 | `ludo/` | Ludo | 2-4 players, documented house rules, bots, same-device, online |
-| `connect4/` | Four in a Row | 2 players, three bot levels, same-device, online |
+| `connect4/` | Four in a Row | 2 players, four bot levels, same-device, online |
 | `azul/` | Azul | Standard coloured wall, 2-4 players, bots, same-device, online |
+| `reversi/` | Reversi | 2 players, four bot levels, automatic passes, same-device, online |
+| `yahtzee/` | Yahtzee | 2–4 players, four bot levels, bonuses/Joker rules, same-device, online |
+| `shared/game-night*.js` | Local game nights | Saved-table summaries, same-player rematches, latest 50 local results |
 | `shared/tabletop*.js`, `shared/tabletop.css` | New-game shell | Local saves, private handover, authored online replay and setup |
 
 Each game has a small `index.html`, `style.css`, `engine.js` (rules/data) and `game.js` (screen and game flow). Catan also has `bot.js`. These are classic scripts with no build step. Shared menus load from `shared/hubkit.js`; online play lazily loads the Firebase SDK from gstatic. The site runs from any static host. The service worker `sw.js` and the manifest sit in the site root, and the games keep working if `hubkit.js` fails to load.
@@ -64,11 +67,19 @@ Direct mode links use `?mode=solo`, `?mode=local` and `?mode=online`. Room invit
 3. Close all Game Hub tabs and reopen to activate an available new service worker. A running game keeps its cached release until tabs close. The next release installs only if every required asset downloads successfully; executable files are served from one complete release rather than refreshed individually.
 4. Check a new room, a legacy invitation, host cancellation, a guest replacement, a backgrounded phone and an offline local reload.
 
-Dependency-free checks: `node --test test/*.test.js shared/test/*.test.js isles/test/entry-modes.test.js sketch/test/*.test.js connect4/test/*.test.js ludo/test/*.test.js azul/*.test.js ticket/test/*.test.js` and `node isles/test/engine.test.js`. Firestore checks: `cd firebase/test && npm ci && npm test` (Node and Java 21). GitHub Actions runs these on pushes and pull requests.
+Dependency-free checks: `node --test test/*.test.js shared/test/*.test.js isles/test/entry-modes.test.js sketch/test/*.test.js codex/test/*.test.js connect4/test/*.test.js ludo/test/*.test.js azul/*.test.js ticket/test/*.test.js reversi/test/*.test.js yahtzee/test/*.test.js` and `node isles/test/engine.test.js`. Firestore checks: `cd firebase/test && npm ci && npm test` (Node and Java 21). GitHub Actions runs these on pushes and pull requests.
 
-The four added games are implemented. Ticket edition details and adapted MIT data credits are in [ticket/README.md](ticket/README.md); Azul uses the standard coloured-wall rules; Ludo house rules are explicit in [ludo/README.md](ludo/README.md).
+All ten games are implemented. Reversi and Yahtzee rules and tests are documented in their folders. Ticket edition details and adapted MIT data credits are in [ticket/README.md](ticket/README.md); Azul uses the standard coloured-wall rules; Ludo house rules are explicit in [ludo/README.md](ludo/README.md).
 
-See [the reviewed implementation plan](docs/implementation-plan.md) and [new-game candidates](docs/game-candidates.md).
+## Bot levels and local game nights
+
+Every game with bots offers Easy, Normal, Hard and Expert. Existing Connect 4 and Splendor Hard behavior is retained. Expert spends more computation on planning or evaluates more strategic trade-offs; it uses visible information and its own private cards, never future dice/deck order or opponents’ private cards. Pictionary has no bot mode. The names are practical presets, not calibrated ratings, and chance still matters in dice games. Splendor retains the internal `medium` value for compatibility but labels it Normal.
+
+The hub shows saved tables with player names, mode, bot level, edition where relevant, and last saved time for games saved after this update. Completed local games appear in Recent results, capped at 50. Results contain names, scores, winners, level, date and a short game summary, not hands or moves. Clearing results leaves active saves intact. Storage is browser-local and is lost if browser data is cleared. Online matches still use the existing room history; they are not copied into this local result list.
+
+Final-screen rematches retain players and settings. Existing saves remain readable; the shared tabletop setup asks before replacing an unfinished game. Reversi and Yahtzee use the existing platform-v2 room schema and require **no new Firestore rule deployment** beyond the previously published rules.
+
+See [the game-night implementation notes](docs/game-night-plan.md), [the reviewed implementation plan](docs/implementation-plan.md) and [new-game candidates](docs/game-candidates.md).
 
 ## Adding a game
 

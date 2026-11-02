@@ -21,12 +21,12 @@
     var savedConfig = read(configKey);
     if (savedConfig && ['solo', 'local'].includes(savedConfig.mode)) setup.mode = savedConfig.mode;
     if (savedConfig && Number.isInteger(savedConfig.count) && savedConfig.count >= config.minPlayers && savedConfig.count <= config.maxPlayers) setup.count = savedConfig.count;
-    if (savedConfig && ['easy', 'normal', 'hard'].includes(savedConfig.level)) setup.level = savedConfig.level;
+    if (savedConfig && ['easy', 'normal', 'hard', 'expert'].includes(savedConfig.level)) setup.level = savedConfig.level;
     if (savedConfig && C.validOptions(savedConfig.options, config.options)) setup.options = savedConfig.options;
     if (savedConfig && Array.isArray(savedConfig.names)) setup.names = savedConfig.names.map(function (name) { return String(name).slice(0, 16); });
     var state = null, people = [], currentOptions = C.clone(setup.options), screen = 'setup', message = '', log = [], actions = [], draft = {};
     var viewer = 0, visibleHuman = null, curtain = false, botTimer = null, resultSound = false;
-    var online = null, generation = 0, lobby = null;
+    var online = null, generation = 0, lobby = null, pendingNew = false;
     var params = new URLSearchParams(location.search), invite = params.get('room'), intent = params.get('mode');
     if (!invite && location.hash !== '#continue' && ['solo', 'local', 'online'].includes(intent)) setup.mode = intent;
     function onlineAvailable() { return !!(window.HubOnline && HubOnline.available()); }
@@ -36,6 +36,13 @@
     function persistSetup() { write(configKey, setup); }
     function save() {
       if (online || !state) return;
+      if (window.HubGameNight) {
+        HubGameNight.touch(state);
+        if (state.over) {
+          var winners = Array.isArray(state.winners) ? state.winners : Number.isInteger(state.winner) && state.winner >= 0 ? [state.winner] : [];
+          if (!HubGameNight.finish(config.id, state, { players: people.map(function (p, i) { return { name: p.name, bot: p.bot, score: score(i) }; }), winners: winners, mode: setup.mode === 'solo' ? 'solo' : 'local', level: setup.level, summary: config.id === 'ticket' ? (currentOptions.edition === 'europe' ? 'Europe Classic' : 'USA Classic') : '' })) message = 'Game finished. This browser could not save the result to your history.';
+        }
+      }
       if (!write(saveKey, { v: 1, game: config.id, gameVersion: config.gameVersion, options: currentOptions, players: people, level: setup.level, state: state, log: log.slice(-20) })) message = 'This browser could not save the game. Keep this tab open to finish.';
     }
     function stopBot() { clearTimeout(botTimer); botTimer = null; }
@@ -55,7 +62,9 @@
       for (var n = config.minPlayers; n <= config.maxPlayers; n++) countOptions += '<option value="' + n + '"' + (setup.count === n ? ' selected' : '') + '>' + n + ' players</option>';
       var settings = config.options.map(function (option) { return '<label>' + esc(option.label) + '<select data-option="' + esc(option.key) + '">' + option.values.map(function (value) { return '<option value="' + esc(value.value) + '"' + (setup.options[option.key] === value.value ? ' selected' : '') + '>' + esc(value.label) + '</option>'; }).join('') + '</select></label>'; }).join('');
       var names = Array.from({ length: setup.count }, function (_, i) { return '<div class="tt-person"><input maxlength="16" aria-label="Player ' + (i + 1) + ' name" data-name="' + i + '" value="' + esc(setup.names[i] || (i === 0 ? 'You' : setup.mode === 'solo' ? 'Bot ' + i : 'Player ' + (i + 1))) + '"><span class="tt-muted">' + (setup.mode === 'solo' && i ? 'Computer' : 'Human') + '</span></div>'; }).join('');
-      root.innerHTML = '<div class="tt-setup">' + title() + '<p class="tt-muted">' + esc(config.subtitle || 'A tabletop classic, ready wherever you are.') + '</p>' + errorHTML() + '<section class="tt-card"><h2>Choose your table</h2><div class="tt-mode">' + [['solo', 'Solo vs bots'], ['local', 'Same device'], ['online', 'Online']].map(function (mode) { return '<button data-tt="mode" data-value="' + mode[0] + '" aria-pressed="' + (setup.mode === mode[0]) + '">' + mode[1] + '</button>'; }).join('') + '</div><div class="tt-form"><label>Table size<select data-setting="count">' + countOptions + '</select></label>' + (setup.mode === 'solo' ? '<label>Bot level<select data-setting="level">' + ['easy', 'normal', 'hard'].map(function (level) { return '<option' + (setup.level === level ? ' selected' : '') + ' value="' + level + '">' + level[0].toUpperCase() + level.slice(1) + '</option>'; }).join('') + '</select></label>' : '') + settings + '</div>' + (setup.mode !== 'online' ? names : '<p class="tt-muted">Every player uses their own phone or laptop. Create a room and share its code, or join a friend.</p>') + '<div class="tt-actions">' + (setup.mode === 'online' ? '<button class="tt-primary" data-tt="online">Create or join online</button>' : '<button class="tt-primary" data-tt="start">Start new game</button>') + (resumable ? '<button data-tt="continue">Continue saved game</button>' : '') + '</div>' + (setup.mode === 'online' && !onlineAvailable() ? '<p role="status">Online play is unavailable. You can still choose Solo or Same device.</p>' : '') + '</section>' + helpHTML() + '</div>';
+      var resumeInfo = resumable && window.HubGameNight ? '<p class="tt-resume-info">Saved table: ' + esc(HubGameNight.describe(config.id, saved)) + '</p>' : '';
+      var newPrompt = pendingNew && resumable ? '<div class="tt-new-warning" role="alert"><p>Starting a new game replaces the unfinished saved table. Your results history stays.</p><div class="tt-actions"><button data-tt="confirm-new" class="tt-primary">Replace saved game</button><button data-tt="cancel-new">Keep saved game</button></div></div>' : '';
+      root.innerHTML = '<div class="tt-setup">' + title() + '<p class="tt-muted">' + esc(config.subtitle || 'A tabletop classic, ready wherever you are.') + '</p>' + errorHTML() + '<section class="tt-card"><h2>Choose your table</h2><div class="tt-mode">' + [['solo', 'Solo vs bots'], ['local', 'Same device'], ['online', 'Online']].map(function (mode) { return '<button data-tt="mode" data-value="' + mode[0] + '" aria-pressed="' + (setup.mode === mode[0]) + '">' + mode[1] + '</button>'; }).join('') + '</div><div class="tt-form"><label>Table size<select data-setting="count">' + countOptions + '</select></label>' + (setup.mode === 'solo' ? '<label>Bot level<select data-setting="level">' + ['easy', 'normal', 'hard', 'expert'].map(function (level) { return '<option' + (setup.level === level ? ' selected' : '') + ' value="' + level + '">' + level[0].toUpperCase() + level.slice(1) + '</option>'; }).join('') + '</select></label>' : '') + settings + '</div>' + (setup.mode === 'solo' ? '<p class="tt-muted tt-level-note">' + esc({ easy: 'Relaxed choices while you learn.', normal: 'A balanced opponent for a casual game.', hard: 'A challenging opponent with stronger tactics.', expert: 'Our strongest bot. Plans further and weighs more trade-offs.' }[setup.level]) + '</p>' : '') + (setup.mode !== 'online' ? names : '<p class="tt-muted">Every player uses their own phone or laptop. Create a room and share its code, or join a friend.</p>') + '<div class="tt-actions">' + (setup.mode === 'online' ? '<button class="tt-primary" data-tt="online">Create or join online</button>' : '<button class="tt-primary" data-tt="start">Start new game</button>') + (resumable ? '<button data-tt="continue">Continue saved game</button>' : '') + '</div>' + resumeInfo + newPrompt + (setup.mode === 'online' && !onlineAvailable() ? '<p role="status">Online play is unavailable. You can still choose Solo or Same device.</p>' : '') + '</section>' + helpHTML() + '</div>';
     }
     function helpHTML() {
       if (screen === 'game' && config.inlineRules) return '';
@@ -66,7 +75,7 @@
     function score(i) { try { return config.score ? config.score(state, i) : state.scores ? state.scores[i] : null; } catch (e) { return null; } }
     function results() {
       var winners = Array.isArray(state.winners) ? state.winners : Number.isInteger(state.winner) ? [state.winner] : [];
-      return winners.length === 1 ? names()[winners[0]] + ' wins!' : winners.length ? 'Shared win: ' + winners.map(function (i) { return names()[i]; }).join(', ') : 'Draw';
+      return winners.length === 1 ? names()[winners[0]] + (names()[winners[0]] === 'You' ? ' win!' : ' wins!') : winners.length ? 'Shared win: ' + winners.map(function (i) { return names()[i]; }).join(', ') : 'Draw';
     }
     function render() {
       root.setAttribute('data-game', config.id);
@@ -89,7 +98,7 @@
       try { board = config.render(state, Math.max(0, viewer), actions, { esc: esc, names: names(), online: !!online, draft: draft }); }
       catch (e) { board = '<p class="tt-error">This board could not be displayed. Reopen the saved game or room.</p>'; try { console.error(e); } catch (_) {} }
       var status = state.over ? results() : online && online.sending ? 'Sending your move…' : canAct ? 'Your turn, ' + people[actor].name : 'Waiting for ' + (people[actor] ? people[actor].name : 'another player');
-      root.innerHTML = title() + errorHTML() + '<div class="tt-scores">' + people.map(function (person, i) { var points = score(i); return '<div class="tt-player' + (!state.over && actor === i ? ' active' : '') + '"><b>' + esc(person.name) + '</b><small>' + (points != null ? esc(points) + ' points' : i === viewer ? 'You' : person.bot ? 'Computer' : 'Player ' + (i + 1)) + '</small></div>'; }).join('') + '</div><div class="tt-status' + (state.over ? ' tt-result' : '') + '" role="status">' + esc(status) + '</div><section class="tt-board">' + board + '</section>' + (state.over ? '<div class="tt-actions"><button data-tt="' + (online ? 'replace' : 'start') + '" class="tt-primary">Play again</button><button data-tt="setup">Game setup</button></div>' : '') + (log.length ? '<details><summary>Recent moves</summary><ol class="tt-log">' + log.slice(-12).map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('') + '</ol></details>' : '') + helpHTML();
+      root.innerHTML = title() + errorHTML() + '<div class="tt-scores">' + people.map(function (person, i) { var points = score(i); return '<div class="tt-player' + (!state.over && actor === i ? ' active' : '') + '"><b>' + esc(person.name) + '</b><small>' + (points != null ? esc(points) + ' points' : i === viewer ? 'You' : person.bot ? 'Computer' : 'Player ' + (i + 1)) + '</small></div>'; }).join('') + '</div><div class="tt-status' + (state.over ? ' tt-result' : '') + '" role="status">' + esc(status) + '</div><section class="tt-board">' + board + '</section>' + (state.over ? '<div class="tt-actions"><button data-tt="' + (online ? 'replace' : 'rematch') + '" class="tt-primary">' + (online ? 'Play again' : 'Rematch, same players') + '</button><button data-tt="setup">Game setup</button></div>' : '') + (log.length ? '<details><summary>Recent moves</summary><ol class="tt-log">' + log.slice(-12).map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('') + '</ol></details>' : '') + helpHTML();
       if (state.over && !resultSound) { resultSound = true; sound('win'); }
       scheduleBot();
     }
@@ -115,22 +124,33 @@
       log.push(people[actor].name + ': ' + (config.describe ? config.describe(action, state) : 'played a move'));
       state = result.state; draft = {}; message = ''; sound('place'); save(); render();
     }
-    function startLocal() {
+    function startLocal(rematch) {
+      var rematchPeople = rematch ? C.clone(people) : null;
+      if (rematch) {
+        setup.names = people.map(function (p) { return p.name; }); setup.count = people.length;
+        setup.options = C.clone(currentOptions); setup.mode = people.some(function (p) { return p.bot; }) ? 'solo' : 'local';
+      }
+      pendingNew = false;
       stopOnline(); stopBot(); message = ''; log = []; draft = {}; resultSound = false; visibleHuman = null; curtain = false;
       currentOptions = C.clone(setup.options);
-      people = Array.from({ length: setup.count }, function (_, i) { return { name: String(setup.names[i] || (i ? setup.mode === 'solo' ? 'Bot ' + i : 'Player ' + (i + 1) : 'You')).slice(0, 16), color: COLORS[i], bot: setup.mode === 'solo' && i > 0 }; });
+      people = rematchPeople || Array.from({ length: setup.count }, function (_, i) { return { name: String(setup.names[i] || (i ? setup.mode === 'solo' ? 'Bot ' + i : 'Player ' + (i + 1) : 'You')).slice(0, 16), color: COLORS[i], bot: setup.mode === 'solo' && i > 0 }; });
       try { state = engine.create({ seed: randomSeed(), players: C.clone(people), options: C.clone(currentOptions) }); screen = 'game'; persistSetup(); save(); clearURL(); render(); }
       catch (error) { screen = 'setup'; message = error.message; render(); }
+    }
+    function requestStart() {
+      var saved = read(saveKey);
+      if (C.validSave(saved, config) && !saved.state.over) { pendingNew = true; render(); }
+      else startLocal(false);
     }
     function resume() {
       var saved = read(saveKey);
       if (!C.validSave(saved, config)) { message = 'This saved game is unavailable or uses a different version. Start a new table.'; screen = 'setup'; render(); return; }
-      stopOnline(); people = saved.players; currentOptions = saved.options; state = saved.state; setup.level = ['easy', 'normal', 'hard'].includes(saved.level) ? saved.level : 'normal';
+      stopOnline(); people = saved.players; currentOptions = saved.options; state = saved.state; setup.level = ['easy', 'normal', 'hard', 'expert'].includes(saved.level) ? saved.level : 'normal';
       setup.mode = people.some(function (person) { return person.bot; }) ? 'solo' : 'local'; log = Array.isArray(saved.log) ? saved.log.filter(function (line) { return typeof line === 'string'; }) : [];
       viewer = 0; visibleHuman = null; curtain = false; draft = {}; message = ''; screen = 'game'; resultSound = false; clearURL(); render();
     }
     function clearURL() { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
-    function backSetup() { stopOnline(); state = null; screen = 'setup'; message = ''; curtain = false; clearURL(); render(); }
+    function backSetup() { stopOnline(); state = null; screen = 'setup'; message = ''; curtain = false; pendingNew = false; clearURL(); render(); }
     function openOnline() {
       if (!onlineAvailable() || !window.HubLobby) { message = 'Online play is unavailable. Choose Solo or Same device, or reconnect and try again.'; screen = 'setup'; render(); return; }
       persistSetup();
@@ -238,7 +258,10 @@
       }
       var action = target.getAttribute('data-tt');
       if (action === 'mode') { setup.mode = target.getAttribute('data-value'); message = ''; persistSetup(); render(); }
-      else if (action === 'start') startLocal();
+      else if (action === 'start') requestStart();
+      else if (action === 'confirm-new' && pendingNew) startLocal(false);
+      else if (action === 'cancel-new') { pendingNew = false; render(); }
+      else if (action === 'rematch' && state && state.over && !online) startLocal(true);
       else if (action === 'continue') resume();
       else if (action === 'setup') backSetup();
       else if (action === 'reopen' && online) enterRoom(online.code);
