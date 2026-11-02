@@ -118,18 +118,18 @@ const server = http.createServer((request, response) => {
       const privacy = page.getByRole('button', { name: 'Hide hands', exact: true });
       if (await privacy.getAttribute('aria-pressed') === 'true') await privacy.click();
       await page.getByRole('button', { name: 'Start game', exact: true }).click();
-      await page.locator('#menuSlot [data-hubkit="menu"]').waitFor({ state: 'visible' });
+      await page.locator('.topbar [data-hubkit="menu"]').waitFor({ state: 'visible' });
       await page.evaluate(() => { window.testRoomControls = HubSession.mount({ code: '123456' }); });
       assert.equal(await page.locator('.hs-launch').isVisible(), false, 'room launcher never covers Catan');
-      await page.locator('#menuSlot [data-hubkit="menu"]').click();
+      await page.locator('.topbar [data-hubkit="menu"]').click();
       await page.getByRole('button', { name: 'Online room', exact: true }).click();
       assert.equal(await page.locator('.hs-code').innerText(), '123 456');
       assert.equal(await page.evaluate(() => HubKit.isOpen()), false, 'room controls replace the menu');
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('.hs-layer').isVisible(), false);
-      assert.ok(await page.locator('#menuSlot [data-hubkit="menu"]').evaluate(node => node === document.activeElement), 'closing controls returns focus to the menu');
+      assert.ok(await page.locator('.topbar [data-hubkit="menu"]').evaluate(node => node === document.activeElement), 'closing controls returns focus to the menu');
       await page.evaluate(() => window.testRoomControls.close());
-      await page.locator('#menuSlot [data-hubkit="menu"]').click();
+      await page.locator('.topbar [data-hubkit="menu"]').click();
       assert.equal(await page.getByRole('button', { name: 'Online room', exact: true }).count(), 0, 'leaving removes room controls');
       await page.keyboard.press('Escape');
       // A real finished game records once; the rematch retains the table and starts fresh.
