@@ -119,8 +119,10 @@ const server = http.createServer((request, response) => {
       for (const col of [1, 2, 1, 2, 1, 2, 1]) await page.getByRole('button', { name: 'Drop a disc in column ' + col, exact: true }).click();
       const finished = await page.evaluate(() => JSON.parse(localStorage.getItem('hub.connect4.save.v1')));
       assert.equal(finished.state.over, true);
-      await page.reload();
       await page.goto(url + '/connect4/#continue');
+      // A fragment-only navigation does not rerun startup. Reload with #continue
+      // present so this actually reopens the finished save, rather than setup.
+      await page.reload();
       assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('hub.results.v1')).length), 1, 'reload does not duplicate results');
       await page.getByRole('button', { name: 'Rematch, same players', exact: true }).click();
       const rematch = await page.evaluate(() => JSON.parse(localStorage.getItem('hub.connect4.save.v1')));

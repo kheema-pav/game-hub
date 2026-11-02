@@ -239,6 +239,23 @@ function shippedConfig(id){
  return registration;
 }
 
+test('a finished Connect4 save reopens with a rematch action and keeps its players and Expert level',()=>{
+ const registration=shippedConfig('connect4'),E=registration.engine;
+ const players=[{name:'Cy',bot:false},{name:'Z',bot:false}];
+ let state=E.create({seed:42,players,options:{}});
+ for(const column of [0,1,0,1,0,1,0])state=E.apply(state,E.actor(state),{type:'drop',column}).state;
+ assert.equal(state.over,true);
+ const save={v:1,game:'connect4',gameVersion:1,players,options:{},level:'expert',state};
+ const setup=shell({save,gameConfig:registration});
+ assert.match(setup.root.innerHTML,/Choose your table/);
+ const continued=shell({hash:'#continue',save,gameConfig:registration});
+ assert.match(continued.root.innerHTML,/Rematch, same players/);
+ continued.click({'data-tt':'rematch'});
+ const fresh=JSON.parse(continued.storage.get('hub.connect4.save.v1'));
+ assert.deepEqual(fresh.players,players);assert.equal(fresh.level,'expert');
+ assert.equal(fresh.state.over,false);assert.equal(fresh.state.moves,0);
+});
+
 for(const id of ['connect4','ludo','azul','ticket','reversi','yahtzee'])test(`${id}: the shipped engine, renderer and shared shell can start and save a local game`,()=>{
  const registration=shippedConfig(id);
  const h=shell({search:'?mode=solo',gameConfig:registration});
