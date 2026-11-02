@@ -22,6 +22,7 @@
   var settings = { sound: true, volume: 0.35, vibrate: true, wake: false };
   var cfg = { id: '', name: 'Menu', accent: null, scheme: 'auto', floating: false, items: null };
   var root, sheet, layer, floatBtn, toastEl, mq;
+  var extraItems = [];
   var isOpenNow = false, cur = [], armed = -1, armTimer = 0, volTimer = 0, toastTimer = 0;
 
   /* ---------- small helpers ---------- */
@@ -468,7 +469,7 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
     var active = document.activeElement, fid = active && sheet.contains(active) ? active.getAttribute('data-hk-id') : null;
     var top = sheet.scrollTop, items = [];
     try { items = (typeof cfg.items === 'function' ? cfg.items() : cfg.items) || []; } catch (e) { items = []; }
-    cur = Array.isArray(items) ? items.filter(Boolean) : [];
+    cur = extraItems.concat(Array.isArray(items) ? items.filter(Boolean) : []);
     if (armed >= cur.length) clearArm();
     var isHub = cfg.id === 'hub';
     var h = '<div class="hk-head"><h2 class="hk-title" id="hubkit-title">' + esc(cfg.name) + '</h2>' +
@@ -670,6 +671,17 @@ button.hk-menu-btn.hk-menu-btn[hidden]{display:none}
       setFloating(cfg.floating);
       syncWake();
       if (isOpenNow) render();
+    },
+    // Shared controls register for their lifetime, without replacing game-specific items.
+    addMenuItem: function (item) {
+      extraItems.push(item);
+      clearArm();
+      if (isOpenNow) render();
+      return function () {
+        extraItems = extraItems.filter(function (entry) { return entry !== item; });
+        clearArm();
+        if (isOpenNow) render();
+      };
     },
     buttonHTML: buttonHTML,
     open: open,
