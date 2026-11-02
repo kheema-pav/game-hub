@@ -39,6 +39,8 @@
   }
   function errText(e) {
     var c = e && e.code;
+    if (c === 'rules-update' || c === 'version' || c === 'host-only') return e.message;
+    if (c === 'ended') return 'This room has ended. Ask your friends for a new code.';
     return c === 'offline' ? "You're offline. Check your connection and try again."
       : c === 'missing' ? 'No game with that code'
       : c === 'full' ? 'That game is full'
@@ -299,6 +301,9 @@
         var info = await HubOnline.rooms.lookup(code);
         if (h.closed) return;
         if (!info.exists) { var x = new Error(); x.code = 'missing'; throw x; }
+        var compatible = HubOnline.rooms.compatibility(info);
+        if (!compatible.ok) { var ver = new Error(compatible.message); ver.code = 'version'; throw ver; }
+        if (info.status === 'cancelled' || info.status === 'ended') { h.close(true); closedRoom(code, info, {accent:o.accent, onClose:o.onClose}); return; }
         if (info.game && game && info.game !== game) {          // another game's code: open that game
           var url = otherGameUrl(info.game, code);
           if (url) { setText(h, '#hl-msg', ''); location.href = url; return; }
@@ -358,21 +363,45 @@
     return { close: function () { h.close(); } };
   }
 
+  function closedRoom(code, room, o) {
+    o = o || {};
+    var busy = false, h;
+    var seated = !!(room.seated || (room.seats && room.seats[HubOnline.uid]));
+    var buttons = [{ label: 'Back to the hub', href: hubUrlOf(o) }];
+    if (o.onClose) buttons.push({ id: 'close', label: 'Back to setup', onClick: function () { h.close(); call(o.onClose); } });
+    if (seated) buttons.push({ id: 'replacement', label: 'Create a new room', go: true, onClick: async function () {
+      if (busy) return;
+      busy = true;
+      h.panel.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      setText(h, '#hl-msg', 'Creating a new room…');
+      try { var r = await HubOnline.rooms.replacement(code); if (!h.closed) location.href = roomLink(r.code); }
+      catch (e) { if (!h.closed) { busy = false; h.panel.querySelectorAll('button').forEach(function (b) { b.disabled = false; }); setText(h, '#hl-msg', errText(e)); } }
+    }});
+    h = messagePage({ title: room.status === 'cancelled' ? 'This room was cancelled' : 'This game has ended',
+      lede: 'The original game is closed. A new room starts a fresh game with the same settings; share its new code with your friends.',
+      extra: '<p class="hl-err" role="alert" id="hl-msg"></p>', accent: o.accent, buttons: buttons });
+    return { close: function () { h.close(); } };
+  }
+
   /* ---------- waiting room ---------- */
   function waitingRoom(code, o) {
     o = o || {};
     code = norm(code);
     var minToStart = Math.max(2, +o.minToStart || 2);
-    var st = { room: null, error: null, busy: false, msg: '', copied: false, fallback: false, done: false, missing: false };
-    var unsub = null;
+    var st = { room: null, error: null, busy: false, msg: '', copied: false, fallback: false, done: false, missing: false, confirmEnd: false, presence: {}, presenceError: null };
+    var unsub = null, stopPresence = null;
     var h = open({
       page: o.mode !== 'sheet', label: 'Waiting room', accent: o.accent,
-      cleanup: function () { st.done = true; if (unsub) { try { unsub(); } catch (e) {} unsub = null; } }
+      cleanup: function () { st.done = true; if (stopPresence) { stopPresence(); stopPresence = null; } if (unsub) { try { unsub(); } catch (e) {} unsub = null; } }
     });
     function uid() { try { return HubOnline.uid; } catch (e) { return null; } }
     function draw() {
       if (h.closed) return;
       var room = st.room, me = uid();
+      if (st.confirmEnd) {
+        h.panel.innerHTML = '<h2 class="hl-title">Cancel this room for everyone?</h2><p class="hl-lede">The code will stop accepting players. A replacement gets a new code.</p><p class="hl-err" role="alert">' + esc(st.msg) + '</p><div class="hl-foot"><button class="hl-btn" data-hl="keep"' + (st.busy ? ' disabled' : '') + '>Keep room</button><button class="hl-btn hl-go" data-hl="confirmend"' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'Cancelling…' : 'Cancel room') + '</button></div>';
+        return;
+      }
       if (st.missing) {
         h.panel.innerHTML = '<h2 class="hl-title">No game with that code</h2><p class="hl-lede">There is no game ' + esc(fmtCode(code)) + '.</p><div class="hl-foot"><button class="hl-btn hl-go" type="button" data-hl="close">Close</button></div>';
         return;
@@ -382,6 +411,8 @@
       var host = !!room && room.host === me;
       var rows = ids.map(function (u) {
         var tags = [u === (room && room.host) ? 'host' : '', u === me ? 'you' : ''].filter(Boolean).join(' · ');
+        var seen = st.presence[u], age = seen && typeof seen.at === 'number' ? Math.max(0, Date.now() - seen.at) : null;
+        tags += ' · ' + (st.presenceError ? 'presence unavailable' : age === null ? 'not seen yet' : age < 150000 ? 'seen recently' : 'away / not seen recently');
         var c = safeColor(seats[u].color);
         return '<li' + (c ? ' style="--hl-pc:' + c + '"' : '') + '><span class="hl-dot"></span><span class="hl-who">' + esc(seats[u].name || 'Player') + '</span><span class="hl-tag">' + esc(tags) + '</span></li>';
       }).join('') + Array.apply(null, Array(Math.max(0, max - ids.length))).map(function () {
@@ -403,10 +434,10 @@
         '<p class="hl-status" role="status">' + esc(status) + '</p>' +
         '<p class="hl-err" role="alert">' + esc(msg) + '</p>' +
         '<div class="hl-foot">' +
-        (host ? '<button class="hl-btn" type="button" data-hl="hostclose"' + (st.busy ? ' disabled' : '') + '>Close</button>'
+        (host ? '<button class="hl-btn" type="button" data-hl="hostclose"' + (st.busy ? ' disabled' : '') + '>Cancel room</button>'
           + '<button class="hl-btn hl-go" type="button" data-hl="start"' + (ids.length < minToStart || st.busy ? ' disabled' : '') + '>Start</button>'
           : '<button class="hl-btn" type="button" data-hl="leave"' + (st.busy || !room ? ' disabled' : '') + '>Leave</button>') +
-        '</div>';
+        '</div>' + (room && room.seats && room.seats[me] ? '<p class="hl-lede">Host unavailable? Create a replacement and share the new code.</p><button class="hl-btn" data-hl="replacement"' + (st.busy ? ' disabled' : '') + '>Create replacement room</button>' : '');
     }
     async function copy() {
       var ok = false;
@@ -431,11 +462,29 @@
       h.close(true);
       call(o.onLeave);
     }
+    async function cancelRoom() {
+      if (st.busy) return;
+      st.busy = true; st.msg = ''; draw();
+      try { await HubOnline.rooms.end(code); }
+      catch (e) { st.busy = false; st.msg = errText(e); draw(); return; }
+      if (!h.closed) { h.close(true); call(o.onClose || o.onLeave); }
+    }
+    async function createReplacement() {
+      if (st.busy) return;
+      st.busy = true; st.msg = ''; draw();
+      try { var r = await HubOnline.rooms.replacement(code); if (!h.closed) location.href = roomLink(r.code); }
+      catch (e) { if (!h.closed) { st.busy = false; st.msg = errText(e); draw(); } }
+    }
     h.onAct = function (a) {
+      if (st.busy) return;
       if (a === 'copy') copy();
       else if (a === 'start') start();
       else if (a === 'leave') leave();
-      else if (a === 'hostclose' || a === 'close') { h.close(true); call(o.onClose || o.onLeave); }
+      else if (a === 'hostclose') { st.confirmEnd = true; st.msg = ''; draw(); focusFirst(h, '[data-hl="keep"]'); }
+      else if (a === 'keep') { st.confirmEnd = false; st.msg = ''; draw(); }
+      else if (a === 'confirmend') cancelRoom();
+      else if (a === 'replacement') createReplacement();
+      else if (a === 'close') { h.close(true); call(o.onClose || o.onLeave); }
     };
     draw();
     focusFirst(h, '[data-hl="copy"]');
@@ -444,7 +493,11 @@
       if (snap.error) { st.error = snap.error; if (!st.room) { st.room = null; } draw(); return; }
       st.error = null;
       if (!snap.room) { st.missing = true; draw(); return; }
-      st.room = snap.room;
+      st.room = snap.room; st.presence = snap.presence || {}; st.presenceError = snap.presenceError || null;
+      var compatible = HubOnline.rooms.compatibility(snap.room);
+      if (!compatible.ok) { h.close(true); messagePage({title:'Different game version',lede:compatible.message,buttons:[{label:'Back to the hub',href:hubUrlOf(o)}],accent:o.accent}); return; }
+      if (snap.room.status === 'cancelled' || snap.room.status === 'ended') { h.close(true); closedRoom(code, snap.room, {accent:o.accent,onClose:o.onClose || o.onLeave,hubUrl:o.hubUrl}); return; }
+      if (!stopPresence && snap.room.seats && snap.room.seats[uid()]) stopPresence = HubOnline.rooms.trackPresence(code);
       var me = uid(), seated = !!(snap.room.seats && snap.room.seats[me]);
       if (snap.room.status === 'playing') {
         if (!seated) { h.close(true); notSeated(code, { gameName: o.gameName, hubUrl: o.hubUrl, accent: o.accent, onClose: o.onClose || o.onLeave }); return; }
@@ -508,6 +561,9 @@
         var info = await HubOnline.rooms.lookup(code);
         if (cancelled) return;
         if (!info.exists) { fail('No game with that code', 'There is no game ' + fmtCode(code) + '. Check the code with whoever invited you.'); return; }
+        var compatible = HubOnline.rooms.compatibility(info);
+        if (!compatible.ok) { fail('Different game version', compatible.message); return; }
+        if (info.status === 'cancelled' || info.status === 'ended') { closedRoom(code, info, {accent:o.accent,onClose:o.onExit,hubUrl:o.hubUrl}); return; }
         if (info.game && game && info.game !== game) {
           var url = otherGameUrl(info.game, code);
           if (url) { location.replace(url); return; }
@@ -544,6 +600,7 @@
     openCreateJoin: openCreateJoin,
     waitingRoom: waitingRoom,
     notSeated: notSeated,
+    closedRoom: closedRoom,
     enter: enter,
     close: function () { closeCurrent(); },
     fmtCode: fmtCode,

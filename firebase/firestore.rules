@@ -20,11 +20,12 @@ service cloud.firestore {
       function n() { return request.resource.data; }
       // Room options fixed at creation (Catan mode/target/friendly, Pictionary secs/rounds); never changed later.
       function optsOk(o) { return o is map && o.size() <= 8
-        && o.keys().hasOnly(['mode','target','friendly','secs','rounds'])
+        && o.keys().hasOnly(['mode','target','friendly','secs','rounds','edition'])
         && o.get('mode','base') in ['base','seafarers']
         && o.get('target',10) is int && o.get('target',10) >= 5 && o.get('target',10) <= 20
         && o.get('friendly',false) is bool
         && o.get('secs',60) is int && o.get('secs',60) in [45,60,90]
+        && o.get('edition','usa') in ['usa','europe']
         && o.get('rounds',1) is int && o.get('rounds',1) in [1,2,3]; }
       function sd() { return n().seats.diff(resource.data.seats); }
       // Add only yourself while open and not full. The join that fills the last seat may also start the game.
@@ -45,15 +46,25 @@ service cloud.firestore {
         return me() == resource.data.host && n().status == 'playing' && resource.data.seats.size() >= 2
           && n().diff(resource.data).affectedKeys().hasOnly(['status','startedAt']);
       }
+      // Only the host can end a room. Terminal rooms remain readable history, never writable.
+      function ending() {
+        return me() == resource.data.host
+          && ((resource.data.status == 'open' && n().status == 'cancelled')
+            || (resource.data.status == 'playing' && n().status == 'ended'))
+          && n().diff(resource.data).affectedKeys().hasOnly(['status','endedAt','endedBy'])
+          && n().endedBy == me() && n().endedAt == request.time;
+      }
       // get only: rooms are looked up by code, never listed
       allow get: if signedIn();
       allow create: if signedIn() && code.matches('[1-9][0-9]{5}')
-        && n().keys().hasOnly(['game','v','host','seed','maxSeats','status','seats','createdAt','opts'])
+        && n().keys().hasOnly(['game','v','gameVersion','host','seed','maxSeats','status','seats','createdAt','opts'])
+        && n().v in [1,2]
+        && ((n().v == 1 && !('gameVersion' in n())) || (n().gameVersion is int && n().gameVersion >= 1))
         && n().game is string && n().host == me() && n().seed is int && n().status == 'open'
         && n().maxSeats is int && n().maxSeats >= 2 && n().maxSeats <= 8
         && (!('opts' in n()) || optsOk(n().opts))
         && n().seats.keys().hasOnly([me()]) && seatOk(n().seats[me()]);
-      allow update: if signedIn() && resource.data.status == 'open' && (joining() || leaving() || starting());
+      allow update: if signedIn() && (ending() || (resource.data.status == 'open' && (joining() || leaving() || starting())));
 
       match /players/{uid} {
         function member() { let r = room(code); return signedIn() && me() == uid && r.status == 'playing' && uid in r.seats; }
@@ -67,6 +78,17 @@ service cloud.firestore {
         allow read: if signedIn();
         allow create: if member() && shape();
         allow update: if member() && shape() && appendOnly() && setupFixed();
+      }
+
+      // Heartbeats only for the caller's seat in an active room. Absence is advisory, not a forfeit.
+      match /presence/{uid} {
+        function seated() { let r = room(code); return signedIn() && me() == uid
+          && r.status in ['open','playing'] && uid in r.seats; }
+        allow read: if signedIn();
+        allow create, update: if seated()
+          && request.resource.data.keys().hasOnly(['at','state'])
+          && request.resource.data.at == request.time && request.resource.data.state == 'here';
+        allow delete: if false;
       }
 
       // Pictionary drawing: append-only chunks {t, i, d}, id = <uid>_<turn>_<seq>. An identical re-send is allowed (idempotent retry).
