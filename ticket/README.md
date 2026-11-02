@@ -46,7 +46,21 @@ Two deterministic exhaustion safeguards address unusual physical-game stalemates
 - `game.js`, `style.css`: original board and private-hand interface, grouped route selection, ticket toggles and staged payments.
 - `test/engine.test.js`: rules fixtures, conservation, rejected-action immutability, seeded repeatability and full games for 2/3/4/5 players in both editions.
 
-Run `node --test ticket/test/*.test.js` from the repository root. Bots use their own cards/tickets and public routes, not opposing private hands; normal/hard prioritize paths toward their tickets, easy varies among affordable claims. They are practical opponents, not a claim of championship play.
+Run `node --test ticket/test/*.test.js` from the repository root. Bot tests cover
+all four levels and player counts in both editions, replay and card/train
+conservation, coordinated ticket choices, payment conservation, station rescues,
+and decisions that do not change when hidden cards/tickets are replaced.
+
+Bots use their own cards/tickets and public routes, never opposing private hands,
+future card/ticket order or the random generator. Easy varies among affordable
+claims. Normal follows short paths toward its destinations. Hard chooses tickets
+as a combined network, estimates the cards and turns needed for each path, and
+draws colours that advance useful routes. Expert also conserves needed colours
+when paying for gray tracks, avoids small unrelated claims, accounts for tunnel
+risk, and can rescue blocked European destinations with stations. Track planning
+respects parallel-route closures. Game rules, action records and save format are
+unchanged. These are practical heuristics, not a claim of championship play or a
+guarantee that a higher level wins every game.
 
 ## Geographic board (November 2026)
 

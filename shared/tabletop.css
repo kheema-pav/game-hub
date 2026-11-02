@@ -6,3 +6,5 @@
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 /* Keep the playing surface close to the top. Setup retains its welcoming header. */
 .tt-app[data-screen=game]{padding-top:58px}.tt-app[data-screen=game]>.tt-head{margin-bottom:12px}.tt-app[data-screen=game]>.tt-head h1{font-size:clamp(1.5rem,2.4vw,2.1rem);margin:4px 0}.tt-app[data-screen=game]>.tt-head .tt-meta{font-size:.7rem}.tt-app[data-screen=game]>.tt-status{margin:10px 0;padding:8px 12px}.tt-app[data-screen=game]>.tt-scores .tt-player{padding:6px 10px}.tt-app[data-screen=game]>.tt-scores .tt-player b{font-size:.9rem}
+
+.tt-resume-info{font-size:.85rem;color:var(--tt-muted);margin-top:14px;overflow-wrap:anywhere}.tt-new-warning{padding:14px;margin-top:14px;border:1px solid var(--tt-accent);border-radius:12px}.tt-level-note{font-size:.85rem}

@@ -111,7 +111,7 @@ test('wrong authors and forged source/colour/row/extra fields are rejected witho
   }
 });
 test('full bot games finish for every player count and skill, preserving every tile and replaying exactly', () => {
-  for (const n of [2, 3, 4]) for (const level of ['easy', 'normal', 'hard']) for (const seed of [1, 17, 941]) {
+  for (const n of [2, 3, 4]) for (const level of ['easy', 'normal', 'hard', 'expert']) for (const seed of [1, 17, 941]) {
     let s = make(n, seed), replay = make(n, seed), steps = 0;
     while (!s.over && steps < 6000) {
       assert.equal(tiles(s), 100, `${n}p ${level} seed ${seed} step ${steps}`);
@@ -122,6 +122,34 @@ test('full bot games finish for every player count and skill, preserving every t
     }
     assert.equal(s.over, true, `${n}p ${level} seed ${seed} did not finish after ${steps} actions`);
     assert.ok(s.winners.length >= 1); assert.equal(tiles(s), 100); assert.deepEqual(s, replay);
+  }
+});
+test('expert denies a valuable public completion instead of taking an equivalent colour', () => {
+  const s = make(); s.current = 0; s.factories = [[1], [0], [], [], []]; s.center = [];
+  s.players[1].lines[2] = { color: 0, count: 2 };
+  s.players[1].wall[2] = [false, true, false, true, false];
+  assert.deepEqual(E.bot(s, 0, 'normal'), { type: 'draft', source: 0, color: 1 });
+  assert.deepEqual(E.bot(s, 0, 'expert'), { type: 'draft', source: 1, color: 0 });
+});
+test('expert avoids ending the game behind when another useful placement is available', () => {
+  const s = make(); s.current = 0; s.phase = 'place'; s.pending = { color: 4, count: 1, source: 0 };
+  s.players[0].wall[0] = [true, true, true, true, false];
+  s.players[0].lines[1] = { color: 4, count: 1 }; s.players[1].score = 30;
+  assert.deepEqual(E.bot(s, 0, 'normal'), { type: 'place', row: 0 });
+  assert.deepEqual(E.bot(s, 0, 'expert'), { type: 'place', row: 1 });
+  s.players[1].wall[4].fill(true);
+  assert.deepEqual(E.bot(s, 0, 'expert'), { type: 'place', row: 0 }, 'take the points when an opponent already ends the game');
+});
+test('expert uses public supply only and is deterministic without mutating input', () => {
+  let s = make(3, 18);
+  for (let step = 0; step < 24 && !s.over; step++) {
+    const before = JSON.stringify(s), other = clone(s), p = E.actor(s);
+    other.bag.reverse(); other.discard.reverse(); other.rng ^= 0x12345678;
+    const action = E.bot(s, p, 'expert');
+    assert.deepEqual(E.bot(other, p, 'expert'), action);
+    assert.deepEqual(E.bot(s, p, 'expert'), action);
+    assert.equal(JSON.stringify(s), before);
+    s = move(s, action);
   }
 });
 test('renderer exposes only current legal choices and escapes names in headings, prompts and labels', () => {

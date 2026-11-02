@@ -88,7 +88,7 @@ for(const mode of ['local','online'])test(`sketch: ${mode} setup edits preserve 
   document:{querySelector:()=>null,querySelectorAll:selector=>selector==='[data-secs]'?[timerButton]:selector==='[data-rounds]'?[roundsButton]:[]},
   localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   startOnline:()=>false,onlineAvailable:()=>true,openOnlineLobby(){},restore(){},paint(){},onlineCardHTML:()=>'',
-  HubKit:{setFloating(){}},status:()=>'',scoreList:()=>'',keepAwake(){},skip(){},beginDraw(){},
+  HubKit:{setFloating(){}},status:()=>'',scoreList:()=>'',keepAwake(){},skip(){},beginDraw(){},clearInterval(){},
   go(screen){c.S.screen=screen;c.render()}
  });
  const render=text.slice(text.indexOf('function render(noClear){'),text.indexOf('function restore(){'));

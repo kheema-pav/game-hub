@@ -74,6 +74,15 @@ function loadCfg() {
 function saveCfg() { try { localStorage.setItem(CFG_KEY, JSON.stringify(ui.cfg)); } catch (e) { } }
 function saveGame() {
   if (ON.active) return;   // online games never touch the local save
+  try {
+    if (G && window.HubGameNight) {
+      HubGameNight.touch(G);
+      if (G.phase === 'gameover') HubGameNight.finish('isles', G, {
+        players: G.players.map(p => ({ name: p.name, bot: !!p.bot, score: E.totalVP(G, p.id) })), winners: [G.winner],
+        mode: G.players.filter(p => !p.bot).length <= 1 && G.players.some(p => p.bot) ? 'solo' : 'local', level: G.level || 'normal', summary: (G.mode === 'seafarers' ? 'Seafarers' : 'Classic') + ' · turn ' + G.turnNo
+      });
+    }
+  } catch (e) { /* Results storage must not interrupt a game. */ }
   try { if (G && G.phase !== 'gameover') localStorage.setItem(SAVE_KEY, JSON.stringify({ G, opts: { hideHands: ui.cfg.hideHands, speed: ui.cfg.speed } })); else localStorage.removeItem(SAVE_KEY); } catch (e) { }
 }
 function loadSave() { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d && d.G && d.G.v === 1) return d; } catch (e) { } return null; }
@@ -99,7 +108,7 @@ function renderHome() {
   const save = loadSave();
   const sv = save && save.G;
   const contHtml = sv ? `<div class="card continue">
-      <div><b>Continue game</b><small>${esc(sv.mode === 'seafarers' ? 'Seafarers' : 'Classic')} · ${sv.players.map(p => esc(p.name)).join(', ')} · turn ${Math.max(1, sv.turnNo)}</small></div>
+      <div><b>Continue game</b><small>${esc(sv.mode === 'seafarers' ? 'Seafarers' : 'Classic')} · ${window.HubGameNight ? esc(HubGameNight.describe('isles', save)) : sv.players.map(p => esc(p.name)).join(', ') + ' · turn ' + Math.max(1, sv.turnNo)}</small></div>
       <button class="btn primary" data-act="continue">Resume</button></div>` : '';
   const rows = cfg.players.map((p, i) => `
     <div class="prow">
@@ -142,7 +151,7 @@ function renderHome() {
       <div class="opt"><div>Hide hands between turns<small>${nHum > 1 ? 'Shows a “pass the device” screen so nobody peeks' : 'Only matters with two or more humans'}</small></div><button class="toggle" aria-pressed="${cfg.hideHands}" data-act="opt" data-k="hideHands" aria-label="Hide hands"></button></div>
       <div class="opt"><div>Confirm moves<small>Every build, trade and turn end asks “are you sure?” first</small></div><button class="toggle" aria-pressed="${cfg.confirm !== false}" data-act="opt" data-k="confirm" aria-label="Confirm moves"></button></div>
       <div class="opt"><div>Friendly robber<small>No robbing players with 2 points or less</small></div><button class="toggle" aria-pressed="${cfg.friendly}" data-act="opt" data-k="friendly" aria-label="Friendly robber"></button></div>
-      ${cfg.players.some(p => p.bot) ? `<div class="opt"><div>Bot skill<small>${{ easy: 'Relaxed play, trades freely', normal: 'Solid play, picky about trades', hard: 'Sharp play, rarely helps the leader' }[cfg.level || 'normal']}</small></div><div class="seg"><button aria-pressed="${cfg.level === 'easy'}" data-act="level" data-l="easy">Easy</button><button aria-pressed="${(cfg.level || 'normal') === 'normal'}" data-act="level" data-l="normal">Normal</button><button aria-pressed="${cfg.level === 'hard'}" data-act="level" data-l="hard">Hard</button></div></div>` : ''}
+      ${cfg.players.some(p => p.bot) ? `<div class="opt"><div>Bot skill<small>${{ easy: 'Relaxed play, trades freely', normal: 'Solid play, picky about trades', hard: 'Sharp play, rarely helps the leader', expert: 'Plans around production, ports and route awards' }[cfg.level || 'normal']}</small></div><div class="seg"><button aria-pressed="${cfg.level === 'easy'}" data-act="level" data-l="easy">Easy</button><button aria-pressed="${(cfg.level || 'normal') === 'normal'}" data-act="level" data-l="normal">Normal</button><button aria-pressed="${cfg.level === 'hard'}" data-act="level" data-l="hard">Hard</button><button aria-pressed="${cfg.level === 'expert'}" data-act="level" data-l="expert">Expert</button></div></div>` : ''}
       <div class="opt"><div>Bot speed</div><div class="seg"><button aria-pressed="${cfg.speed === 'slow'}" data-act="speed" data-s="slow">Relaxed</button><button aria-pressed="${cfg.speed === 'normal'}" data-act="speed" data-s="normal">Normal</button><button aria-pressed="${cfg.speed === 'fast'}" data-act="speed" data-s="fast">Fast</button></div></div>
     </div>
     ${sv && ui.homeConfirm ? `<div class="card"><p style="margin:0">Starting a new game replaces the saved one.</p><div class="confirm-row"><button class="btn" data-act="cancel-new">Keep it</button><button class="btn primary" data-act="start-force">Start new game</button></div></div>`
@@ -201,6 +210,8 @@ function goHome() {
 }
 function resumeSave() {
   const sv = loadSave(); if (!sv) { renderHome(); return false; }
+  if (sv.opts && typeof sv.opts.hideHands === 'boolean') ui.cfg.hideHands = sv.opts.hideHands;
+  if (sv.opts && ['slow', 'normal', 'fast'].includes(sv.opts.speed)) ui.cfg.speed = sv.opts.speed;
   G = sv.G; G.fx = []; log0(); enterGame(); return true;
 }
 // The kit's floating menu button shows where the game has no topbar: setup screen and the pass-the-device curtain.
@@ -820,7 +831,7 @@ function resultsModal() {
   return sheet(`${esc(G.players[G.winner].name)} wins!`, `<div style="overflow-x:auto"><table class="score-table"><tr><th></th><th>Builds</th><th>Road</th><th>Army</th>${sea ? '<th>Isles</th>' : ''}<th>Cards</th><th>Total</th></tr>
     ${rows.map(r => `<tr><td><span style="color:${colorHex(r.p.color)};font-weight:800">●</span> ${esc(r.p.name)}</td><td>${r.set + r.cit * 2}</td><td>${r.lr}</td><td>${r.la}</td>${sea ? `<td>${r.isl}</td>` : ''}<td>${r.vp}</td><td><b>${r.tot}</b></td></tr>`).join('')}</table></div>
     <p>Dice rolls this game: ${hist}</p>
-    ${ON.active ? '<div class="confirm-row"><button class="btn" data-act="close-modal">See the board</button><button class="btn primary" data-act="leave">Leave game</button></div>' : '<div class="confirm-row"><button class="btn" data-act="home">Change setup</button><button class="btn primary" data-act="rematch">Play again</button></div>'}`, true);
+    ${ON.active ? '<div class="confirm-row"><button class="btn" data-act="close-modal">See the board</button><button class="btn primary" data-act="leave">Leave game</button></div>' : '<div class="confirm-row"><button class="btn" data-act="home">Change setup</button><button class="btn primary" data-act="rematch">Rematch, same players</button></div>'}`, true);
 }
 
 function renderPhaseModal() {
@@ -1515,8 +1526,8 @@ function menuItems() {
   if (ON.active) { items.push({ label: 'Leave game', onSelect: () => leaveClick() }); return items; }
   items.push({ label: 'Hide hands between turns', toggle: true, checked: !!c.hideHands, onSelect: on => { c.hideHands = on; saveCfg(); render(); } });
   if (G.players.some(p => p.bot)) {
-    items.push({ label: 'Bot skill', value: { easy: 'Easy', normal: 'Normal', hard: 'Hard' }[G.level || 'normal'],
-      onSelect: () => { G.level = { easy: 'normal', normal: 'hard', hard: 'easy' }[G.level || 'normal']; c.level = G.level; saveCfg(); saveGame(); } });
+    items.push({ label: 'Bot skill', value: { easy: 'Easy', normal: 'Normal', hard: 'Hard', expert: 'Expert' }[G.level || 'normal'],
+      onSelect: () => { G.level = { easy: 'normal', normal: 'hard', hard: 'expert', expert: 'easy' }[G.level || 'normal']; c.level = G.level; saveCfg(); saveGame(); } });
   }
   items.push({ label: 'Bot speed', value: { slow: 'Relaxed', normal: 'Normal', fast: 'Fast' }[c.speed],
     onSelect: () => { c.speed = { slow: 'normal', normal: 'fast', fast: 'slow' }[c.speed]; saveCfg(); saveGame(); } });

@@ -91,7 +91,7 @@ function shell({search='',hash='',save,room:r=room(),onlineAvailable=true,gameCo
   replacement:async()=>({code:'654321'})};
  const context={console,document:{getElementById:()=>root},location,URLSearchParams,Promise,Uint32Array,
   history:{replaceState(a,b,url){location.search=url.includes('?')?'?'+url.split('?')[1]:'';location.hash='';}},
-  localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},
+  localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   crypto:{getRandomValues(a){a[0]=123;return a;}},
   setTimeout(fn,ms){const id=timers.size+1;timers.set(id,{fn,ms});return id;},clearTimeout(id){timers.delete(id);},
   addEventListener(){},HubTabletopCore:C,HubGameVersions:{platform:2,games:{fixture:1}},
@@ -100,6 +100,7 @@ function shell({search='',hash='',save,room:r=room(),onlineAvailable=true,gameCo
   HubSession:{mount(){return {update:s=>!(s.room&&['ended','cancelled'].includes(s.room.status)),close(){}};}},
   HubKit:{init(o){calls.push(['kit',o]);},sfx(){}}
  };
+ context.HubGameNight=require('../game-night.js').createStore(context.localStorage);
  context.window=context;vm.createContext(context);vm.runInContext(shellSource,context);
  const mounted=context.HubTabletop.mount({...gameConfig});
  function click(attrs){const t={disabled:false,closest(){return this;},hasAttribute:k=>k in attrs,getAttribute:k=>attrs[k]??null};root.listeners.click({target:t});}
@@ -107,6 +108,39 @@ function shell({search='',hash='',save,room:r=room(),onlineAvailable=true,gameCo
   begin(){onPlay({code:'123456'});},
   emit(snapshot){watcher(snapshot);},pending:()=>pending,room:r};
 }
+
+test('four-level setup persists Expert and an unfinished save is replaced only after confirmation',()=>{
+ const h=shell({save:savedGame()});
+ assert.match(h.root.innerHTML,/value="expert"/);
+ const before=h.storage.get('hub.fixture.save.v1');
+ const attrs={'data-setting':'level'};
+ h.root.listeners.change({target:{value:'expert',hasAttribute:k=>k in attrs,getAttribute:k=>attrs[k]}});
+ h.click({'data-tt':'start'});assert.match(h.root.innerHTML,/Replace saved game/);
+ assert.equal(h.storage.get('hub.fixture.save.v1'),before);
+ h.click({'data-tt':'cancel-new'});assert.equal(h.storage.get('hub.fixture.save.v1'),before);
+ h.click({'data-tt':'confirm-new'});assert.equal(h.storage.get('hub.fixture.save.v1'),before,'stale confirmation cannot replace a save');
+ h.click({'data-tt':'start'});h.click({'data-tt':'confirm-new'});
+ assert.equal(JSON.parse(h.storage.get('hub.fixture.save.v1')).level,'expert');
+ assert.equal(h.root.getAttribute('data-screen'),'game');
+});
+
+test('resumed table rematch keeps its actual players, difficulty and edition, records once and gets a new identity',()=>{
+ const registration={...config,id:'ticket',privateInformation:false,options:[{key:'edition',label:'Edition',values:[{value:'usa'},{value:'europe'}]}]};
+ const players=[{name:'Cy',bot:false,color:'#a11'},{name:'Ada',bot:true,color:'#1a1'},{name:'Z',bot:false,color:'#11a'}];
+ const state=engine.create({seed:99,players,options:{edition:'europe'}});state.steps=3;
+ const save={v:1,game:'ticket',gameVersion:1,players,options:{edition:'europe'},level:'expert',state};
+ const h=shell({hash:'#continue',save,gameConfig:registration});
+ h.click({'data-move':'0'});
+ const finished=JSON.parse(h.storage.get('hub.ticket.save.v1'));
+ assert.equal(finished.state.over,true);assert.match(h.root.innerHTML,/Rematch, same players/);
+ assert.equal(h.context.HubGameNight.list().length,1);
+ h.click({'data-tt':'rematch'});
+ const restarted=JSON.parse(h.storage.get('hub.ticket.save.v1'));
+ assert.deepEqual(restarted.players,players);assert.equal(restarted.level,'expert');assert.deepEqual(restarted.options,{edition:'europe'});
+ assert.equal(restarted.state.over,false);assert.notEqual(restarted.state._night.id,finished.state._night.id);
+ assert.equal(h.context.HubGameNight.list().length,1);
+ h.click({'data-tt':'rematch'});assert.equal(JSON.parse(h.storage.get('hub.ticket.save.v1')).state._night.id,restarted.state._night.id,'active table cannot rematch without ending');
+});
 
 test('shell boots all mode intents and gives invitations/Continue precedence',()=>{
  for(const mode of ['solo','local','online']){
@@ -197,7 +231,7 @@ test('write rejection cannot erase a later acknowledged prefix from the same sea
 function shippedConfig(id){
  const gameEngine=require('../../'+id+'/engine.js');
  let registration;
- const context={HubEngines:{[id]:gameEngine},HubTabletop:{mount:config=>{registration=config}}};
+ const context={document:{getElementById:()=>({addEventListener(){}})},HubEngines:{[id]:gameEngine},HubTabletop:{mount:config=>{registration=config}}};
  context.window=context;vm.createContext(context);
  if(id==='ticket')vm.runInContext(fs.readFileSync(path.join(__dirname,'../../ticket/geography.js'),'utf8'),context,{filename:'ticket/geography.js'});
  vm.runInContext(fs.readFileSync(path.join(__dirname,'../../'+id+'/game.js'),'utf8'),context,{filename:id+'/game.js'});
@@ -205,7 +239,24 @@ function shippedConfig(id){
  return registration;
 }
 
-for(const id of ['connect4','ludo','azul','ticket'])test(`${id}: the shipped engine, renderer and shared shell can start and save a local game`,()=>{
+test('a finished Connect4 save reopens with a rematch action and keeps its players and Expert level',()=>{
+ const registration=shippedConfig('connect4'),E=registration.engine;
+ const players=[{name:'Cy',bot:false},{name:'Z',bot:false}];
+ let state=E.create({seed:42,players,options:{}});
+ for(const column of [0,1,0,1,0,1,0])state=E.apply(state,E.actor(state),{type:'drop',column}).state;
+ assert.equal(state.over,true);
+ const save={v:1,game:'connect4',gameVersion:1,players,options:{},level:'expert',state};
+ const setup=shell({save,gameConfig:registration});
+ assert.match(setup.root.innerHTML,/Choose your table/);
+ const continued=shell({hash:'#continue',save,gameConfig:registration});
+ assert.match(continued.root.innerHTML,/Rematch, same players/);
+ continued.click({'data-tt':'rematch'});
+ const fresh=JSON.parse(continued.storage.get('hub.connect4.save.v1'));
+ assert.deepEqual(fresh.players,players);assert.equal(fresh.level,'expert');
+ assert.equal(fresh.state.over,false);assert.equal(fresh.state.moves,0);
+});
+
+for(const id of ['connect4','ludo','azul','ticket','reversi','yahtzee'])test(`${id}: the shipped engine, renderer and shared shell can start and save a local game`,()=>{
  const registration=shippedConfig(id);
  const h=shell({search:'?mode=solo',gameConfig:registration});
  assert.equal(h.root.getAttribute('data-game'),id);assert.equal(h.root.getAttribute('data-screen'),'setup');
@@ -218,7 +269,7 @@ for(const id of ['connect4','ludo','azul','ticket'])test(`${id}: the shipped eng
  assert.equal(C.validSave(saved,{...registration,gameVersion:1}),true);
 });
 
-for(const id of ['connect4','ludo','azul'])test(`${id}: public same-device turns stay visible and playable`,()=>{
+for(const id of ['connect4','ludo','azul','reversi'])test(`${id}: public same-device turns stay visible and playable`,()=>{
  const registration=shippedConfig(id),h=shell({search:'?mode=local',gameConfig:registration});
  h.click({'data-tt':'start'});
  const read=()=>JSON.parse(h.storage.get('hub.'+id+'.save.v1'));

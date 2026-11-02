@@ -13,6 +13,7 @@ const Bot = (() => {
     easy: { plan: false, noise: 6, margin: 0.2, leaderGap: 2, maxAccepts: 3, maxDeclines: 6, mood: 0.1, bankSkip: 0.45, knight: 0.1, leaderW: 1, robNoise: 5, rarity: false, offerRate: 0.5, needHelp: false },
     normal: { plan: false, noise: 0.7, margin: 0.7, leaderGap: 3, maxAccepts: 2, maxDeclines: 3, mood: 0.2, bankSkip: 0, knight: 0.25, leaderW: 1.5, robNoise: 0.5, rarity: false, offerRate: 0.6, needHelp: true },
     hard: { plan: true, noise: 0.1, margin: 1.1, leaderGap: 4, maxAccepts: 1, maxDeclines: 2, mood: 0.15, bankSkip: 0, knight: 0.35, leaderW: 2.5, robNoise: 0.2, rarity: true, offerRate: 0.7, needHelp: true },
+    expert: { plan: true, noise: 0, margin: 0.9, leaderGap: 3, maxAccepts: 2, maxDeclines: 3, mood: 0, bankSkip: 0, knight: 0.6, leaderW: 3, robNoise: 0, rarity: true, offerRate: 1, needHelp: true },
   };
   function lv(s) { return LEVELS[s.level] || LEVELS.normal; }
   const rarityCache = new WeakMap();
@@ -56,6 +57,13 @@ const Bot = (() => {
       kinds.add(hx.terrain);
     });
     val += kinds.size * (lv(s).plan ? 1.0 : 0.7);
+    if (s.level === 'expert') {
+      // A second settlement should complement the first, especially wheat/ore for cities.
+      const next = Object.assign({}, prod);
+      vx.hexes.forEach(h => { const x = s.board.hexes[h]; if (x.number && RES.includes(x.terrain)) next[x.terrain] += PIPS[x.number]; });
+      val += 0.65 * (Math.min(next.wood, next.brick) - Math.min(prod.wood, prod.brick));
+      val += 0.8 * (Math.min(next.wheat / 2, next.ore / 3) - Math.min(prod.wheat / 2, prod.ore / 3));
+    }
     if (lv(s).plan && s.phase === 'setup') {
       // early game: brick + wood to expand, wheat + ore for cities
       const have = new Set(Object.keys(prod).filter(k => prod[k] > 0));
@@ -140,9 +148,35 @@ const Bot = (() => {
     return out;
   }
   function missing(hand, cost) { return Object.keys(cost).reduce((a, r) => a + Math.max(0, cost[r] - hand[r]), 0); }
+  // Estimate how soon this bot can fund a goal using its own cards, public production
+  // and ports. No opponent resource identities or development deck order are read.
+  function expertGoal(s, p, gs) {
+    const pl = s.players[p], prod = production(s, p);
+    let best = null, bv = Infinity;
+    for (const g of gs) {
+      const cost = COST[g.kind], deficits = RES.map(r => Math.max(0, (cost[r] || 0) - pl.hand[r]));
+      const credits = RES.reduce((sum, r) => sum + Math.floor(Math.max(0, pl.hand[r] - (cost[r] || 0)) / E.tradeRatio(s, p, r)), 0);
+      const waits = RES.map((r, i) => ({ r, n: deficits[i], rate: (prod[r] + prod.gold / 5) / 36 }));
+      // Spend available bank trades on the slowest resource first.
+      for (let k = 0; k < credits; k++) {
+        const target = waits.filter(x => x.n && s.bank[x.r] > 0).sort((a, b) => b.n / (b.rate + .04) - a.n / (a.rate + .04))[0];
+        if (!target) break;
+        target.n--;
+      }
+      const eta = Math.max(0, ...waits.map(x => x.n / (x.rate + .04)));
+      let reward = g.kind === 'dev' ? .65 + (pl.knights >= 2 && s.army.p !== p ? .5 : 0) : 1.5;
+      if (g.kind === 'city') reward += vertexValue(s, p, bestCity(s, p), prod) / 10;
+      if (g.kind === 'settlement') reward += Math.max(...E.validSettlements(s, p, false).map(v => vertexValue(s, p, v, prod))) / 10;
+      if (g.ex) reward = Math.max(.6, g.ex.val / (8 + g.ex.dist * 3));
+      const sc = (1 + eta + deficits.reduce((a, b) => a + b, 0) * .35) / reward;
+      if (sc < bv) { bv = sc; best = g; }
+    }
+    return best;
+  }
   function pickGoal(s, p) {
     const h = s.players[p].hand;
     const gs = goals(s, p);
+    if (s.level === 'expert') return expertGoal(s, p, gs);
     let best = null, bs = 1e9;
     gs.forEach(g => { const sc = missing(h, COST[g.kind]) + g.w; if (sc < bs) { bs = sc; best = g; } });
     return best;
@@ -336,7 +370,7 @@ const Bot = (() => {
     RES.forEach(r => { gain += (give[r] || 0) * resValue(s, p, r, goal); loss += (get[r] || 0) * resValue(s, p, r, goal); });
     let margin = L.margin;
     // tougher with whoever is ahead of the bot
-    if (E.publicVP(s, from) > E.publicVP(s, p)) margin += s.level === 'hard' ? 0.8 : 0.3;
+    if (E.publicVP(s, from) > E.publicVP(s, p)) margin += lv(s).plan ? 0.8 : 0.3;
     return { ok: gain > loss + margin, why: 'no' };
   }
   function considerOffer(s, p, from, give, get) { return judgeOffer(s, p, from, give, get).ok; }
@@ -349,10 +383,30 @@ const Bot = (() => {
     return j;
   }
 
+  function awardRoute(s, p) {
+    if (s.longest.p === p) return null;
+    const threshold = Math.max(4, ...s.players.filter(o => o.id !== p).map(o => E.roadLength(s, o.id)));
+    for (const kind of s.mode === 'seafarers' ? ['road', 'ship'] : ['road']) {
+      if (!E.canAfford(s, p, kind) || s.players[p].pieces[kind] <= 0) continue;
+      for (const e of E.buildSpots(s, p, kind)) {
+        const trial = Object.assign({}, s, { eb: s.eb.slice() });
+        trial.eb[e] = { p, t: kind };
+        if (E.roadLength(trial, p) > threshold) return { kind, e };
+      }
+    }
+    return null;
+  }
+
   function mainStep(s, p) {
     const pl = s.players[p];
     s._botActions = (s._botActions || 0) + 1;
     if (s._botActions > 40) return E.doEndTurn(s);
+    if (s.level === 'expert') {
+      const route = awardRoute(s, p);
+      if (route) return E.doBuild(s, route.kind, route.e);
+      const plan = pickGoal(s, p);
+      if (plan && plan.kind === 'settlement' && E.canBuildKind(s, p, 'settlement')) return E.doBuild(s, 'settlement', bestSettlement(s, p, false));
+    }
     const d = tryDev(s, p, false); if (d) return d;
     // build what we can, best first
     if (E.canBuildKind(s, p, 'city')) return E.doBuild(s, 'city', bestCity(s, p));
@@ -443,5 +497,5 @@ const Bot = (() => {
     return { ok: false, err: 'idle' };
   }
 
-  return { step, considerOffer, respond, vertexValue, expansion, production, LEVELS };
+  return { step, considerOffer, respond, vertexValue, expansion, production, pickGoal, awardRoute, LEVELS };
 })();

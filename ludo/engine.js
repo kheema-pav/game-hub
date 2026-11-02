@@ -76,9 +76,49 @@
     }else if(after<FINISH)value+=30;
     return value;
   }
+  // Estimate danger from visible pieces and all six equally likely next dice.
+  // Never read the RNG state or simulate a future roll to choose a token.
+  function exposedValue(s,p) {
+    return s.tokens[p].reduce((total,progress,t)=>{
+      const square=trackIndex(s,p,t);
+      if(square===null||SAFE.includes(square))return total;
+      let survives=1;
+      s.tokens.forEach((tokens,o)=>{
+        if(o===p)return;
+        const rolls=new Set();
+        tokens.forEach((other,j)=>{
+          const from=trackIndex(s,o,j);if(from===null)return;
+          const distance=(square-from+52)%52;
+          if(distance>=1&&distance<=6&&other+distance<=50)rolls.add(distance);
+        });
+        survives*=1-rolls.size/6;
+      });
+      return total+(1-survives)*(18+progress*1.6);
+    },0);
+  }
+  function expertValue(s,p,action) {
+    if(action.type!=='move')return 0;
+    const before=s.tokens[p][action.token],after=before===-1?0:before+s.die;
+    const next=apply(s,p,action).state;
+    if(next.over)return 100000;
+    let value=after===FINISH?1000:before===-1?24:s.die*2;
+    if(before<=50&&after>50)value+=35;
+    // Removing an advanced opponent is worth more than sending a fresh piece back.
+    s.tokens.forEach((tokens,o)=>{
+      if(o===p)return;
+      const urgency=1+tokens.filter(t=>t===FINISH).length*.2;
+      tokens.forEach((progress,t)=>{if(progress>=0&&next.tokens[o][t]===-1)value+=(18+progress*.9)*urgency;});
+    });
+    const riskWeight=s.die===6?.65:1;
+    value+=1.7*(exposedValue(s,p)-riskWeight*exposedValue(next,p));
+    const square=trackIndex(next,p,action.token);
+    if(square!==null&&SAFE.includes(square))value+=5;
+    return value+after*.08;
+  }
   function bot(s,p,level) {
     const actions=legal(s,p);if(!actions.length)return null;
-    level=['easy','normal','hard'].includes(level)?level:'normal';
+    level=['easy','normal','hard','expert'].includes(level)?level:'normal';
+    if(level==='expert')return actions.reduce((best,a)=>expertValue(s,p,a)>expertValue(s,p,best)?a:best,actions[0]);
     return actions.reduce((best,a)=>moveValue(s,p,a,level)>moveValue(s,p,best,level)?a:best,actions[0]);
   }
   function result(s) { return s.over?s.players[s.winner].name+' brought all four tokens home.':s.notice; }

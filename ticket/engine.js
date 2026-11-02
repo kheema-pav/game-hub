@@ -165,15 +165,104 @@ function apply(state,p,action){
  return {ok:true,state:s};
 }
 // Weighted shortest route through public claims; no opposing private hand is inspected.
-function path(s,p,a,b){
- const cities=Object.keys(map(s).cities),dist=Object.fromEntries(cities.map(c=>[c,Infinity])),prev={};dist[a]=0;const todo=new Set(cities);
+function path(s,p,a,b,weight){
+ const cities=Object.keys(map(s).cities),dist=Object.fromEntries(cities.map(c=>[c,Infinity])),prev={},edges=map(s).routes.filter(r=>s.claimed[r.id]===p||available(s,r.id,p));dist[a]=0;const todo=new Set(cities);
  while(todo.size){let v=null;for(const c of todo)if(v===null||dist[c]<dist[v])v=c;if(dist[v]===Infinity||v===b)break;todo.delete(v);
-  for(const r of map(s).routes){if(r.a!==v&&r.b!==v)continue;if(s.claimed[r.id]!==null&&s.claimed[r.id]!==p)continue;const w=r.a===v?r.b:r.a,cost=s.claimed[r.id]===p?0:r.n;if(dist[v]+cost<dist[w]){dist[w]=dist[v]+cost;prev[w]=[v,r.id];}}
+  for(const r of edges){if(r.a!==v&&r.b!==v)continue;const w=r.a===v?r.b:r.a,cost=s.claimed[r.id]===p?0:weight?weight(r):r.n;if(todo.has(w)&&dist[v]+cost<dist[w]){dist[w]=dist[v]+cost;prev[w]=[v,r.id];}}
  }
  const routes=[];let c=b;while(prev[c]){routes.push(prev[c][1]);c=prev[c][0];}return {distance:dist[b],routes:c===a?routes:[]};
 }
+// The stronger bots estimate turns from their own cards and public tracks. They never
+// inspect the blind deck, future ticket order, random generator or another hand.
+function routeDebt(hand,r){
+ const colors=r.c==='gray'?COLORS:[r.c];
+ return Math.min(...colors.map(c=>Math.max(0,r.f-hand.wild)+Math.max(0,r.n-Math.max(r.f,hand.wild)-hand[c])));
+}
+function routeCost(hand,r,expert){return 1+r.n*.35+routeDebt(hand,r)*.85+(r.t?(expert?.9:.45):0);}
+function plannedBorrowed(s,p){
+ const pl=s.players[p];let best=[],value=-1;
+ function visit(index,borrowed){
+  if(index===pl.stations.length){const score=pl.tickets.reduce((n,id)=>{const t=map(s).tickets[id];return n+(connected(s,p,t.a,t.b,borrowed)?t.points:0);},0);if(score>value){value=score;best=borrowed.slice();}return;}
+  const station=pl.stations[index];
+  const choices=station.route!==null?[station.route]:[null].concat(map(s).routes.filter(r=>(r.a===station.city||r.b===station.city)&&s.claimed[r.id]!==null&&s.claimed[r.id]!==p).map(r=>r.id));
+  for(const id of choices)visit(index+1,id===null?borrowed:borrowed.concat(id));
+ }
+ visit(0,[]);return best;
+}
+function plan(s,p,expert){
+ const pl=s.players[p],weights={},goals=[],borrowed=expert?plannedBorrowed(s,p):pl.stations.map(x=>x.route).filter(x=>x!==null);
+ for(const id of pl.tickets){const t=map(s).tickets[id];if(connected(s,p,t.a,t.b,borrowed))continue;
+  const route=path(s,p,t.a,t.b,r=>routeCost(pl.hand,r,expert)),remaining=route.routes.filter(i=>s.claimed[i]===null);
+  goals.push({ticket:t,route,remaining});
+  for(const i of remaining)weights[i]=(weights[i]||0)+4+t.points*1.4/Math.max(1,remaining.length);
+ }
+ return {weights,goals};
+}
+function strategicTickets(s,p,actions,expert){
+ const pl=s.players[p],ids=s.phase==='initial'?s.offers[p]:s.pending.ids;
+ const options=ids.map(id=>{const t=map(s).tickets[id],route=path(s,p,t.a,t.b,r=>routeCost(pl.hand,r,expert));return {t,route};});
+ const existing=new Set(plan(s,p,expert).goals.flatMap(g=>g.remaining));
+ let best=actions[0],bestValue=-Infinity;
+ for(const a of actions){const used=new Set(),chosen=options.filter((_,i)=>a.mask&(1<<i));let value=0,impossible=0;
+  for(const x of chosen){if(!Number.isFinite(x.route.distance))impossible++;value+=x.t.points*(x.route.distance===0?2:.7);for(const i of x.route.routes)if(s.claimed[i]===null)used.add(i);}
+  let trains=0;for(const i of used){const r=map(s).routes[i];trains+=r.n;value-=routeCost(pl.hand,r,expert)*(existing.has(i)?.25:1.7);}
+  value-=impossible*1000+Math.max(0,trains-pl.trains)*10;
+  // Extra unfinished promises are a liability, especially near the final round.
+  value-=chosen.filter(x=>x.route.distance>0).length*(s.phase==='initial'?1:3);
+  if(value>bestValue){best=a;bestValue=value;}
+ }
+ return best;
+}
+function strategicBot(s,p,actions,expert){
+ const pl=s.players[p],strategy=plan(s,p,expert),wanted=strategy.weights;
+ if(s.phase==='initial'||s.phase==='tickets')return strategicTickets(s,p,actions,expert);
+ if(s.phase==='payment'){
+  const demand={};for(const id of Object.keys(wanted)){const r=map(s).routes[id];if(r.id!==s.pending.route&&r.c!=='gray')demand[r.c]=(demand[r.c]||0)+wanted[id];}
+  return actions.filter(a=>a.type==='pay').sort((a,b)=>{
+   const cost=a=>a.wild*5+(expert?(demand[a.color]||0)*.12:0);
+   return cost(a)-cost(b)||COLORS.indexOf(a.color)-COLORS.indexOf(b.color);
+  })[0]||actions[0];
+ }
+ if(s.phase!=='main'&&s.phase!=='draw')return null;
+ const claims=actions.filter(a=>a.type==='claim').map(a=>{const r=map(s).routes[a.route];let value=POINTS[r.n]+(wanted[a.route]||0);
+  if(expert){
+   for(const g of strategy.goals)if(g.remaining.length===1&&g.remaining[0]===r.id)value+=g.ticket.points*2;
+   const owned=map(s).routes.filter(x=>s.claimed[x.id]===p);if(owned.some(x=>x.a===r.a||x.b===r.a||x.a===r.b||x.b===r.b))value+=2;
+   const pay=payments(pl.hand,r.n,r.c,r.f).sort((a,b)=>a.wild-b.wild)[0];
+   value-=pay.wild*(wanted[r.id]?0.4:1.8);
+   if(r.t&&routeDebt(pl.hand,Object.assign({},r,{n:r.n+1}))>0)value-=4;
+  }
+  return {a,value};
+ }).sort((a,b)=>b.value-a.value||a.a.route-b.a.route);
+ if(expert&&s.edition==='europe'){
+  // A station is worth spending only when one borrowed track rescues a ticket now.
+  const borrowed=plannedBorrowed(s,p);
+  for(const a of actions.filter(a=>a.type==='station')){let gain=0;
+   for(const r of map(s).routes.filter(r=>(r.a===a.city||r.b===a.city)&&s.claimed[r.id]!==null&&s.claimed[r.id]!==p)){
+    gain=Math.max(gain,strategy.goals.reduce((v,g)=>v+(connected(s,p,g.ticket.a,g.ticket.b,borrowed.concat(r.id))?g.ticket.points*2:0),0));
+   }
+   if(gain>8&&(!claims.length||gain-5>claims[0].value))return a;
+  }
+ }
+ // Hard secures useful tracks immediately. Expert can save a small, unrelated
+ // claim for later instead of wasting the cards needed by its connected network.
+ if(claims.length&&(!expert||!Object.keys(wanted).length||s.finalRemaining!==null||claims[0].value>=7||wanted[claims[0].a.route]))return claims[0].a;
+ const targets=map(s).routes.filter(r=>available(s,r.id,p)&&(wanted[r.id]||!Object.keys(wanted).length));
+ const draws=actions.filter(a=>a.type==='draw');let best=draws[0],bestValue=-Infinity;
+ for(const a of draws){const c=a.index<0?'blind':s.market[a.index];let value=c==='blind'?1.2:c==='wild'?1.4:.5;
+  for(const r of targets){const debt=routeDebt(pl.hand,r);if(debt<=0)continue;
+   if(c!=='blind'){const hand=Object.assign({},pl.hand);hand[c]++;const improvement=debt-routeDebt(hand,r);
+    const importance=(wanted[r.id]||3)+POINTS[r.n]*.35;
+    value=Math.max(value,improvement*(2+importance/(debt+1))*(c==='wild'&&s.phase==='main'?.65:1));
+   }
+  }
+  if(value>bestValue){best=a;bestValue=value;}
+ }
+ return best||(claims[0]&&claims[0].a)||actions.find(a=>a.type!=='station')||actions[0];
+}
 function bot(s,p,level='normal'){
  const actions=legal(s,p),pl=s.players[p];if(!actions.length)return null;
+ if(level==='hard'||level==='expert'){const chosen=strategicBot(s,p,actions,level==='expert');if(chosen)return chosen;}
  if(s.phase==='initial'||s.phase==='tickets'){
   const ids=s.phase==='initial'?s.offers[p]:s.pending.ids,min=s.phase==='initial'?2:1;
   const ranked=ids.map((id,i)=>({i,cost:path(s,p,map(s).tickets[id].a,map(s).tickets[id].b).distance,points:map(s).tickets[id].points})).sort((a,b)=>(a.cost-a.points*.25)-(b.cost-b.points*.25)||a.i-b.i);

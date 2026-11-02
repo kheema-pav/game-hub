@@ -27,9 +27,12 @@ const server = http.createServer((request, response) => {
       const page = await context.newPage(), errors = [];
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(url);
-      assert.equal(await page.locator('article.game').count(), 8);
+      assert.equal(await page.locator('article.game').count(), 10);
       await page.screenshot({ path: path.join(shots, 'hub-' + width + '.png'), fullPage: true });
-      for (const id of ['connect4', 'ludo', 'azul', 'ticket']) {
+      for (const id of ['connect4', 'ludo', 'azul', 'ticket', 'reversi', 'yahtzee']) {
+        await page.goto(url + '/' + id + '/?mode=solo');
+        assert.deepEqual(await page.locator('select[data-setting="level"] option').allTextContents(), ['Easy', 'Normal', 'Hard', 'Expert']);
+        await page.getByLabel('Bot level').selectOption('expert');
         await page.goto(url + '/' + id + '/?mode=local');
         await page.getByRole('button', { name: 'Start new game', exact: true }).click();
         if (await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).count()) await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).click();
@@ -68,6 +71,22 @@ const server = http.createServer((request, response) => {
           assert.equal(await page.locator('.tr-endpoint').count(), 0, 'clear removes both markers');
         }
         await page.locator('button[data-move]').first().click();
+        if (id === 'yahtzee') {
+          const rolled = await page.evaluate(key => localStorage.getItem(key), saveKey);
+          const firstDie = JSON.parse(rolled).state.dice[0];
+          await page.locator('.yz-die[data-choice]').first().click();
+          assert.equal(await page.evaluate(key => localStorage.getItem(key), saveKey), rolled, 'keeping a die is a preview, not a turn action');
+          assert.equal(await page.locator('.yz-die').first().getAttribute('aria-pressed'), 'true');
+          await page.locator('.yz-roll[data-move]').click();
+          const rerolled = await page.evaluate(key => localStorage.getItem(key), saveKey);
+          assert.equal(JSON.parse(rerolled).state.dice[0], firstDie, 'held die survives the next roll');
+          await page.locator('.yz-category[data-choice]').first().click();
+          assert.equal(await page.evaluate(key => localStorage.getItem(key), saveKey), rerolled, 'score preview never consumes a category');
+          await page.screenshot({ path: path.join(shots, 'yahtzee-score-preview-' + width + '.png'), fullPage: true });
+          await page.locator('.yz-confirm button[data-move]').click();
+          const scored = JSON.parse(await page.evaluate(key => localStorage.getItem(key), saveKey));
+          assert.equal(scored.state.current, 1, 'confirmed score advances to the next player');
+        }
         const after = await page.evaluate(key => localStorage.getItem(key), saveKey);
         assert.notEqual(after, initial, id + ' accepts and saves a real browser move');
         if (id !== 'ticket') assert.equal(await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).count(), 0, 'public games have no handover curtain');
@@ -81,6 +100,7 @@ const server = http.createServer((request, response) => {
       await page.goto(url + '/ticket/?mode=local');
       await page.getByLabel('Map and rules').selectOption('europe');
       await page.getByRole('button', { name: 'Start new game', exact: true }).click();
+      await page.getByRole('button', { name: 'Replace saved game', exact: true }).click();
       await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).click();
       await page.locator('.tr-ticket-preview').nth(1).click();
       assert.equal(await page.locator('.tr-endpoint').count(), 2);
@@ -92,9 +112,35 @@ const server = http.createServer((request, response) => {
         await page.goto(url + '/' + id + '/');
         assert.ok((await page.locator('body').innerText()).length > 80, id + ' renders a setup screen');
       }
+      // A real finished game records once; the rematch retains the table and starts fresh.
+      await page.goto(url + '/connect4/?mode=local');
+      await page.getByRole('button', { name: 'Start new game', exact: true }).click();
+      await page.getByRole('button', { name: 'Replace saved game', exact: true }).click();
+      for (const col of [1, 2, 1, 2, 1, 2, 1]) await page.getByRole('button', { name: 'Drop a disc in column ' + col, exact: true }).click();
+      const finished = await page.evaluate(() => JSON.parse(localStorage.getItem('hub.connect4.save.v1')));
+      assert.equal(finished.state.over, true);
+      await page.goto(url + '/connect4/#continue');
+      // A fragment-only navigation does not rerun startup. Reload with #continue
+      // present so this actually reopens the finished save, rather than setup.
+      await page.reload();
+      assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('hub.results.v1')).length), 1, 'reload does not duplicate results');
+      await page.getByRole('button', { name: 'Rematch, same players', exact: true }).click();
+      const rematch = await page.evaluate(() => JSON.parse(localStorage.getItem('hub.connect4.save.v1')));
+      assert.deepEqual(rematch.players, finished.players); assert.equal(rematch.level, 'expert');
+      assert.notEqual(rematch.state._night.id, finished.state._night.id); assert.equal(rematch.state.moves, 0);
+      await page.goto(url);
+      assert.ok(await page.getByRole('link', { name: /Continue Four in a Row/ }).first().isVisible());
+      await page.locator('#recentResults summary').click();
+      assert.match(await page.locator('#recentResults').innerText(), /Four in a Row · You win\b/);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), 'game-night panels fit the viewport');
+      await page.screenshot({ path: path.join(shots, 'hub-game-night-' + width + '.png'), fullPage: true });
+      await page.getByRole('button', { name: 'Clear results history', exact: true }).click();
+      await page.getByRole('button', { name: 'Confirm clear history', exact: true }).click();
+      assert.equal(await page.evaluate(() => localStorage.getItem('hub.results.v1')), null);
+      assert.ok(await page.evaluate(() => localStorage.getItem('hub.connect4.save.v1')), 'clearing results keeps unfinished saves');
       assert.deepEqual(errors, [], 'no JavaScript runtime errors at width ' + width);
       await context.close();
     }
-    console.log('Browser smoke passed: eight games boot; new games play/save/resume at phone and laptop widths.');
+    console.log('Browser smoke passed: ten games boot; six tabletop games play/save/resume; four levels, Yahtzee scoring, rematches and history work at phone and laptop widths.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); server.close(); process.exitCode = 1; });

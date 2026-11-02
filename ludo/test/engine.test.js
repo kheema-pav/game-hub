@@ -65,7 +65,7 @@ test('seeded roll sequences are repeatable and independent of Math.random',()=>{
 });
 test('all bot levels finish complete 2-, 3- and 4-player games with token invariants',()=>{
   let count=0,maxActions=0;
-  for(const n of [2,3,4])for(const level of ['easy','normal','hard'])for(const seed of [1,12,345]){
+  for(const n of [2,3,4])for(const level of ['easy','normal','hard','expert'])for(const seed of [1,12,345]){
     let s=game(n,seed),steps=0;
     for(;steps<30000&&!s.over;steps++){
       const p=E.actor(s),action=E.bot(s,p,level);assert.ok(action,'no legal bot action at '+JSON.stringify(s));
@@ -75,5 +75,35 @@ test('all bot levels finish complete 2-, 3- and 4-player games with token invari
     }
     assert.equal(s.over,true,n+' players '+level+' seed '+seed+' did not finish');assert.equal(s.tokens[s.winner].filter(t=>t===E.FINISH).length,4);count++;maxActions=Math.max(maxActions,steps);
   }
-  assert.equal(count,27);console.log('27 complete bot games; maximum '+maxActions+' actions.');
+  assert.equal(count,36);console.log('36 complete bot games; maximum '+maxActions+' actions.');
+});
+
+test('expert avoids exposing a safe advanced token when another token can progress',()=>{
+  const s=moveState();s.tokens=[[47,30,-1,-1],[16,-1,-1,-1]];
+  // The first token would leave a star for square 48. The opponent on square
+  // 42 can capture it with a six, losing nearly a whole lap of progress.
+  assert.equal(E.bot(s,0,'hard').token,0);
+  const before=JSON.stringify(s);
+  assert.equal(E.bot(s,0,'expert').token,1);
+  assert.equal(JSON.stringify(s),before);
+});
+test('expert values capturing advanced opponents and takes an exact finish',()=>{
+  const s=moveState();s.tokens=[[0,10,-1,-1],[27,37,-1,-1]];
+  // Both choices capture, but the second removes more opposing progress.
+  assert.equal(E.bot(s,0,'expert').token,1);
+  s.tokens[0]=[55,10,-1,-1];
+  assert.equal(E.bot(s,0,'expert').token,0);
+  s.tokens[0]=[55,56,56,56];
+  assert.equal(apply(s,0,E.bot(s,0,'expert')).over,true);
+});
+test('expert does not peek at future dice or consume randomness',()=>{
+  const s=moveState({die:6,sixStreak:1});s.tokens=[[38,8,-1,51],[14,30,2,-1]];
+  const before=JSON.stringify(s),action=E.bot(s,0,'expert');
+  for(const seed of [1,12,345,987654321]){
+    const other=clone(s);other.rng=seed;
+    assert.deepEqual(E.bot(other,0,'expert'),action);
+  }
+  assert.equal(JSON.stringify(s),before);
+  const rolling=game();
+  assert.deepEqual(E.bot(rolling,0,'expert'),{type:'roll'});
 });

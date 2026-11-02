@@ -171,9 +171,91 @@
     }
     return val;
   }
+  // Evaluate only public tiles and boards. In particular, do not simulate dealing
+  // the next round: that would let the bot read the hidden bag order.
+  function publicSupply(s) {
+    var counts = [0, 0, 0, 0, 0];
+    s.center.forEach(function (c) { counts[c]++; });
+    s.factories.forEach(function (pile) { pile.forEach(function (c) { counts[c]++; }); });
+    return counts;
+  }
+  function projection(p, supply) {
+    var wall = p.wall.map(function (row) { return row.slice(); }), gained = 0, partial = 0, completed = 0;
+    p.lines.forEach(function (line, row) {
+      if (line.count === row + 1) {
+        var col = column(row, line.color); wall[row][col] = true;
+        gained += placementPoints(wall, row, col); completed++;
+      } else if (line.count) {
+        var needed = row + 1 - line.count, chance = supply[line.color] >= needed ? .8 : .28;
+        partial += line.count / (row + 1) * (2 + placementPoints(wall, row, column(row, line.color))) * chance;
+      }
+    });
+    var penalty = p.floor.reduce(function (sum, _, i) { return sum + FLOOR[i]; }, 0);
+    var projected = { wall: wall }, bonus = bonuses(projected), position = 0;
+    // Convex progress rewards a coherent mosaic, especially columns and colours.
+    for (var c = 0; c < 5; c++) {
+      var vertical = wall.filter(function (row) { return row[c]; }).length;
+      var color = wall.filter(function (row, r) { return row[column(r, c)]; }).length;
+      position += vertical < 5 ? vertical * vertical * .17 : 0;
+      position += color < 5 ? color * color * .23 : 0;
+    }
+    return { value: Math.max(0, p.score + gained - penalty) * 2 + completed * 2 + bonus.points + position + partial,
+      total: Math.max(0, p.score + gained - penalty) + bonus.points, ends: bonus.rows > 0 };
+  }
+  function expertPlacement(s, player, color, count, row, marker, supply) {
+    var original = s.players[player], p = { wall: original.wall, lines: original.lines.map(function (line) { return { color: line.color, count: line.count }; }), floor: original.floor.slice(), score: original.score };
+    var used = 0;
+    if (row >= 0) { used = Math.min(count, row + 1 - p.lines[row].count); p.lines[row].color = color; p.lines[row].count += used; }
+    for (var i = 0; i < count - used + (marker ? 1 : 0); i++) if (p.floor.length < 7) p.floor.push(color);
+    var after = projection(p, supply), value = after.value - projection(original, supply).value;
+    if (marker) value += .35; // First pick next round, paid for by the actual floor penalty.
+    if (after.ends) {
+      var opponents = s.players.filter(function (_, i) { return i !== player; }).map(function (other) { return projection(other, supply); });
+      var strongest = Math.max.apply(null, opponents.map(function (other) { return other.total; }));
+      // Do not voluntarily finish the game while behind when another line can wait.
+      // If somebody else already finishes it this round, maximise points instead.
+      if (!opponents.some(function (other) { return other.ends; })) value += after.total >= strongest ? 4 : -Math.min(14, 4 + strongest - after.total);
+    }
+    return value;
+  }
+  function expertPick(s, player, color, count, marker, supply) {
+    var best = expertPlacement(s, player, color, count, -1, marker, supply);
+    for (var r = 0; r < 5; r++) if (canPlace(s.players[player], r, color)) best = Math.max(best, expertPlacement(s, player, color, count, r, marker, supply));
+    return best;
+  }
+  function nextOpportunity(s, player) {
+    var supply = publicSupply(s), best = 0;
+    s.factories.concat([s.center]).forEach(function (pile, index) {
+      for (var c = 0; c < 5; c++) { var count = pile.filter(function (x) { return x === c; }).length;
+        if (count) { var remaining = supply.slice(); remaining[c] -= count; best = Math.max(best, expertPick(s, player, c, count, index === s.factories.length && s.marker, remaining)); }
+      }
+    });
+    return best;
+  }
+  function plannedBot(s, player, actions, considerOpponent) {
+    var supply = publicSupply(s), best = actions[0], bestValue = -Infinity;
+    actions.forEach(function (a) {
+      var value;
+      if (a.type === 'place') value = expertPlacement(s, player, s.pending.color, s.pending.count, a.row, false, supply);
+      else {
+        var pile = a.source === -1 ? s.center : s.factories[a.source], count = pile.filter(function (c) { return c === a.color; }).length;
+        var remaining = supply.slice(); remaining[a.color] -= count;
+        value = expertPick(s, player, a.color, count, a.source === -1 && s.marker, remaining);
+        var next = { players: s.players, center: s.center.slice(), factories: s.factories.slice(), marker: s.marker };
+        if (a.source === -1) { next.center = pile.filter(function (c) { return c !== a.color; }); next.marker = false; }
+        else { next.factories[a.source] = []; next.center = next.center.concat(pile.filter(function (c) { return c !== a.color; })); }
+        // Penalise handing the next player an easy completion; this also recognises
+        // the opportunity denied by removing their best colour from a factory.
+        value -= nextOpportunity(next, (player + 1) % s.players.length) * (considerOpponent ? (s.players.length === 2 ? .65 : .35) : .25);
+      }
+      if (value > bestValue) { bestValue = value; best = a; }
+    });
+    return best;
+  }
   function bot(s, player, level) {
     var actions = legal(s, player);
     if (!actions.length) return null;
+    if (level === 'expert' || level === 'hard') return plannedBot(s, player, actions, level === 'expert');
     level = level === 'hard' || level === 'easy' ? level : 'normal';
     if (level === 'easy') return actions[((s.rng >>> 0) + s.turn * 17 + (s.phase === 'place' ? 3 : 0)) % actions.length];
     var best = actions[0], score = -Infinity;

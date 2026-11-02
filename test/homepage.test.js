@@ -20,7 +20,7 @@ function boot({ saves = {}, configured = true, room, entries = [] } = {}) {
   const data = new Map(Object.entries(saves).map(([k, v]) => [k, JSON.stringify(v)]));
   const ids = Object.fromEntries(['menuSlot', 'createBox', 'joinBox', 'soonBox', 'joinForm', 'joinCode', 'joinBtn', 'joinErr', 'onlineStrip', 'onlineList'].map(k => [k, node()]));
   const cards = {};
-  for (const game of ['codex', 'isles', 'gems', 'sketch', 'ticket', 'ludo', 'connect4', 'azul']) {
+  for (const game of ['codex', 'isles', 'gems', 'sketch', 'ticket', 'ludo', 'connect4', 'azul', 'reversi', 'yahtzee']) {
     const parts = Object.fromEntries(['.prog', '.pl', '.play', '.title'].map(k => [k, node()]));
     parts['.title'].textContent = game;
     cards[game] = { querySelector: k => parts[k], parts };
@@ -62,7 +62,7 @@ async function submit(b, code = '123456') {
 }
 
 test('each card has distinct valid mode links with no nested anchors', () => {
-  for (const game of ['codex', 'isles', 'gems', 'ticket', 'ludo', 'connect4', 'azul']) {
+  for (const game of ['codex', 'isles', 'gems', 'ticket', 'ludo', 'connect4', 'azul', 'reversi', 'yahtzee']) {
     for (const mode of ['solo', 'local', 'online']) assert.ok(html.includes(`href="${game}/?mode=${mode}"`));
   }
   assert.ok(html.includes('href="sketch/?mode=local"'));

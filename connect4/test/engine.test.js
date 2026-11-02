@@ -66,17 +66,17 @@ test('full board without four is a draw, with no winning seat', () => {
   assert.match(E.result(result.state), /draw/);
 });
 
-test('normal and hard bots take immediate wins and block immediate losses', () => {
+test('normal, hard and expert bots take immediate wins and block immediate losses', () => {
   const winning = play([0, 6, 1, 6, 2, 5]);
   const threat = play([6, 0, 6, 1, 5, 2]);
-  for (const level of ['normal', 'hard']) {
+  for (const level of ['normal', 'hard', 'expert']) {
     assert.deepEqual(E.bot(winning, 0, level), { type: 'drop', column: 3 });
     assert.deepEqual(E.bot(threat, 0, level), { type: 'drop', column: 3 });
   }
 });
 
 test('all difficulty levels finish complete legal games without mutating bot inputs', () => {
-  for (const level of ['easy', 'normal', 'hard']) for (const seed of [1, 31]) {
+  for (const level of ['easy', 'normal', 'hard', 'expert']) for (const seed of [1, 31]) {
     let s = create(seed);
     for (let i = 0; i < 42 && !s.over; i++) {
       const original = JSON.stringify(s), player = E.actor(s), action = E.bot(s, player, level);
@@ -91,7 +91,7 @@ test('all difficulty levels finish complete legal games without mutating bot inp
 test('engine never depends on Math.random, Date.now or environment time', () => {
   const random = Math.random, now = Date.now;
   Math.random = () => { throw new Error('unseeded random'); }; Date.now = () => { throw new Error('clock'); };
-  try { const s = create(42); assert.deepEqual(E.bot(s, 0, 'hard'), E.bot(JSON.parse(JSON.stringify(s)), 0, 'hard')); }
+  try { const s = create(42); for (const level of ['hard', 'expert']) assert.deepEqual(E.bot(s, 0, level), E.bot(JSON.parse(JSON.stringify(s)), 0, level)); }
   finally { Math.random = random; Date.now = now; }
 });
 
@@ -105,4 +105,34 @@ test('browser view escapes names and submits only the current legal-action indic
   assert.equal(html.includes('<img'), false); assert.ok(html.includes('&lt;img'));
   assert.equal((html.match(/data-move="\d"/g) || []).length, 7); assert.equal((html.match(/role="gridcell"/g) || []).length, 42);
   const waiting = registration.render(s, 1, [], { esc }); assert.equal(waiting.includes('data-move='), false);
+});
+
+// This oracle deliberately uses only legal/apply and exhaustive terminal outcomes,
+// not the bot's heuristic, depth limits, move ordering or transposition bounds.
+function solvedOutcome(state, memo = new Map()) {
+  if (state.over) return state.winner === null ? 0 : -1;
+  const key = JSON.stringify([state.board, state.current]);
+  if (memo.has(key)) return memo.get(key);
+  let best = -1;
+  for (const action of E.legal(state, state.current)) {
+    best = Math.max(best, -solvedOutcome(E.apply(state, state.current, action).state, memo));
+    if (best === 1) break;
+  }
+  memo.set(key, best); return best;
+}
+
+test('expert sees a forced win beyond Hard while the existing Hard choice stays unchanged', () => {
+  const s = play([4,5,3,2,5,5,0,4,3,1,4,1,3,3,0,1,1,6,6,4,0,0,1,0,6,4,1,3]);
+  const before = JSON.stringify(s), hard = E.bot(s, s.current, 'hard'), expert = E.bot(s, s.current, 'expert');
+  assert.equal(hard.column, 5, 'preserve the existing Hard behavior');
+  assert.equal(expert.column, 3);
+  assert.equal(-solvedOutcome(E.apply(s, s.current, hard).state), -1, 'Hard allows a forced loss');
+  assert.equal(-solvedOutcome(E.apply(s, s.current, expert).state), 1, 'Expert forces a win');
+  assert.equal(JSON.stringify(s), before);
+});
+
+test('expert choices depend on the visible position, not a changed seed', () => {
+  const s = play([3,2,4,3,2,4,0,6,1,5]);
+  const copy = JSON.parse(JSON.stringify(s)); copy.seed = 987654321;
+  assert.deepEqual(E.bot(s, s.current, 'expert'), E.bot(copy, copy.current, 'expert'));
 });

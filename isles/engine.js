@@ -237,7 +237,7 @@ function newGame(opts) {
   for (let i = n - 1; i >= 0; i--) order.push(i);
   const deck = shuffle([].concat(Array(14).fill('knight'), Array(5).fill('vp'), Array(2).fill('road'), Array(2).fill('plenty'), Array(2).fill('mono')), gen);
   const s = {
-    v: 1, mode, target: opts.target || (mode === 'seafarers' ? 13 : 10), friendly: !!opts.friendly, level: ['easy', 'normal', 'hard'].includes(opts.level) ? opts.level : 'normal',
+    v: 1, mode, target: opts.target || (mode === 'seafarers' ? 13 : 10), friendly: !!opts.friendly, level: ['easy', 'normal', 'hard', 'expert'].includes(opts.level) ? opts.level : 'normal',
     board, players,
     vb: Array(board.vertices.length).fill(null),
     eb: Array(board.edges.length).fill(null),
