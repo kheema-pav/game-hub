@@ -81,8 +81,8 @@ test('save validation rejects an engine version mismatch and a board/player coun
 
 function shell({search='',hash='',save,room:r=room(),onlineAvailable=true,gameConfig=config}={}){
  const storage=new Map(),writes=[],timers=new Map(),calls=[];
- if(save)storage.set('hub.fixture.save.v1',JSON.stringify(save));
- const root={innerHTML:'',listeners:{},classList:{add(){}},addEventListener(k,fn){this.listeners[k]=fn;},contains:()=>true};
+ if(save)storage.set('hub.'+gameConfig.id+'.save.v1',JSON.stringify(save));
+ const root={innerHTML:'',attrs:{},listeners:{},classList:{add(){}},setAttribute(k,v){this.attrs[k]=String(v);},getAttribute(k){return this.attrs[k]??null;},addEventListener(k,fn){this.listeners[k]=fn;},contains:()=>true};
  const location={search,hash,pathname:'/fixture/'};
  let watcher,onPlay,pending,uid=C.seats(r)[0];
  const rooms={compatibility:()=>({ok:true}),
@@ -194,18 +194,87 @@ test('write rejection cannot erase a later acknowledged prefix from the same sea
  assert.doesNotMatch(h.root.innerHTML,/step 0/);
 });
 
-for(const id of ['connect4','ludo','azul','ticket'])test(`${id}: the shipped engine, renderer and shared shell can start and save a local game`,()=>{
+function shippedConfig(id){
  const gameEngine=require('../../'+id+'/engine.js');
  let registration;
- vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../'+id+'/game.js'),'utf8'),{
-  window:{HubEngines:{[id]:gameEngine}},HubTabletop:{mount:config=>{registration=config}}
- },{filename:id+'/game.js'});
+ const context={HubEngines:{[id]:gameEngine},HubTabletop:{mount:config=>{registration=config}}};
+ context.window=context;vm.createContext(context);
+ if(id==='ticket')vm.runInContext(fs.readFileSync(path.join(__dirname,'../../ticket/geography.js'),'utf8'),context,{filename:'ticket/geography.js'});
+ vm.runInContext(fs.readFileSync(path.join(__dirname,'../../'+id+'/game.js'),'utf8'),context,{filename:id+'/game.js'});
  assert.ok(registration);assert.equal(registration.id,id);
+ return registration;
+}
+
+for(const id of ['connect4','ludo','azul','ticket'])test(`${id}: the shipped engine, renderer and shared shell can start and save a local game`,()=>{
+ const registration=shippedConfig(id);
  const h=shell({search:'?mode=solo',gameConfig:registration});
+ assert.equal(h.root.getAttribute('data-game'),id);assert.equal(h.root.getAttribute('data-screen'),'setup');
  h.click({'data-tt':'start'});
+ assert.equal(h.root.getAttribute('data-screen'),'game');
  assert.doesNotMatch(h.root.innerHTML,/This board could not be displayed/);
  assert.doesNotMatch(h.root.innerHTML,/Choose your table/);
  const saved=JSON.parse(h.storage.get('hub.'+id+'.save.v1'));
  assert.equal(saved.game,id);assert.equal(saved.gameVersion,1);
  assert.equal(C.validSave(saved,{...registration,gameVersion:1}),true);
+});
+
+for(const id of ['connect4','ludo','azul'])test(`${id}: public same-device turns stay visible and playable`,()=>{
+ const registration=shippedConfig(id),h=shell({search:'?mode=local',gameConfig:registration});
+ h.click({'data-tt':'start'});
+ const read=()=>JSON.parse(h.storage.get('hub.'+id+'.save.v1'));
+ const initialActor=registration.engine.actor(read().state);
+ let changedActor=false;
+ for(let step=0;step<20&&!changedActor;step++){
+  assert.doesNotMatch(h.root.innerHTML,/Pass the device|This board could not be displayed/);
+  const move=/data-move="(\d+)"/.exec(h.root.innerHTML);assert.ok(move,'public board exposes a legal move');
+  h.click({'data-move':move[1]});
+  changedActor=registration.engine.actor(read().state)!==initialActor;
+ }
+ assert.ok(changedActor,'legal moves reach the next human turn');
+ assert.doesNotMatch(h.root.innerHTML,/Pass the device|This board could not be displayed/);
+ assert.match(h.root.innerHTML,/data-move="\d+"/,'next human can act without a handoff screen');
+ assert.ok(read().players.every(p=>p.bot===false));
+});
+
+test('Ticket to Ride retains its privacy curtain between same-device ticket selections',()=>{
+ const registration=shippedConfig('ticket'),h=shell({search:'?mode=local',gameConfig:registration});
+ h.click({'data-tt':'start'});
+ assert.match(h.root.innerHTML,/Pass the device/);assert.doesNotMatch(h.root.innerHTML,/class="tr-map|data-move=/);
+ h.click({'data-tt':'reveal'});
+ assert.doesNotMatch(h.root.innerHTML,/This board could not be displayed/);
+ const move=/data-move="(\d+)"/.exec(h.root.innerHTML);assert.ok(move,'ticket choice can be confirmed');
+ h.click({'data-move':move[1]});
+ assert.match(h.root.innerHTML,/Pass the device/);assert.doesNotMatch(h.root.innerHTML,/class="tr-map|data-move=/);
+});
+
+for(const input of ['click','keyboard'])test(`${input} choices preserve panel scroll, open details and focus without playing a move`,()=>{
+ let nodes,choiceContext;
+ const registration={...config,
+  choose(draft,key,value,context){choiceContext=context;return {...draft,[key]:value,preview:context.target.getAttribute('data-ticket')};},
+  render(s,viewer,actions,{draft}){
+   const attrs={'data-choice':'ticketMask','data-ticket':'ticket-7','data-value':draft.ticketMask==='2'?'0':'2'};
+   const choice={getAttribute:k=>attrs[k]??null,focus(options){this.focusOptions=options;}};
+   const panel={getAttribute:()=> 'tickets',scrollTop:0,scrollLeft:0};
+   const details={open:false,querySelector:()=>({textContent:'Your destinations'})};
+   nodes={choice,panel,details};
+   return '<p>Preview '+(draft.preview||'none')+'</p>';
+  }
+ };
+ const h=shell({hash:'#continue',save:savedGame(),gameConfig:registration});
+ h.root.querySelectorAll=selector=>({'[data-scroll-key]':[nodes.panel],'details[open]':nodes.details.open?[nodes.details]:[],'details':[nodes.details],'[data-choice]':[nodes.choice]})[selector]||[];
+ const before=nodes,save=h.storage.get('hub.fixture.save.v1');
+ before.panel.scrollTop=310;before.panel.scrollLeft=42;before.details.open=true;
+ const attrs={'data-choice':'ticketMask','data-ticket':'ticket-7','data-value':'2'};
+ if(input==='click')h.click(attrs);
+ else{
+  let prevented=false;
+  const target={tagName:'g',closest(){return this;},getAttribute:k=>attrs[k]??null};
+  h.root.listeners.keydown({target,key:'Enter',preventDefault(){prevented=true;}});
+  assert.equal(prevented,true);
+ }
+ assert.notEqual(nodes,before,'choice rerender replaced the panels');
+ assert.equal(nodes.panel.scrollTop,310);assert.equal(nodes.panel.scrollLeft,42);assert.equal(nodes.details.open,true);
+ assert.deepEqual(copy(nodes.choice.focusOptions),{preventScroll:true},'focus follows the same ticket even when its toggle value changes');
+ assert.match(h.root.innerHTML,/Preview ticket-7/);assert.equal(choiceContext.viewer,0);assert.equal(choiceContext.state.steps,0);
+ assert.equal(h.storage.get('hub.fixture.save.v1'),save,'draft choices do not mutate the game or save');
 });

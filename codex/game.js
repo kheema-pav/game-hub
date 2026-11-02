@@ -1,7 +1,7 @@
 // ---------- State ----------
 const KEY='naturalists-codex-v1';
 let S=null;
-const ui={view:0,sel:null,faces:{},zoom:window.innerWidth<700?7:9,setup:{face:null,obj:null},modal:null,ng:null,origin:null,aiToken:0,fresh:null,gateOpen:-1,dismissOver:false,undo:null,aim:null,hover:null,hlObj:null,flight:null,refill:null,ptr:matchMedia('(hover: hover)').matches?'mouse':'touch'};
+const ui={dock:'hand',dockPhase:null,view:0,sel:null,faces:{},zoom:window.innerWidth<700?7:9,setup:{face:null,obj:null},modal:null,ng:null,origin:null,aiToken:0,fresh:null,gateOpen:-1,dismissOver:false,undo:null,aim:null,hover:null,hlObj:null,flight:null,refill:null,ptr:matchMedia('(hover: hover)').matches?'mouse':'touch'};
 const $=s=>document.querySelector(s);
 // sounds go through HubKit.sfx (looked up at call time); bots play quieter
 const sfx=(name,quiet)=>{try{HubKit.sfx(name,quiet?{volume:.6}:undefined);}catch(e){}};
@@ -325,8 +325,22 @@ function objHTML(oid,prog=null){
 function render(){
   if(!S){if(ON.active) renderShell();return;}
   if(ui.view>=S.players.length) ui.view=0;
-  renderTop();renderBoard();renderHand();renderSide();renderModal();
+  syncDock();renderTop();renderBoard();renderHand();renderSide();renderModal();
   if(ui.flight){const f=ui.flight;ui.flight=null;launchFlight(f);}
+}
+// Phone tools share one dock, leaving the board and turn guidance visible.
+// Only a phase transition changes the tab automatically; inspecting objectives is safe.
+function syncDock(){
+  const phase=S&&S.phase;
+  if(ui.dockPhase!==phase){
+    if(phase==='draw'&&canAct()) ui.dock='market';
+    else if(phase==='place') ui.dock='hand';
+    ui.dockPhase=phase;
+  }
+  $('#app').dataset.dock=ui.dock;
+  $('#app').dataset.phase=phase||'setup';
+  document.querySelectorAll('[data-act="dock"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.panel===ui.dock)));
+  $('#marketSec').classList.toggle('ready-to-draw',!!(canAct()&&phase==='draw'));
 }
 function renderTop(){
   const live=S.phase!=='setup'&&S.phase!=='over';
@@ -427,6 +441,7 @@ function renderPrompt(){
   if(on&&ON.saveErr==='denied') msg+=' <span class="down">That move couldn\'t be saved. Try again.</span>';
   if(on&&ON.err) msg+=' <span class="down">Lost the connection to the game. Reload the page to reconnect.</span>';
   if(S.endTriggered&&S.phase!=='over') msg+=` <span class="final">Final rounds · ${S.turnsLeft} turn${S.turnsLeft===1?'':'s'} left after this</span>`;
+  $('#turnStep').textContent=S.phase==='place'?'1 / Place':S.phase==='draw'?'2 / Draw':S.phase==='over'?'Finished':'Your codex';
   $('#prompt').innerHTML=msg;
 }
 function renderHand(){
@@ -440,7 +455,7 @@ function renderHand(){
     const unmet=card.type==='G'&&face==='front'&&!meetsReq(n,card);
     return `<div class="hslot ${ui.sel===id?'sel':''} ${unmet?'unmet':''}">
       <button class="hcard" data-act="sel" data-id="${id}" ${active?'':'disabled'} aria-pressed="${ui.sel===id}" aria-label="${esc(cardTitle(card,face))}">${cardHTML(id,face,'inhand')}</button>
-      <div class="hrow"><button class="btn flip" data-act="flip" data-id="${id}">Flip ↻</button></div>
+      <div class="card-caption">${esc(NAMES[card.k]||'Starter')} · ${face==='back'?'Back':card.type==='G'?'Gold':'Resource'}</div><div class="hrow"><button class="btn flip" data-act="flip" data-id="${id}" aria-label="Flip ${esc(NAMES[card.k]||'starter')} card to ${face==='front'?'back':'front'}">Flip ↻</button></div>
       ${unmet?`<span class="warn">Needs ${reqText(card)}</span>`:''}</div>`;
   }).join('')||'<span class="hand-note">Your hand is empty.</span>';
 }
@@ -572,7 +587,7 @@ document.addEventListener('click',e=>{
       if(!canAct()||S.phase!=='place'||!ui.sel) return;
       const key=kxy(+d.x,+d.y);
       // touch: first tap previews the spot, second tap places
-      if(ui.ptr!=='mouse'&&ui.aim!==key){ui.aim=key;renderBoard();renderPrompt();return;}
+      if(ui.ptr!=='mouse'&&e.detail!==0&&ui.aim!==key){ui.aim=key;renderBoard();renderPrompt();return;}
       placeHuman(+d.x,+d.y); break;
     }
     case 'place-aim': if(ui.aim&&canAct()&&S.phase==='place'&&ui.sel){const [x,y]=ui.aim.split(',').map(Number);placeHuman(x,y);} break;
@@ -582,6 +597,8 @@ document.addEventListener('click',e=>{
     case 'zin': zoomTo(ui.zoom*1.25); break;
     case 'zout': zoomTo(ui.zoom/1.25); break;
     case 'center': ui.origin=null; renderBoard(); break;
+    case 'fit': fitBoard(); break;
+    case 'dock': if(['hand','market','objectives'].includes(d.panel)){ui.dock=d.panel;syncDock();} break;
     case 'rules': ui.modal='rules'; render(); break;
     case 'new': openNewGame(); break;
     case 'close': ui.modal=null; render(); break;
@@ -632,6 +649,25 @@ document.addEventListener('mouseover',e=>{
   const sp=e.target.closest&&e.target.closest('.spot'), k=sp?kxy(sp.dataset.x,sp.dataset.y):null;
   if(k!==ui.hover){ui.hover=k;renderPrompt();}
 });
+
+document.addEventListener('focusin',e=>{
+  if(!S||S.phase!=='place'||!ui.sel) return;
+  const spot=e.target.closest&&e.target.closest('.spot');
+  if(spot){ui.hover=kxy(spot.dataset.x,spot.dataset.y);renderPrompt();}
+});
+
+function fitBoard(){
+  if(!S) return;
+  const sc=$('#boardScroll'),p=S.players[ui.view],cards=Object.values(p.board);
+  if(!cards.length) return;
+  const xs=cards.map(c=>c.x),ys=cards.map(c=>c.y);
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  ui.zoom=Math.max(.25,Math.min(14,(sc.clientWidth-32)/((maxX-minX)*SX+12),(sc.clientHeight-32)/((maxY-minY)*SY+8)));
+  ui.origin=null;renderBoard();
+  const o=ui.origin;
+  sc.scrollLeft=(((minX+maxX)/2-o.minX)*SX+PAD+6)*ui.zoom-sc.clientWidth/2;
+  sc.scrollTop=(((minY+maxY)/2-o.minY)*SY+PAD+4)*ui.zoom-sc.clientHeight/2;
+}
 
 // ---------- Board zoom and pan ----------
 // zoom around a screen point; cards are sized in em, so only the font-size changes

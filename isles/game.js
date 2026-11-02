@@ -219,17 +219,19 @@ function renderStatic() {
   ui.base = { x: Math.min(...xs) - m, y: Math.min(...ys) - m, w: Math.max(...xs) - Math.min(...xs) + 2 * m, h: Math.max(...ys) - Math.min(...ys) + 2 * m };
   ui.view = Object.assign({}, ui.base);
   applyView();
-  let s = '';
+  let s = '<defs><linearGradient id="island-glaze" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#ffffff" stop-opacity=".18"/><stop offset="1" stop-color="#10282b" stop-opacity=".12"/></linearGradient></defs>';
   // sea
   B.hexes.forEach(h => {
     if (h.terrain !== 'sea') return;
     s += `<polygon points="${hexPts(h.x, h.y, 1)}" fill="${FILL.sea}" stroke="#3a8db5" stroke-width=".03"/>`;
     s += `<path d="M${(h.x - 0.32).toFixed(2)},${(h.y + 0.1).toFixed(2)} q.08,-.08 .16,0 t.16,0 t.16,0 t.16,0" fill="none" stroke="#ffffff" stroke-opacity=".18" stroke-width=".035" stroke-linecap="round"/>`;
   });
+  // Raised wooden tiles, with a warm coastal rim.
+  land.forEach(h => { s += `<polygon points="${hexPts(h.x, h.y + .07, 1.025)}" fill="#102c35" fill-opacity=".36"/>`; });
   // beaches + land
   land.forEach(h => { s += `<polygon points="${hexPts(h.x, h.y, 1.02)}" fill="#e6d3a1"/>`; });
   land.forEach(h => {
-    s += `<polygon points="${hexPts(h.x, h.y, 0.93)}" fill="${FILL[h.terrain]}" stroke="#00000022" stroke-width=".02"/>`;
+    s += `<polygon points="${hexPts(h.x, h.y, 0.93)}" fill="${FILL[h.terrain]}" stroke="#00000022" stroke-width=".02"/><polygon points="${hexPts(h.x, h.y, 0.93)}" fill="url(#island-glaze)"/>`;
     const g = GLYPH[h.terrain];
     if (g) DECOR.forEach(([dx, dy]) => { s += `<g transform="translate(${(h.x + dx).toFixed(3)},${(h.y + dy).toFixed(3)}) scale(.02)" opacity=".9">${g}</g>`; });
     if (h.number) {
@@ -321,7 +323,7 @@ function renderDynamic() {
   const myCol = pcol(E.actor(G));
   sp.h.forEach(id => {
     const h = B.hexes[id];
-    s += `<polygon class="hl-hex" data-h="${id}" points="${hexPts(h.x, h.y, 0.9)}" fill="#ffffff" fill-opacity=".28" stroke="#fff" stroke-width=".09" stroke-dasharray=".2 .1"/>`;
+    s += `<polygon class="hl-hex" role="button" tabindex="0" aria-label="${esc(`Move ${h.terrain === 'sea' ? 'pirate' : 'robber'} to ${terrainLabel(h)}`)}" data-h="${id}" points="${hexPts(h.x, h.y, 0.9)}" fill="#ffffff" fill-opacity=".28" stroke="#fff" stroke-width=".09" stroke-dasharray=".2 .1"/>`;
   });
   // edges
   G.eb.forEach((o, e) => {
@@ -361,11 +363,11 @@ function renderDynamic() {
     const sh = 0.2;
     const x1 = a.x + (b.x - a.x) * sh, y1 = a.y + (b.y - a.y) * sh, x2 = b.x - (b.x - a.x) * sh, y2 = b.y - (b.y - a.y) * sh;
     const stroke = kind === 'movefrom' ? '#ffc94a' : '#ffffff';
-    s += `<g class="spot" data-e="${id}" data-k="${kind}"><line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="transparent" stroke-width=".38"/><g class="spot-e"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#10222c" stroke-opacity=".55" stroke-width=".2" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width=".11" stroke-linecap="round" stroke-dasharray="${kind === 'ship' || kind === 'moveto' ? '.09 .06' : 'none'}"/></g>${kind === 'movefrom' ? `<circle cx="${ed.x}" cy="${ed.y}" r=".22" fill="none" stroke="#ffc94a" stroke-width=".04"/>` : ''}</g>`;
+    s += `<g class="spot" role="button" tabindex="0" aria-label="${esc(`${kind === 'movefrom' ? 'Select ship' : kind === 'moveto' ? 'Move ship' : 'Build ' + kind} at edge ${id + 1}`)}" data-e="${id}" data-k="${kind}"><line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="transparent" stroke-width=".38"/><g class="spot-e"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#10222c" stroke-opacity=".55" stroke-width=".2" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width=".11" stroke-linecap="round" stroke-dasharray="${kind === 'ship' || kind === 'moveto' ? '.09 .06' : 'none'}"/></g>${kind === 'movefrom' ? `<circle cx="${ed.x}" cy="${ed.y}" r=".22" fill="none" stroke="#ffc94a" stroke-width=".04"/>` : ''}</g>`;
   });
   sp.v.forEach(id => {
     const vx = B.vertices[id];
-    s += `<g class="spot" data-v="${id}"><circle cx="${vx.x}" cy="${vx.y}" r=".3" fill="transparent"/><circle class="spot-v" cx="${vx.x}" cy="${vx.y}" r=".13" fill="#fff" stroke="${myCol}" stroke-width=".06"/></g>`;
+    s += `<g class="spot" role="button" tabindex="0" aria-label="${esc(`Build at corner ${id + 1}: ${siteResources(id)}`)}" data-v="${id}"><circle cx="${vx.x}" cy="${vx.y}" r=".3" fill="transparent"/><circle class="spot-v" cx="${vx.x}" cy="${vx.y}" r=".13" fill="#fff" stroke="${myCol}" stroke-width=".06"/></g>`;
   });
   if (ui.pending) s += ghostSvg();
   $('#dynamic').innerHTML = s;
@@ -468,6 +470,14 @@ function setupPanZoom() {
     const u = toUnits(ev.clientX, ev.clientY, ui.view);
     zoomAt(ev.deltaY > 0 ? 1.12 : 1 / 1.12, u.x, u.y);
   }, { passive: false });
+  svg.addEventListener('keydown', ev => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const spot = ev.target.closest('[data-v],[data-e],[data-h]');
+    if (!spot) return;
+    ev.preventDefault();
+    onBoardTap(spot);
+    if (ui.pending) $('#dock [data-act="pending-yes"]')?.focus();
+  });
   svg.addEventListener('click', ev => {
     if (pz.justDragged) { pz.justDragged = false; return; }
     const t = ev.target.closest('[data-v],[data-e],[data-h]');
@@ -502,6 +512,7 @@ function render() {
   renderDice();
   renderTicker();
   renderDock();
+  renderBoardGuide();
   renderStatus();
   renderCurtain();
   renderPhaseModal();
@@ -534,7 +545,7 @@ function dieHtml(n, red) {
   const L = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] }[n];
   let s = '';
   for (let i = 1; i <= 9; i++) s += L.includes(i) ? `<b style="grid-area:${Math.ceil(i / 3)}/${(i - 1) % 3 + 1}"></b>` : '';
-  return `<div class="die ${red ? 'red-die' : ''}">${s}</div>`;
+  return `<div aria-hidden="true" class="die ${red ? 'red-die' : ''}">${s}</div>`;
 }
 function renderDice() {
   const d = G.dice;
@@ -542,6 +553,7 @@ function renderDice() {
   const key = d ? d.join(',') + ':' + G.turnNo + ':' + G.rollCounts.reduce((x, y) => x + y, 0) : '';
   if (ui.diceKey === key) return;
   ui.diceKey = key;
+  $('#dice').setAttribute('aria-label', d ? `Dice: ${d[0]} and ${d[1]}, total ${d[0] + d[1]}` : 'Dice not rolled yet');
   $('#dice').innerHTML = d ? dieHtml(d[0], false) + dieHtml(d[1], true) + `<span class="dice-sum">${d[0] + d[1]}</span>` : '';
 }
 function renderTicker() {
@@ -549,16 +561,38 @@ function renderTicker() {
   $('#ticker').innerHTML = last.map(l => `<div>${l.p !== null ? `<i style="background:${pcol(l.p)}"></i>` : ''}${esc(l.t)}</div>`).join('');
 }
 
+function terrainLabel(hex) {
+  const name = E.RES_NAME[hex.terrain] || (hex.terrain === 'gold' ? 'Gold' : hex.terrain === 'sea' ? 'Sea' : 'Desert');
+  return name + (hex.number ? ' ' + hex.number : '');
+}
+function siteResources(id) {
+  return G.board.vertices[id].hexes.map(h => G.board.hexes[h]).filter(h => h.terrain !== 'sea').map(terrainLabel).join(' · ');
+}
+function costLabel(kind) {
+  return Object.entries(E.COST[kind]).map(([r, count]) => `${count} ${E.RES_NAME[r]}`).join(', ');
+}
+function renderBoardGuide() {
+  const a = E.actor(G);
+  if (G.phase === 'gameover' || G.players[a].bot || needCurtain() || (ON.active && a !== ui.seat)) return;
+  let message = '';
+  if (ui.pending && ui.pending.v !== null) message = siteResources(ui.pending.v);
+  else if (G.phase === 'setup' && G.setup.step === 'settlement') message = 'Choose a glowing corner. Nearby tile numbers produce resources when rolled; more dots mean better odds.';
+  else if (G.phase === 'setup') message = 'Choose a glowing edge beside your new settlement.';
+  else if (ui.mode && E.COST[ui.mode.kind]) message = 'Cost: ' + costLabel(ui.mode.kind) + '. Choose a glowing spot on the board.';
+  if (message) $('#dock').insertAdjacentHTML('beforeend', `<p class="board-guide">${esc(message)}</p>`);
+  if (G.phase === 'main' && !ui.pending && !ui.mode) $('#dock').insertAdjacentHTML('beforeend', '<button class="cost-help" data-act="show-costs">Building costs & scoring <span aria-hidden="true">↗</span></button>');
+}
+
 function costDots(kind) {
   const c = E.COST[kind]; let s = '';
   Object.keys(c).forEach(r => { for (let i = 0; i < c[r]; i++) s += `<i style="background:${RES_DOT[r]}"></i>`; });
-  return `<span class="cost">${s}</span>`;
+  return `<span class="cost" aria-hidden="true">${s}</span>`;
 }
 
 function handHtml(p, opts) {
   const pl = G.players[p];
   const bump = ui.bump || {};
-  const cards = E.RES.map(r => `<div class="rcard ${pl.hand[r] ? '' : 'zero'} ${bump[r] ? 'bump' : ''}" title="${E.RES_NAME[r]}"><div class="art" style="background:${FILL[r]}">${glyphSvg(r, 26)}</div><div class="ct">${pl.hand[r]}</div></div>`).join('');
+  const cards = E.RES.map(r => `<div class="rcard ${pl.hand[r] ? '' : 'zero'} ${bump[r] ? 'bump' : ''}" title="${E.RES_NAME[r]}"><div class="art" style="background:${FILL[r]}">${glyphSvg(r, 26)}</div><span class="res-name">${esc(E.RES_NAME[r])}</span><div class="ct">${pl.hand[r]}</div></div>`).join('');
   const playable = ['knight', 'road', 'plenty', 'mono'].some(t => E.playableDev(G, p, t));
   const dev = `<button class="devbtn ${playable ? 'glow' : ''}" data-act="dev" ${opts && opts.noDev ? 'disabled' : ''}><b>${pl.dev.length}</b>Cards</button>`;
   return `<div class="hand">${cards}${dev}</div>`;
@@ -621,10 +655,10 @@ function renderDock() {
       const can = E.canBuildKind(G, me, k);
       const on = ui.mode && ui.mode.kind === k;
       const label = { road: 'Road', settlement: 'Settle', city: 'City', ship: 'Ship' }[k];
-      return `<button class="act ${on ? 'on' : ''}" data-act="build" data-k="${k}" ${can || on ? '' : 'disabled'} style="--ic:${col}"><span class="ic">${ICON[k]}</span><span class="lb">${label}</span>${costDots(k)}</button>`;
+      return `<button class="act ${on ? 'on' : ''}" data-act="build" data-k="${k}" aria-pressed="${!!on}" title="${esc(costLabel(k))}" aria-label="${label}: ${esc(costLabel(k))}" ${can || on ? '' : 'disabled'} style="--ic:${col}"><span class="ic">${ICON[k]}</span><span class="lb">${label}</span>${costDots(k)}</button>`;
     };
     const canDev = E.canAfford(G, me, 'dev') && G.deck.length > 0;
-    const actions = kinds.map(btn).join('') + `<button class="act" data-act="buy-dev" data-confirm="Buy?" ${canDev ? '' : 'disabled'}><span class="ic">${ICON.dev}</span><span class="lb">Card</span>${costDots('dev')}</button>`;
+    const actions = kinds.map(btn).join('') + `<button class="act" data-act="buy-dev" data-confirm="Buy?" title="${esc(costLabel('dev'))}" aria-label="Development card: ${esc(costLabel('dev'))}" ${canDev ? '' : 'disabled'}><span class="ic">${ICON.dev}</span><span class="lb">Card</span>${costDots('dev')}</button>`;
     const cols = kinds.length + 1;
     const movable = G.mode === 'seafarers' && E.movableShips(G, me).length > 0;
     const row2 = [];
@@ -712,7 +746,7 @@ function drawModal() {
   ui.animModal = false;
 }
 function costsHtml() {
-  const row = (label, kind) => `<div>${label}</div><div class="pips">${Object.keys(E.COST[kind]).map(r => Array(E.COST[kind][r]).fill(`<i style="background:${RES_DOT[r]}" title="${E.RES_NAME[r]}"></i>`).join('')).join('')}</div>`;
+  const row = (label, kind) => `<div>${label}</div><div>${esc(costLabel(kind))}</div>`;
   return `<div class="costs">${row('Road', 'road')}${row('Settlement (1 point)', 'settlement')}${row('City (2 points)', 'city')}${G && G.mode === 'seafarers' ? row('Ship', 'ship') : ''}${row('Development card', 'dev')}</div>
     <p>${E.RES.map(r => `<span style="color:${RES_DOT[r]};font-weight:800">■</span> ${E.RES_NAME[r]}`).join(' &nbsp; ')}</p>
     <p>Longest Road (5+ in a row) and Largest Army (3+ knights) are worth 2 points each.${G && G.mode === 'seafarers' ? ' Your first settlement on each new island is worth 2 extra points.' : ''}</p>
@@ -980,6 +1014,7 @@ function onAct(name, el) {
   const c = ui.cfg;
   switch (name) {
     /* home */
+    case 'show-costs': openModal('costs'); break;
     case 'mode': c.mode = d.m; saveCfg(); renderHome(); break;
     case 'preset': syncNames(); preset(d.p); saveCfg(); renderHome(); break;
     case 'cycle-color': {

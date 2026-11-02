@@ -47,3 +47,21 @@ Two deterministic exhaustion safeguards address unusual physical-game stalemates
 - `test/engine.test.js`: rules fixtures, conservation, rejected-action immutability, seeded repeatability and full games for 2/3/4/5 players in both editions.
 
 Run `node --test ticket/test/*.test.js` from the repository root. Bots use their own cards/tickets and public routes, not opposing private hands; normal/hard prioritize paths toward their tickets, easy varies among affordable claims. They are practical opponents, not a claim of championship play.
+
+## Geographic board (November 2026)
+
+The display now uses real geographic coordinates and Natural Earth's public-domain
+1:110m country outlines and lakes, projected into a local SVG. Both USA and Europe maps are
+bundled in `geography.js`; no map service, tracking, API key, or network request is
+needed during play. City coordinates are rounded for this display. The historical
+city names used by the Europe game are retained. Outlines show contemporary
+geography, not historical borders.
+
+Source: https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_admin_0_countries.geojson
+Lake source: https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_lakes.geojson
+License: https://www.naturalearthdata.com/about/terms-of-use/ (public domain).
+
+Destination previews are independent of the keep/discard choice. Their A/B city
+markers and dashed guide show the destination pair, not a claimable railway or a
+suggested path. Railway selection highlights its actual train spaces; route IDs,
+engine rules, online records, and saved games are unchanged.

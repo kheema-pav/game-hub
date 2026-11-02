@@ -139,3 +139,27 @@ test('renderer exposes only current legal choices and escapes names in headings,
   const actions = E.legal(s, who); check(s, actions); check(s, []);
   s = move(s, actions[0]); check(s, E.legal(s, who));
 });
+
+test('placement previews explain legal fits and overflow without changing moves or state', () => {
+  const fs = require('node:fs'), vm = require('node:vm'); let renderer;
+  vm.runInNewContext(fs.readFileSync(require.resolve('./game.js'), 'utf8'), {
+    window: { HubEngines: { azul: E } }, HubTabletop: { mount(config) { renderer = config; } },
+  });
+  const s = make(), who = s.current;
+  s.phase = 'place'; s.pending = { color: 0, count: 3, source: 0 };
+  const p = s.players[who];
+  p.lines[1] = { color: 1, count: 1 }; // Cannot mix colours.
+  p.wall[3][E.column(3, 0)] = true; // Blue already present on this wall row.
+  const before = JSON.stringify(s), actions = E.legal(s, who);
+  const html = renderer.render(s, who, actions, { esc: String });
+  assert.equal(renderer.privateInformation, false);
+  assert.match(html, /az-play az-placing/);
+  assert.match(html, /3 blue tiles in your hand/);
+  assert.match(html, /Complete · 2 to floor/);
+  assert.match(html, /Complete · no spill/);
+  assert.match(html, /Different colour/);
+  assert.match(html, /Already on wall/);
+  assert.equal([...html.matchAll(/az-preview/g)].length, 7, 'one + three + three previews for the three legal lines');
+  assert.equal([...html.matchAll(/data-move="/g)].length, actions.length, 'previews never introduce an illegal action');
+  assert.equal(JSON.stringify(s), before);
+});

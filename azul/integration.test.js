@@ -12,7 +12,7 @@ const gameSource = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
 function shell({ search = '?mode=local', hash = '', save } = {}) {
   const storage = new Map(), listeners = {}, timers = new Map(), calls = [], writes = [];
   if (save) storage.set('hub.azul.save.v1', JSON.stringify(save));
-  const root = { innerHTML: '', classList: { add() {} }, addEventListener(k, fn) { listeners[k] = fn; }, contains() { return true; } };
+  const root = { innerHTML: '', setAttribute() {}, classList: { add() {} }, addEventListener(k, fn) { listeners[k] = fn; }, contains() { return true; } };
   const location = { pathname: '/azul/', search, hash };
   let config, watcher, onPlay;
   const room = { game: 'azul', v: 2, gameVersion: 1, status: 'playing', seed: 123, opts: {}, maxSeats: 2, seats: { a: { name: 'Alice', color: '#123456' }, b: { name: 'Bob', color: '#234567' } } };
@@ -46,19 +46,19 @@ function shell({ search = '?mode=local', hash = '', save } = {}) {
     begin() { onPlay({ code: '123456' }); }, emit(snapshot) { watcher(snapshot); },
   };
 }
-test('actual Azul shell holds the same actor across draft/place, then hands over; saved state resumes mid-draft', () => {
+test('actual Azul shell holds the same actor across draft/place, then advances without a curtain; saved state resumes mid-draft', () => {
   const h = shell(); assert.match(h.root.innerHTML, /Draft colourful tiles/); h.click({ 'data-tt': 'start' });
-  assert.match(h.root.innerHTML, /Pass the device/); h.click({ 'data-tt': 'reveal' });
+  assert.doesNotMatch(h.root.innerHTML, /Pass the device/);
   const starter = h.save().state.current; assert.match(h.root.innerHTML, /Factory 1/);
   h.click({ 'data-move': '0' }); const saved = h.save();
   assert.equal(saved.gameVersion, 1); assert.equal(saved.state.phase, 'place'); assert.equal(saved.state.current, starter);
   assert.doesNotMatch(h.root.innerHTML, /Pass the device/); assert.match(h.root.innerHTML, /Send all/);
   assert.equal(C.validSave(saved, h.config), true);
   const resumed = shell({ search: '?mode=online', hash: '#continue', save: saved });
-  assert.ok(!resumed.calls.some(c => c[0] === 'open')); assert.match(resumed.root.innerHTML, /Pass the device/);
-  resumed.click({ 'data-tt': 'reveal' }); assert.match(resumed.root.innerHTML, /Send all/);
+  assert.ok(!resumed.calls.some(c => c[0] === 'open')); assert.doesNotMatch(resumed.root.innerHTML, /Pass the device/);
+  assert.match(resumed.root.innerHTML, /Send all/);
   assert.equal(resumed.save().state.phase, 'place'); resumed.click({ 'data-move': '0' });
-  assert.equal(resumed.save().state.phase, 'draft'); assert.notEqual(resumed.save().state.current, starter); assert.match(resumed.root.innerHTML, /Pass the device/);
+  assert.equal(resumed.save().state.phase, 'draft'); assert.notEqual(resumed.save().state.current, starter); assert.doesNotMatch(resumed.root.innerHTML, /Pass the device/);
 });
 test('actual Azul online shell can author consecutive staged moves and leaves a local save unchanged', async () => {
   const local = shell(); local.click({ 'data-tt': 'start' }); const save = local.save();

@@ -118,3 +118,28 @@ html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none}
 .score .tag{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .hl-root .hl-seg{flex-wrap:wrap}
 body .hl-root .hl-seg button{flex:1 1 22%;min-width:0;padding:0 4px;font-size:14px;line-height:1.2}
+
+/* A playful drawing desk. The canvas keeps the space; the controls sit beside it. */
+button:disabled{cursor:default;opacity:.48;box-shadow:none}button:disabled:active{transform:none}
+a:focus-visible{outline:3px solid var(--mark);outline-offset:4px}
+.sk-intro{position:relative;padding:6px 0 8px}.sk-intro h1{margin:10px 0 14px}.sk-intro>.label{padding-right:38px;display:block;font-size:.67rem;letter-spacing:.1em}
+.sk-sticker{position:absolute;right:2px;top:7px;display:grid;place-items:center;width:45px;height:45px;background:var(--mark);color:var(--mark-ink);border:2px solid var(--ink);border-radius:50%;font:36px/1 Georgia,serif;transform:rotate(12deg);box-shadow:2px 2px 0 var(--ink)}
+.sk-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.sk-modes>div,.sk-modes>a{display:flex;flex-direction:column;justify-content:center;padding:12px;border:2px solid var(--ink);border-radius:12px;background:var(--card);color:var(--ink);text-decoration:none;gap:4px}.sk-modes>div{background:var(--mark);color:var(--mark-ink)}.sk-modes b{font-size:.95rem}.sk-modes span{font-size:.73rem;line-height:1.4}.sk-modes>a:hover{box-shadow:3px 3px 0 var(--ink);transform:translate(-1px,-1px)}.sk-modes>div:only-child{grid-column:1/-1}
+.sk-estimate{font-size:.8rem;text-align:center;color:var(--muted);margin-top:-6px}
+#ocard{scroll-margin-top:20px}main[data-screen=secret] .wordbox{width:100%}.wordbox.hidden-word{background-image:repeating-linear-gradient(-45deg,transparent,transparent 10px,color-mix(in srgb,var(--grid),transparent 50%) 10px,color-mix(in srgb,var(--grid),transparent 50%) 11px)}
+.sk-clock-state{text-align:center;font-size:.83rem;color:var(--muted)}.clock-paused .sk-clock-state{color:var(--ink);background:var(--mark);border-radius:20px;padding:8px 14px;align-self:center}.clock-paused .timer{opacity:.5}.bar i.low{background:var(--bad)}
+.play{padding-bottom:max(10px,env(safe-area-inset-bottom,0px));gap:10px}.cwrap{box-shadow:5px 5px 0 var(--ink),0 12px 28px #00000018}.sk-tool-label{display:none}.sk-feed-wrap{flex:none;min-height:0}.sk-guess-prompt{background:var(--card);color:var(--ink);box-shadow:none;border-width:2px;padding:10px 14px}.sk-guess-prompt .word{font-size:1.2rem}.sk-guess-prompt .tiny{font-size:.78rem;margin-top:4px}.sw{position:relative}.sw:not(.er)[aria-pressed=true]::after{content:'✓';position:absolute;inset:0;display:grid;place-items:center;color:white;text-shadow:0 1px 3px #000;font-size:20px}.phead{padding-bottom:2px}.phead .pwho b{font-size:1.05rem}
+@media(min-width:900px) and (min-height:700px){
+ .play{width:min(1280px,100%);padding:24px 28px;display:grid;grid-template-columns:minmax(0,1fr) 300px;grid-template-rows:44px 8px auto auto minmax(90px,1fr) auto;gap:18px 24px}
+ .phead{grid-column:1/-1;grid-row:1}.play>.bar{grid-column:1/-1;grid-row:2}.cbox{grid-column:1;grid-row:3/7;min-width:0;min-height:0}.pword{grid-column:2;grid-row:3;align-self:start;padding:16px;display:flex;flex-direction:column;align-items:stretch;gap:14px}.pword .word{font-size:1.6rem;margin-top:8px}.pword .cat{font-size:.72rem}.pword button{width:100%;padding:10px}.tools{grid-column:2;grid-row:4;background:var(--card);border:2px solid var(--ink);border-radius:14px;padding:12px;gap:10px}.sk-tool-label{display:block;font-size:.65rem;letter-spacing:.08em}.trow{gap:4px}.sw{min-height:38px;border-radius:9px}.sw.er{font-size:.64rem}.tb{font-size:.74rem}.sk-feed-wrap{grid-column:2;grid-row:5;align-self:stretch;min-height:0;display:flex;flex-direction:column;gap:10px;padding:14px;background:var(--card);border:2px solid var(--line);border-radius:14px}.feed,.is-drawer .feed{height:auto;flex:1;overflow:auto;justify-content:flex-start;font-size:.9rem;gap:8px}.feed div{white-space:normal;overflow-wrap:anywhere}.gform{grid-column:2;grid-row:6;display:flex;flex-direction:column}.gform input{padding:12px;min-height:48px;flex:none}.gform button{min-height:48px}.is-guesser .sk-feed-wrap{grid-row:4/6}.ptimer{font-size:2.2rem}.phead .pwho b{font-size:1.25rem}
+}
+@media(max-width:600px){.sk-intro h1{font-size:2rem}.play{gap:7px;padding-inline:12px}.sk-guess-prompt{padding:7px 10px}.sk-guess-prompt .word{font-size:1rem}.sk-guess-prompt .tiny{font-size:.7rem}.sk-guess-prompt .cat{display:none}.phead .pwho b{font-size:1rem}.card{padding:14px}.stage{gap:14px}.timer{font-size:clamp(4rem,18vw,5.5rem)}}
+@media(max-height:600px){.sk-guess-prompt{display:none}.play{gap:5px}.is-drawer .feed{height:1.5rem}.pword .pw .word{font-size:1.1rem}.pword .pw .cat{display:none}.pword{padding:4px 6px 4px 10px}.stage{gap:10px}.timer{font-size:3.5rem}.wordbox{min-height:6rem;padding:16px}}
+/* Keep the guess field reachable when an on-screen keyboard reduces the canvas area. */
+.compact-play .sk-guess-prompt{display:none}
+.compact-play .play{gap:5px}
+.compact-play .feed{height:2.7rem}
+.compact-play .is-drawer .feed{height:1.5rem}
+.compact-play .pword .pw .word{font-size:1.1rem}
+.compact-play .pword .pw .cat{display:none}
+.compact-play .pword{padding:4px 6px 4px 10px}

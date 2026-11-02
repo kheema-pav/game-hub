@@ -37,16 +37,56 @@ const server = http.createServer((request, response) => {
         assert.ok(await page.locator('#hubkit-root .hk-float').isVisible(), id + ' has a shared menu');
         await page.screenshot({ path: path.join(shots, id + '-' + width + '.png'), fullPage: true });
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), id + ' fits width ' + width);
+        await page.screenshot({ path: path.join(shots, id + '-viewport-' + width + '.png') });
         const saveKey = 'hub.' + id + '.save.v1';
         const initial = await page.evaluate(key => localStorage.getItem(key), saveKey);
         assert.ok(initial, id + ' saves the new game');
+        if (id === 'ticket') {
+          const mapTopBefore = await page.locator('.tr-map').evaluate(node => node.getBoundingClientRect().top);
+          const footerOrder = await page.evaluate(() => {
+            const footer = document.querySelector('.tr-keep-footer').getBoundingClientRect();
+            return [...document.querySelectorAll('.tr-ticket-picker .tr-destination')].every(ticket => ticket.getBoundingClientRect().bottom <= footer.top);
+          });
+          assert.ok(footerOrder, 'ticket confirmation never overlays a destination card');
+          const card = page.locator('.tr-ticket-preview').nth(1);
+          const endpoints = await card.locator('b').allTextContents();
+          await card.click();
+          assert.deepEqual(await page.locator('.tr-endpoint').evaluateAll(nodes => nodes.map(node => node.dataset.city)), endpoints, 'ticket preview marks both cities');
+          assert.equal(await page.evaluate(key => localStorage.getItem(key), saveKey), initial, 'preview never keeps/discards a ticket');
+          await page.getByRole('button', { name: 'Zoom to selection', exact: true }).click();
+          assert.ok(await page.getByRole('button', { name: 'Fit whole map', exact: true }).evaluate(node => node === document.activeElement), 'zoom retains keyboard focus');
+          const layout = await page.evaluate(() => {
+            const map = document.querySelector('.tr-map').getBoundingClientRect(), panel = document.querySelector('.tr-sidebar').getBoundingClientRect();
+            return { mapTop: map.top, mapBottom: map.bottom, mapRight: map.right, panelLeft: panel.left, height: innerHeight };
+          });
+          assert.ok(layout.mapTop >= 0 && layout.mapBottom <= layout.height, 'map stays on screen while selecting a ticket');
+          if (width <= 760) assert.ok(Math.abs(layout.mapTop - mapTopBefore) < 2, 'scrolling ticket choices does not shift the map');
+          if (width > 760) assert.ok(layout.panelLeft >= layout.mapRight, 'tickets sit alongside the map on a laptop');
+          await page.screenshot({ path: path.join(shots, 'ticket-preview-' + width + '.png'), fullPage: true });
+          await page.screenshot({ path: path.join(shots, 'ticket-preview-viewport-' + width + '.png') });
+          await page.getByRole('button', { name: 'Clear highlight', exact: true }).click();
+          assert.equal(await page.locator('.tr-endpoint').count(), 0, 'clear removes both markers');
+        }
         await page.locator('button[data-move]').first().click();
         const after = await page.evaluate(key => localStorage.getItem(key), saveKey);
         assert.notEqual(after, initial, id + ' accepts and saves a real browser move');
+        if (id !== 'ticket') assert.equal(await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).count(), 0, 'public games have no handover curtain');
+        await page.screenshot({ path: path.join(shots, id + '-after-move-' + width + '.png'), fullPage: true });
+        await page.screenshot({ path: path.join(shots, id + '-after-move-viewport-' + width + '.png') });
         await page.goto(url + '/' + id + '/#continue');
         if (await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).count()) await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).click();
         assert.equal(await page.evaluate(key => localStorage.getItem(key), saveKey), after, id + ' resumes without overwriting state');
       }
+      // The second geographic edition must also render and preview destinations.
+      await page.goto(url + '/ticket/?mode=local');
+      await page.getByLabel('Map and rules').selectOption('europe');
+      await page.getByRole('button', { name: 'Start new game', exact: true }).click();
+      await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).click();
+      await page.locator('.tr-ticket-preview').nth(1).click();
+      assert.equal(await page.locator('.tr-endpoint').count(), 2);
+      await page.screenshot({ path: path.join(shots, 'ticket-europe-viewport-' + width + '.png') });
+      await page.getByRole('button', { name: 'Zoom to selection', exact: true }).click();
+      await page.screenshot({ path: path.join(shots, 'ticket-europe-zoom-viewport-' + width + '.png') });
       // Original games must still initialize after the extraction.
       for (const id of ['codex', 'gems', 'isles', 'sketch']) {
         await page.goto(url + '/' + id + '/');

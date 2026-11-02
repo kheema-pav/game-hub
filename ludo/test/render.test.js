@@ -23,3 +23,24 @@ test('move buttons use current legal indices and waiting viewers cannot submit t
   assert.equal((html.match(/ can-move/g)||[]).length,4);
   assert.equal(game.render(s,1,[],{esc}).includes('data-move='),false);
 });
+test('legal landing previews explain captures and safe moves without revealing interactive moves to other viewers',()=>{
+  const s=E.create({seed:7,players:[{name:'A'},{name:'B'}]});
+  s.phase='move';s.die=1;s.lastDie=1;s.lastRoller=0;
+  s.tokens[0]=[0,7,55,-1];s.tokens[1]=[27,-1,-1,-1];
+  const html=game.render(s,0,E.legal(s,0),{esc});
+  assert.match(html,/Landing for token 1/);
+  assert.match(html,/Landing for token 2/);
+  assert.doesNotMatch(html,/Landing for token 3/,'finishing tokens use the home message instead of a track marker');
+  assert.match(html,/Capture 1 opposing token/);
+  assert.match(html,/Land on a safe square/);
+  assert.match(html,/Bring it home/);
+  assert.equal(game.render(s,1,[],{esc}).includes('ludo-landing'),false);
+  assert.equal(game.privateInformation,false,'a public board should not need pass-device privacy curtains');
+});
+test('all die results render the corresponding number of pips',()=>{
+  const s=E.create({seed:7,players:[{name:'A'},{name:'B'}]});s.lastRoller=0;
+  for(let die=1;die<=6;die++){
+    s.lastDie=die;
+    assert.equal((game.render(s,0,E.legal(s,0),{esc}).match(/class="pip"/g)||[]).length,die);
+  }
+});

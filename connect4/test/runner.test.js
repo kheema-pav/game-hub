@@ -88,13 +88,15 @@ test('real solo runner boots, starts, applies a human drop and completes the bot
   assert.ok(h.find('button[data-tt="continue"]'), 'menu setup preserves the save');
 });
 
-test('same-device curtain hides each next human turn and blocks stale move controls', () => {
+test('same-device public board stays visible as human turns alternate', () => {
   const h = boot({ search: '?mode=local' }); h.click('button[data-tt="start"]');
-  assert.match(h.app.textContent, /Pass the device/); assert.equal(h.find('button[data-move]'), null);
-  h.click('button[data-tt="reveal"]'); h.click('button[data-move="0"]');
-  assert.equal(h.saved().state.moves, 1); assert.match(h.app.textContent, /Pass the device/);
-  assert.equal(h.find('button[data-move]'), null); h.click('button[data-tt="reveal"]');
-  h.click('button[data-move="1"]'); assert.equal(h.saved().state.moves, 2); assert.match(h.app.textContent, /Pass the device/);
+  assert.doesNotMatch(h.app.textContent, /Pass the device/); assert.ok(h.find('button[data-move]'));
+  h.click('button[data-move="0"]');
+  assert.equal(h.saved().state.moves, 1); assert.doesNotMatch(h.app.textContent, /Pass the device/);
+  assert.ok(h.find('button[data-move]'));
+  h.click('button[data-move="1"]'); assert.equal(h.saved().state.moves, 2);
+  assert.equal(h.saved().state.board[5][0], 0); assert.equal(h.saved().state.board[5][1], 1);
+  assert.doesNotMatch(h.app.textContent, /Pass the device/);
 });
 
 test('Continue restores exact board; #continue has priority over a new mode intent', () => {
