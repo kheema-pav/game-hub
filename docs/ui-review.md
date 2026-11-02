@@ -43,3 +43,20 @@ Actual browser execution and visual inspection remain pending: this editing
 session cannot bind a local preview port, and browser policy forbids local-file
 navigation. CI browser checks must pass and screenshots should be inspected
 before merging. Firebase rules do not change in this PR.
+
+## Screenshot review follow-up
+
+Reviewed user-supplied screenshots of the hub, USA Ticket to Ride, Azul, Ludo and
+Four in a Row on phone/laptop. Desktop geography, destination highlighting and
+Connect4's board were confirmed visually. The review found Ticket's sticky keep
+button overlapping a phone ticket, excessive Azul phone spacing, repeated help
+sections, and confusing Ludo last-roll/player wording.
+
+The follow-up removes the overlapping footer, gives portrait phones separate map
+and scrolling-choice areas, compacts Azul, removes duplicate in-game help, and
+labels the previous Ludo roll explicitly. Coastal map labels are kept inside the
+whole-map bounds. Browser checks now assert that confirmation controls never
+cover tickets and that scrolling phone choices does not move the map. New
+viewport screenshots and Europe map screenshots are included in CI artifacts.
+These follow-up layouts still need the new CI run and screenshot review. The
+complete offline release is now gh-v8. Game rules and Firebase rules are unchanged.

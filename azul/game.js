@@ -42,7 +42,7 @@
         html += filled ? tile(line.color, true) : preview ? tile(s.pending.color, true, 'az-preview') : '<span class="az-tile az-slot" aria-hidden="true"></span>';
       }
       var blocked = mine && index < 0 ? (line.count === row + 1 ? 'Line full' : p.wall[row][E.column(row, s.pending.color)] ? 'Already on wall' : 'Different colour') : '';
-      html += '</span>' + (blocked ? '<span class="az-place-label az-blocked">' + blocked + '</span>' : '') + (index >= 0 ? '<span class="az-place-label' + (spill ? ' az-spill' : '') + '">' + (line.count + placed === row + 1 ? 'Complete' : '+' + placed + ' tiles') + (spill ? ' · ' + spill + ' to floor' : ' · no spill') + '</span>' : '')
+      html += '</span>' + (blocked ? '<span class="az-place-label az-blocked">' + blocked + '</span>' : '') + (index >= 0 ? '<span class="az-place-label' + (spill ? ' az-spill' : '') + '">' + (line.count + placed === row + 1 ? 'Complete' : '+' + placed + (placed === 1 ? ' tile' : ' tiles')) + (spill ? ' · ' + spill + ' to floor' : ' · no spill') + '</span>' : '')
         + '</' + (index >= 0 ? 'button' : 'div') + '><div class="az-wall-row">';
       for (var col = 0; col < 5; col++) {
         var color = E.colorAt(row, col);
@@ -71,7 +71,7 @@
       : canAct ? 'Find a colour. Make a mosaic.' : s.players[s.current].name + ' is ' + (s.phase === 'place' ? 'placing tiles.' : 'choosing tiles.');
     var html = '<div class="az-play' + (placing ? ' az-placing' : '') + '"><header class="az-status"><div><span class="az-eyebrow">The tile atelier · Round ' + s.round + '</span><h2>' + esc(prompt) + '</h2></div>'
       + '<div class="az-steps" aria-label="Turn steps"><span class="' + (s.phase === 'draft' ? 'is-active' : '') + '"><b>1</b> Pick a colour</span><span class="' + (s.phase === 'place' ? 'is-active' : '') + '"><b>2</b> Choose a line</span></div></header>';
-    if (placing) html += '<div class="az-picked" role="status">' + tile(s.pending.color, true) + '<div><b>' + s.pending.count + ' ' + esc(E.COLORS[s.pending.color].toLowerCase()) + ' tiles in your hand</b><span>Choose a glowing line. Faded tiles preview the fit; extra tiles go to the floor.</span></div></div>';
+    if (placing) html += '<div class="az-picked" role="status">' + tile(s.pending.color, true) + '<div><b>' + s.pending.count + ' ' + esc(E.COLORS[s.pending.color].toLowerCase()) + (s.pending.count===1?' tile':' tiles') + ' in your hand</b><span>Choose a glowing line. Faded tiles preview the fit; extra tiles go to the floor.</span></div></div>';
     html += '<div class="az-table">';
     if (!s.over) {
       html += '<section class="az-supply" aria-label="Shared tile supply"><header class="az-supply-head"><div><span class="az-eyebrow">Shared supply</span><h3>Choose your tiles</h3></div><span>' + s.bag.length + ' in bag</span></header><p class="az-supply-hint">Take every tile of one colour from one factory. The rest move to the centre.</p><div class="az-factories">';
@@ -97,7 +97,7 @@
       + '<p><a href="https://cdn.svc.asmodee.net/production-nextmove/uploads/sites/4/2024/06/EN-Azul-Rules-Next-Move-web.pdf" target="_blank" rel="noopener">Official base-game rules</a>. Original fan-made interface, normal coloured wall. Game design by Michael Kiesling. Not affiliated with its publishers.</p></details></div>';
     return html;
   }
-  HubTabletop.mount({ id: 'azul', privateInformation: false, title: 'Azul', subtitle: 'Draft colourful tiles and build a connected mosaic. 2 to 4 players.', minPlayers: 2, maxPlayers: 4, engine: E, options: [],
+  HubTabletop.mount({ id: 'azul', inlineRules: true, privateInformation: false, title: 'Azul', subtitle: 'Draft colourful tiles and build a connected mosaic. 2 to 4 players.', minPlayers: 2, maxPlayers: 4, engine: E, options: [],
     rules: ['Take every tile of one colour from one factory or the centre, then place the group on one pattern line. The rest of a factory moves to the centre.',
       'Complete pattern lines send one tile each to the wall at round end. Neighbouring tiles score together. Excess tiles and the first-player marker take floor spaces and lose points.',
       'A full wall row ends the game after that round. Bonuses: 2 per row, 7 per column, 10 per complete colour. Highest score wins; tied scores compare complete rows, then share victory.'],

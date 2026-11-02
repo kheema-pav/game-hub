@@ -1,5 +1,5 @@
 /* One complete cached release at a time. Bump VERSION whenever shipped assets change. */
-const VERSION = 'gh-v7';
+const VERSION = 'gh-v8';
 const CACHE = VERSION;
 const FONTS = 'gh-fonts-v1';
 const PRECACHE = [
