@@ -59,7 +59,7 @@
     }
     function helpHTML() {
       var rules = typeof config.rules === 'string' ? config.rules : config.rules && config.rules.join ? config.rules.map(function (rule) { return '<p>' + esc(rule) + '</p>'; }).join('') : '<p>Choose an available move on your turn. Your local game saves after every move.</p>';
-      return '<details class="tt-help"><summary>How to play</summary>' + rules + '<p>Same-device play hides the board between human turns. Online hands belong to this browser; clearing browser data loses your anonymous seat.</p></details>';
+      return '<details class="tt-help"><summary>How to play</summary>' + rules + '<p>' + (config.privateInformation === false ? 'Same-device players take turns on this board.' : 'Same-device play hides the board between human turns.') + ' Online hands belong to this browser; clearing browser data loses your anonymous seat.</p></details>';
     }
     function names() { return people.map(function (person) { return person.name; }); }
     function score(i) { try { return config.score ? config.score(state, i) : state.scores ? state.scores[i] : null; } catch (e) { return null; } }
@@ -68,13 +68,15 @@
       return winners.length === 1 ? names()[winners[0]] + ' wins!' : winners.length ? 'Shared win: ' + winners.map(function (i) { return names()[i]; }).join(', ') : 'Draw';
     }
     function render() {
+      root.setAttribute('data-game', config.id);
+      root.setAttribute('data-screen', screen);
       if (screen === 'setup') { setupScreen(); return; }
       if (screen === 'connecting') { root.innerHTML = title() + '<section class="tt-card"><h2>Opening your table</h2><p role="status">' + esc(message || 'Connecting to the game server…') + '</p><button data-tt="setup">Back to setup</button></section>'; return; }
       if (!state) return;
       var actor = engine.actor(state);
       if (!online && !state.over && people[actor] && !people[actor].bot) {
         var humanCount = people.filter(function (person) { return !person.bot; }).length;
-        if (humanCount > 1 && visibleHuman !== actor) curtain = true;
+        if (config.privateInformation !== false && humanCount > 1 && visibleHuman !== actor) curtain = true;
         viewer = actor;
       } else if (online) viewer = online.seats.indexOf(HubOnline.uid);
       if (curtain && !state.over) {
@@ -209,10 +211,25 @@
         rebuildOnline(session);
       });
     }
+    function selectChoice(target) {
+      var key = target.getAttribute('data-choice'), value = target.getAttribute('data-value') || '';
+      var focusValue = target.getAttribute('data-ticket') || value, focusKey = target.getAttribute('data-focus-key');
+      var panels = typeof root.querySelectorAll === 'function' ? Array.from(root.querySelectorAll('[data-scroll-key]')).map(function (el) { return [el.getAttribute('data-scroll-key'), el.scrollTop, el.scrollLeft]; }) : [];
+      var opened = typeof root.querySelectorAll === 'function' ? Array.from(root.querySelectorAll('details[open]')).map(function (el) { return el.querySelector('summary') && el.querySelector('summary').textContent; }) : [];
+      if (config.choose) draft = config.choose(draft, key, value, { state: state, viewer: viewer, target: target }) || draft;
+      else draft[key] = value;
+      render();
+      if (typeof root.querySelectorAll !== 'function') return;
+      root.querySelectorAll('details').forEach(function (el) { if (el.querySelector('summary') && opened.includes(el.querySelector('summary').textContent)) el.open = true; });
+      root.querySelectorAll('[data-scroll-key]').forEach(function (el) { var saved = panels.find(function (item) { return item[0] === el.getAttribute('data-scroll-key'); }); if (saved) { el.scrollTop = saved[1]; el.scrollLeft = saved[2]; } });
+      var candidates = Array.from(root.querySelectorAll('[data-choice]'));
+      var focus = focusKey ? candidates.find(function (el) { return el.getAttribute('data-focus-key') === focusKey; }) : candidates.find(function (el) { return el.getAttribute('data-choice') === key && (el.getAttribute('data-ticket') || el.getAttribute('data-value') || '') === focusValue; });
+      if (focus && typeof focus.focus === 'function') focus.focus({ preventScroll: true });
+    }
     root.addEventListener('click', function (event) {
       var target = event.target.closest('button[data-tt],button[data-move],[data-choice]');
       if (!target || !root.contains(target) || target.disabled) return;
-      if (target.hasAttribute('data-choice')) { draft[target.getAttribute('data-choice')] = target.getAttribute('data-value') || ''; render(); return; }
+      if (target.hasAttribute('data-choice')) { selectChoice(target); return; }
       if (target.hasAttribute('data-move')) {
         var index = Number(target.getAttribute('data-move'));
         if (!Number.isInteger(index) || !actions[index]) return;
@@ -235,7 +252,7 @@
     root.addEventListener('keydown', function (event) {
       var target = event.target.closest('[data-choice]');
       if (target && target.tagName !== 'BUTTON' && (event.key === 'Enter' || event.key === ' ')) {
-        event.preventDefault(); draft[target.getAttribute('data-choice')] = target.getAttribute('data-value') || ''; render();
+        event.preventDefault(); selectChoice(target);
       }
     });
     root.addEventListener('change', function (event) {

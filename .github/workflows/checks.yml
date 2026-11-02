@@ -12,7 +12,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test test/*.test.js shared/test/*.test.js isles/test/entry-modes.test.js sketch/test/*.test.js connect4/test/*.test.js ludo/test/*.test.js azul/*.test.js ticket/test/*.test.js
+      - run: node --test test/*.test.js shared/test/*.test.js isles/test/entry-modes.test.js sketch/test/*.test.js codex/test/*.test.js connect4/test/*.test.js ludo/test/*.test.js azul/*.test.js ticket/test/*.test.js
       - run: node isles/test/engine.test.js
   firestore:
     runs-on: ubuntu-latest

@@ -40,9 +40,29 @@ const server = http.createServer((request, response) => {
         const saveKey = 'hub.' + id + '.save.v1';
         const initial = await page.evaluate(key => localStorage.getItem(key), saveKey);
         assert.ok(initial, id + ' saves the new game');
+        if (id === 'ticket') {
+          const card = page.locator('.tr-ticket-preview').nth(1);
+          const endpoints = await card.locator('b').allTextContents();
+          await card.click();
+          assert.deepEqual(await page.locator('.tr-endpoint').evaluateAll(nodes => nodes.map(node => node.dataset.city)), endpoints, 'ticket preview marks both cities');
+          assert.equal(await page.evaluate(key => localStorage.getItem(key), saveKey), initial, 'preview never keeps/discards a ticket');
+          await page.getByRole('button', { name: 'Zoom to selection', exact: true }).click();
+          assert.ok(await page.getByRole('button', { name: 'Fit whole map', exact: true }).evaluate(node => node === document.activeElement), 'zoom retains keyboard focus');
+          const layout = await page.evaluate(() => {
+            const map = document.querySelector('.tr-map').getBoundingClientRect(), panel = document.querySelector('.tr-sidebar').getBoundingClientRect();
+            return { mapTop: map.top, mapBottom: map.bottom, mapRight: map.right, panelLeft: panel.left, height: innerHeight };
+          });
+          assert.ok(layout.mapTop >= 0 && layout.mapBottom <= layout.height, 'map stays on screen while selecting a ticket');
+          if (width > 760) assert.ok(layout.panelLeft >= layout.mapRight, 'tickets sit alongside the map on a laptop');
+          await page.screenshot({ path: path.join(shots, 'ticket-preview-' + width + '.png'), fullPage: true });
+          await page.getByRole('button', { name: 'Clear highlight', exact: true }).click();
+          assert.equal(await page.locator('.tr-endpoint').count(), 0, 'clear removes both markers');
+        }
         await page.locator('button[data-move]').first().click();
         const after = await page.evaluate(key => localStorage.getItem(key), saveKey);
         assert.notEqual(after, initial, id + ' accepts and saves a real browser move');
+        if (id !== 'ticket') assert.equal(await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).count(), 0, 'public games have no handover curtain');
+        await page.screenshot({ path: path.join(shots, id + '-after-move-' + width + '.png'), fullPage: true });
         await page.goto(url + '/' + id + '/#continue');
         if (await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).count()) await page.getByRole('button', { name: 'Ready, show my turn', exact: true }).click();
         assert.equal(await page.evaluate(key => localStorage.getItem(key), saveKey), after, id + ' resumes without overwriting state');

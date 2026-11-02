@@ -415,11 +415,12 @@ function cardHTML(id, o = {}) {
   const pips = COLORS.filter(k => c.cost[k] > 0).map(k => `<span class="pip g-${k}">${c.cost[k]}</span>`).join('');
   const label = `Level ${ROMAN[c.level - 1]} ${GEM_NAME[c.color]} card, ${c.points} prestige. Costs ${COLORS.filter(k => c.cost[k]).map(k => `${c.cost[k]} ${GEM_NAME[k]}`).join(', ')}`;
   const tag = o.act ? 'button' : 'div';
-  const attrs = o.act ? ` data-act="${o.act}" ${o.data || ''} aria-label="${esc(label)}"` : ` role="img" aria-label="${esc(label)}"`;
+  const attrs = o.act ? ` data-act="${o.act}" ${o.data || ''} aria-label="${esc(label)}${o.buyable ? '. You can buy this card now.' : ''}"` : ` role="img" aria-label="${esc(label)}"`;
   return `<${tag} class="card g-${c.color}${o.buyable ? ' buyable' : ''}${o.fresh ? ' fresh' : ''}${o.ribbon ? ' pv' : ''}"${attrs}>
     <span class="band"><span class="pts">${c.points || ''}</span><span class="medal">${gemSVG(c.color)}</span></span>
     <span class="scene">${SCENES[c.level - 1]}</span>
     <span class="cost">${pips}</span>
+    ${o.buyable ? '<span class="afford-label">✓ Buy now</span>' : ''}
     ${o.ribbon ? `<span class="ribbon">${o.ribbon}</span>` : ''}
   </${tag}>`;
 }
@@ -486,7 +487,7 @@ function marketRow(lv, me) {
   const slots = G.market[lv].map((id, i) => (id == null
     ? '<div class="slot empty" aria-label="Empty space"></div>'
     : cardHTML(id, { act: 'mk', data: `data-lv="${lv}" data-i="${i}"`, buyable: me && payment(me, CARDS[id]), fresh: ui.fresh === `${lv}-${i}`, ribbon: ribbonAt(i) }))).join('');
-  return `<div class="five">${deck}${slots}</div>`;
+  return `<section class="market-tier" aria-label="Level ${ROMAN[lv]} development cards"><div class="tier-label"><span>Level ${ROMAN[lv]} · ${['Mines', 'Trade routes', 'Merchant houses'][lv]}</span><span>${lv === 0 ? 'Build your bonuses' : lv === 1 ? 'Grow your trade' : 'Earn prestige'}</span></div><div class="five">${deck}${slots}</div></section>`;
 }
 
 function bankHTML() {
@@ -532,7 +533,7 @@ function barHTML(withRecap = true) {
     if (!legalMoves(G, G.cur).length) return `<div class="bar" aria-live="polite"><div class="status">${status}</div>${last}<div class="pickrow"><span class="last">You have no legal move this turn.</span><span class="spacer"></span><button class="btn small primary" data-act="pass">Pass</button></div></div>`;
     pick = `<div class="pickrow">${chips}<span class="last">${tip}</span><span class="spacer"></span>
       ${ui.sel.length ? '<button class="btn small ghost" data-act="clear">Clear</button>' : ''}
-      <button class="btn small primary" data-act="take" ${m ? '' : 'disabled'}>Take gems</button></div>`;
+      <button class="btn small primary" data-act="take" ${m ? '' : 'disabled'}>Take${ui.sel.length ? ' ' + ui.sel.length : ''} gems</button></div>`;
   }
   const net = !ON.active ? '' : [
     ON.msg ? `<div class="hint">${esc(ON.msg)}</div>` : '',
@@ -591,7 +592,7 @@ function playerHTML(p, i, vi) {
       <div class="pl-who"><div class="pl-name">${turn ? '<span class="turn-dot" aria-hidden="true"></span>' : ''}${ON.active && safeColor(p.color) ? `<span class="cdot" style="background:${safeColor(p.color)}" aria-hidden="true"></span>` : ''}${esc(p.name)}</div><div class="pl-kind">${kindLabel(p)}</div></div>
       <div class="pl-pts"><b>${p.pts}</b><span>prestige</span></div>
     </div>
-    <div class="pl-gems" aria-label="Bonuses (cards) and tokens">${gems}</div>
+    <div class="prestige-track" role="progressbar" aria-label="${esc(p.name)} prestige towards 15" aria-valuemin="0" aria-valuemax="15" aria-valuenow="${Math.min(15, p.pts)}"><span style="width:${Math.min(100, p.pts / 15 * 100)}%"></span></div><div class="ledger-key"><span>Cards = permanent discounts</span><span>Circles = spendable gems</span></div><div class="pl-gems" aria-label="Bonuses (cards) and tokens">${gems}</div>
     <div class="pl-meta"><span class="${tc > TOKEN_LIMIT ? 'over' : ''}">${tc}/${TOKEN_LIMIT} tokens</span><span>${p.cards.length} cards</span><span>${p.reserved.length}/${MAX_RESERVED} reserved</span></div>
     ${p.reserved.length ? `<div class="pl-res"><span class="label">Reserved</span>${res}</div>` : ''}
     ${p.nobles.length ? `<div class="pl-nobles">${p.nobles.map(n => nobleHTML(n)).join('')}</div>` : ''}
@@ -619,14 +620,15 @@ function renderGame() {
   const nobleRow = phone
     ? `<div class="nobles-strip"><span class="label">Nobles · 3 prestige each</span><div class="nobles-row nchips" aria-label="Nobles">${G.nobles.map(n => nobleChipHTML(n, isNear(n))).join('')}</div></div>`
     : `<div class="five nobles-row" aria-label="Nobles">${nobleSlots}</div>`;
-  // Phones: your hand sits right under the bank, then what others did, then their hands.
-  const summary = phone ? lastMoveHTML() : '';
+  const actionDock = `<section class="action-dock" aria-label="Your turn and gem bank"><div class="dock-heading"><span class="label">Gem bank</span><span class="last">Gold comes with a reservation</span></div>${bankHTML()}${barHTML(false)}</section>`;
+  // Keep every move control beside the market on laptops and before it on phones.
+  const summary = lastMoveHTML();
   const side = phone
     ? `${vi >= 0 ? `<div class="players">${playerHTML(G.players[vi], vi, vi)}</div>` : ''}
        ${summary ? `<section class="bar recap-card" aria-live="polite">${summary}</section>` : ''}
        <div class="players">${G.players.map((p, i) => (i === vi ? '' : playerHTML(p, i, vi))).join('')}</div>
        ${logHTML()}`
-    : `<div class="players">${G.players.map((p, i) => playerHTML(p, i, vi)).join('')}</div>${logHTML()}`;
+    : `${summary ? `<section class="bar recap-card">${summary}</section>` : ''}<div class="players">${G.players.map((p, i) => playerHTML(p, i, vi)).join('')}</div>${logHTML()}`;
   return `<header class="top">
       <span class="wordmark">Splendor</span>
       <span class="round">Round ${G.round}${ON.active ? `<span class="roomcode"> · Room ${fmtCode(ON.code)}</span>` : ''}</span>
@@ -637,13 +639,12 @@ function renderGame() {
       ${HubKit.buttonHTML()}
     </header>
     <main class="table">
-      <section class="board" aria-label="Market">
+      ${phone ? actionDock : ''}
+      <section class="board" aria-label="Market"><div class="market-heading"><h2>Development market</h2><span>Gold outline = you can buy</span></div>
         ${nobleRow}
         ${[2, 1, 0].map(lv => marketRow(lv, me)).join('')}
-        ${bankHTML()}
-        ${barHTML(!phone)}
       </section>
-      <aside class="side">${side}</aside>
+      <aside class="side">${phone ? '' : actionDock}<div class="ledger-heading"><h2>Merchant houses</h2><span>Race to 15 prestige</span></div>${side}</aside>
     </main>
     ${overlays()}`;
 }
@@ -777,8 +778,29 @@ function overlays() {
   return '';
 }
 
+let returnFocus = null;
+function focusKey(el) {
+  return el && el.dataset && el.dataset.act ? Object.entries(el.dataset).filter(([key]) => key !== 'rj') : null;
+}
+function restoreFocus(key, scope) {
+  if (!key) return false;
+  const match = Array.from(scope.querySelectorAll('[data-act]')).find(el => key.every(([k, v]) => el.dataset[k] === v));
+  if (!match || match.disabled) return false;
+  match.focus({ preventScroll: true }); return true;
+}
 function render() {
+  const oldDialog = app.querySelector('[role="dialog"]');
+  const focused = focusKey(document.activeElement);
+  if (!oldDialog && (ui.modal || ui.rules || ui.confirmNew)) returnFocus = focused;
   app.innerHTML = ui.screen === 'setup' ? renderSetup() : ui.screen === 'online' ? renderConnecting() : renderGame();
+  const dialog = app.querySelector('[role="dialog"]');
+  if (dialog) {
+    // The dialog is a sibling of the game surface, so the rest can be inert.
+    Array.from(app.children).filter(el => !el.classList.contains('scrim')).forEach(el => { el.inert = true; });
+    dialog.tabIndex = -1;
+    if (!oldDialog || !restoreFocus(focused, dialog)) (dialog.querySelector('button:not(:disabled), input, [tabindex="0"]') || dialog).focus({ preventScroll: true });
+  } else if (oldDialog) { restoreFocus(returnFocus, app); returnFocus = null; }
+  else restoreFocus(focused, app);
   ui.fresh = null;
   HubKit.setFloating(ui.screen !== 'game');
   if (ON.active) { ON.shownPending = ON.pending; signals(); if (ON.deferred && !drafting()) queueMicrotask(flushDeferred); }
@@ -1277,6 +1299,14 @@ if (window.matchMedia) {
 }
 
 document.addEventListener('keydown', e => {
+  const dialog = app.querySelector('[role="dialog"]');
+  if (dialog && e.key === 'Tab') {
+    const controls = Array.from(dialog.querySelectorAll('button:not(:disabled), input, a[href], [tabindex="0"]'));
+    const first = controls[0], last = controls[controls.length - 1];
+    if (!first) { e.preventDefault(); dialog.focus(); }
+    else if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
   if (e.key === 'Escape' && (ui.modal || ui.rules || ui.confirmNew)) { ui.modal = null; ui.rules = false; ui.confirmNew = false; render(); }
 });
 

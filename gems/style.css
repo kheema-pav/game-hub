@@ -375,3 +375,70 @@ button.card:hover { transform: translateY(-2px); }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   button.card:hover, .tok-btn:hover .chip { transform: none !important; }
 }
+
+/* A jewel merchant's table, with the bank within reach of the market. */
+body {
+  background-image: radial-gradient(ellipse at 18% 0%, color-mix(in srgb, var(--gilt) 9%, transparent), transparent 60%),
+    repeating-linear-gradient(110deg, transparent 0 3px, #80978004 3px 4px);
+}
+.top { border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.market-heading, .ledger-heading, .dock-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+.market-heading h2, .ledger-heading h2 { font-family: var(--f-display); font-size: 16px; letter-spacing: .03em; }
+.market-heading>span, .ledger-heading>span { color: var(--muted); font-size: 12px; }
+.market-tier { display: grid; gap: 7px; min-width: 0; }
+.tier-label { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); }
+.tier-label span:first-child { font-weight: 700; letter-spacing: .03em; }
+.action-dock { background: var(--raised); border: 1px solid var(--line); border-top: 3px solid var(--gilt); border-radius: 16px; padding: 16px; display: grid; gap: 14px; box-shadow: var(--shadow); }
+.action-dock .bar { background: transparent; padding: 0; border: 0; border-radius: 0; gap: 8px; }
+.action-dock .status { font-size: 15px; }
+.action-dock .bank { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.action-dock .chip { --size: 42px; }
+.action-dock .tok-btn { min-width: 0; padding: 3px 0; border-radius: 8px; }
+.action-dock .tok-btn .nm { font-size: 9px; letter-spacing: 0; }
+.action-dock .pickrow .chip { --size: 36px; }
+.action-dock .picked { background: var(--ink); color: var(--raised); }
+.action-dock .tok-btn:has(.picked) { background: var(--gilt-soft); box-shadow: 0 0 0 2px var(--gilt); }
+.action-dock .pickrow .last { flex-basis: 100%; font-size: 13px; }
+.action-dock .btn { min-height: 44px; }
+.action-dock .pickrow>.btn.primary { margin-left: auto; }
+.action-dock .dock-heading .last { font-size: 11px; }
+.afford-label { position: absolute; right: 4cqw; top: 34%; padding: 2cqw 4cqw; border-radius: 999px; background: #234a35; color: #fff9e9; font-weight: 700; font-size: 10cqw; line-height: 1.2; box-shadow: 0 1px 3px #0002; }
+.card.buyable { box-shadow: 0 0 0 2px var(--gilt), 0 4px 14px #0002; }
+.card .scene { opacity: .62; }
+.card:hover .scene { opacity: .85; }
+.prestige-track { height: 5px; overflow: hidden; border-radius: 4px; background: var(--line); }
+.prestige-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #a87921, #e0bc65); transition: width .25s; }
+.ledger-key { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 3px; color: var(--muted); font-size: 10px; }
+.dialog .btn { min-height: 44px; }
+.pl-pts span { font-size: 10px; }
+@media (min-width: 900px) {
+  .table { grid-template-columns: minmax(0, 720px) minmax(340px, 1fr); gap: 24px; }
+  .top, .table { max-width: 1240px; }
+  .nobles-row { grid-template-columns: repeat(5, minmax(0, 90px)); justify-content: start; gap: 12px; }
+  .side { max-height: calc(100dvh - 32px); overflow-y: auto; scrollbar-width: thin; padding: 3px 5px 12px 3px; }
+  .board .five .card, .board .five .deck, .board .five .slot { aspect-ratio: 5 / 6.5; }
+  .board .card .cost { gap: 2cqw; }
+  .board .card .pip { width: 19cqw; height: 19cqw; font-size: 13cqw; }
+}
+@media (max-width: 899px) {
+  .table { max-width: 680px; gap: 16px; }
+  .action-dock { padding: 12px; gap: 10px; }
+  .action-dock .chip { --size: clamp(36px, 10vw, 48px); }
+  .action-dock .pickrow { gap: 6px; }
+  .action-dock .pickrow .last { flex: 1; min-width: 135px; font-size: 12px; }
+  .action-dock .pickrow .spacer { display: none; }
+  .market-heading h2 { font-size: 14px; }
+  .market-heading>span { font-size: 11px; }
+  .tier-label { font-size: 10px; gap: 6px; }
+  .board { gap: 10px; }
+  .ledger-key { font-size: 11px; }
+  .nobles-strip { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 8px; }
+  .nobles-strip .label { font-size: 10px; }
+}
+@media (max-width: 380px) {
+  body { padding-inline: 10px; }
+  .action-dock { padding: 10px; }
+  .action-dock .chip { --size: 36px; }
+  .top .wordmark { font-size: 23px; }
+  .market-heading>span { font-size: 10px; }
+}

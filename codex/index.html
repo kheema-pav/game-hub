@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="style.css"><link rel="manifest" href="../manifest.webmanifest"><link rel="apple-touch-icon" href="../icons/icon-180.png"></head><body>
+<!doctype html><html lang="en"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="style.css"><link rel="manifest" href="../manifest.webmanifest"><link rel="apple-touch-icon" href="../icons/icon-180.png"></head><body>
 <title>Codex Naturalis</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,18 +29,20 @@
     <div class="boardbar">
       <h2 id="boardTitle">Your codex</h2>
       <div class="resstrip" id="resStrip" aria-label="Visible symbols"></div>
-      <div class="zoom"><button class="btn" data-act="zout" aria-label="Zoom out">−</button><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="center">Center</button></div>
+      <div class="zoom"><button class="btn" data-act="zout" aria-label="Zoom out">−</button><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="center">Center</button><button class="btn" data-act="fit">Fit</button></div>
     </div>
-    <div class="board-scroll" id="boardScroll"><div class="board-inner" id="board"></div></div>
+    <div class="turn-guide"><span id="turnStep" class="turn-step"></span><div class="prompt" id="prompt" role="status" aria-live="polite" aria-atomic="true"></div></div>
+    <div class="board-scroll" id="boardScroll" tabindex="0" aria-label="Codex board. Drag to pan, or use the zoom controls."><div class="board-inner" id="board"></div></div>
   </main>
+  <nav class="dock-nav" aria-label="Game tools"><button data-act="dock" data-panel="hand" aria-pressed="true">Your hand</button><button data-act="dock" data-panel="market" aria-pressed="false">Market</button><button data-act="dock" data-panel="objectives" aria-pressed="false">Objectives</button></nav>
   <section class="handwrap" aria-label="Hand">
-    <div class="prompt" id="prompt"></div>
+    <div class="hand-heading"><h2>Your hand</h2><span>Choose a card, then a corner on the board</span></div>
     <div class="hand" id="hand"></div>
   </section>
   <aside class="side">
     <section id="marketSec"><h2>Market <small id="deckInfo"></small></h2><div id="market"></div></section>
-    <section><h2>Objectives</h2><div id="objectives"></div></section>
-    <section><h2>Chronicle</h2><ol id="log"></ol></section>
+    <section id="objectivesSec"><h2>Objectives</h2><div id="objectives"></div></section>
+    <section class="chronicle"><h2>Chronicle</h2><ol id="log"></ol></section>
   </aside>
 </div>
 <div class="modal-back" id="modal" hidden><div class="modal" id="modalBody" role="dialog" aria-modal="true"></div></div>

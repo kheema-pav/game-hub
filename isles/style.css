@@ -223,3 +223,57 @@ button.hk-menu-btn.isl-menu { align-self: flex-start; color: var(--ink); }
   .rcard .art { height: 40px; }
   .devbtn { max-width: none; }
 }
+
+/* A readable tabletop: keep the island visible while choosing the next move. */
+.board-wrap { background: radial-gradient(ellipse at 46% 42%, #2c8b9d 0%, #15536f 58%, #0b3046 100%); box-shadow: inset 0 0 100px #031d3533; }
+.pchip { box-shadow: inset 0 1px #ffffff0d, 0 3px 10px #00000012; }
+.pchip.turn { box-shadow: inset 0 1px #ffffff26, 0 0 0 1px var(--pc); }
+.dock { background: linear-gradient(160deg, #153b4c, #102d40); }
+.prompt { line-height: 1.45; padding: 2px 0 6px; }
+.prompt small { display: block; font-size: .8rem; }
+.rcard { border: 1px solid #fff4d74d; box-shadow: 0 3px 0 #00000022, 0 5px 12px #00000010; }
+.rcard .res-name { color: #5a4934; font-size: .6rem; font-weight: 800; line-height: 1.2; text-align: center; padding-top: 4px; }
+.rcard .ct { padding-bottom: 3px; }
+.rcard.zero { opacity: .6; }
+.act { min-height: 66px; border: 1px solid #ffffff0d; box-shadow: inset 0 1px #ffffff08; }
+.act:not(:disabled):hover { background: #235c73; }
+.act.on:hover { background: var(--gold); }
+.act .cost { gap: 3px; }
+.act .cost i { width: 9px; height: 9px; box-shadow: 0 0 0 1px #ffffff30; }
+.board-guide { margin: 0; padding: 10px 12px; border-radius: 10px; background: #0a223180; border: 1px solid #8db9be25; color: #c4dbe1; font-size: .8rem; line-height: 1.5; }
+.cost-help { align-self: flex-start; background: none; border: none; color: #bcd4df; font-size: .82rem; font-weight: 700; min-height: 40px; padding: 4px 2px; text-decoration: underline; text-underline-offset: 4px; }
+.cost-help span { margin-left: 6px; }
+.zoom { gap: 5px; }
+.zoom button { width: 44px; height: 44px; border: 1px solid #b6deef33; box-shadow: 0 2px 8px #00000018; }
+.zoom button:hover { background: #174b62; }
+.ticker { right: 66px; }
+.spot:focus-visible, .hl-hex:focus-visible { outline: none; filter: drop-shadow(0 0 .08px #ffdc74); }
+.spot:focus-visible .spot-v { r: .22; fill: #ffdc74; stroke: #fff; animation: none; }
+.spot:focus-visible .spot-e line:last-child { stroke: #ffdc74; stroke-width: .22; animation: none; }
+.hl-hex:focus-visible { stroke: #ffdc74; stroke-width: .14; animation: none; }
+@media (min-width:900px) and (min-aspect-ratio:1/1) {
+  #game { grid-template-columns: minmax(0, 1fr) 370px; }
+  .topbar { padding: 18px 18px 12px; }
+  .dock { gap: 16px; padding: 8px 18px 20px; overflow-y: auto; min-height: 0; }
+  .pchip { padding: 10px; }
+  .pchip .nm { font-size: .9rem; }
+  .pchip .vp { font-size: 1.5rem; margin: 4px 0; }
+  .prompt { font-family: var(--font-display); font-size: 1.2rem; font-weight: 500; padding-bottom: 4px; }
+  .rcard .art { height: 44px; }
+  .rcard .res-name { font-size: .65rem; }
+  .rcard .ct { font-size: 1.4rem; }
+  .act { min-height: 78px; padding: 10px 2px; }
+  .act .lb { font-size: .8rem; }
+  .board-guide { font-size: .9rem; padding: 14px; }
+}
+@media (max-width:899px) {
+  .dock { max-height: 48dvh; overflow-y: auto; }
+  .board-wrap { min-height: 170px; }
+}
+@media (max-height:600px) and (orientation:landscape) {
+  #game { grid-template-columns: minmax(0,1fr) 300px; grid-template-rows: auto minmax(0,1fr); grid-template-areas: "board top" "board dock"; }
+  .dock { max-height: none; min-height: 0; overflow-y: auto; }
+  .topbar { padding: 8px; }
+  .players { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
+  .pchip .meta { display: none; }
+}

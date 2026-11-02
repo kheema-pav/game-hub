@@ -77,7 +77,7 @@ test('sketch: an invitation and continue take precedence over a mode',()=>{
 for(const mode of ['local','online'])test(`sketch: ${mode} setup edits preserve the previous save until Start`,()=>{
  const text=source('sketch');
  const elements=new Map();
- const get=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',value:'',dataset:{}});return elements.get(id)};
+ const get=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',value:'',dataset:{},classList:{toggle(){}},focus(){}});return elements.get(id)};
  const timerButton={dataset:{secs:'90'}},roundsButton={dataset:{rounds:'5'}};
  const previous='previous in-progress game';
  const storage=new Map([['pictionary.save.v1',previous]]);

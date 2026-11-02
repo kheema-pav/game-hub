@@ -49,18 +49,20 @@ function render(noClear){
   if(ON.active)return;
   const a=$("app"), cur=S.turn%S.teams.length, name=esc(S.teams[cur]||"");
   let h="";
+  a.dataset.screen=S.screen;
   if(S.screen==="setup"){
-    h=`<div><h1>Pen &amp; Paper Pictionary</h1><p class="muted">One phone for words and the clock. Draw on paper.</p></div>
-    <div class="card"><span class="label">Teams</span>
+    h=`<header class="sk-intro"><span class="sk-sticker" aria-hidden="true">✎</span><span class="label">A little imagination. A lot of laughter.</span><h1>Pen &amp; Paper<br>Pictionary</h1><p class="muted">Draw something brilliant. Or brilliantly bad.</p></header>
+    <div class="sk-modes"><div><b>At the table</b><span>One phone + paper · 2–4 teams</span></div>${onlineAvailable()?'<a href="#ocard"><b>Play online ↗</b><span>Draw on screen · 2–8 players</span></a>':''}</div>
+    <div class="card"><span class="label">1 · Name your teams</span>
       ${S.teams.map((t,i)=>`<div class="teamin"><span class="dot" style="background:${COLORS[i]}"></span><input id="t${i}" value="${esc(t)}" maxlength="20" aria-label="Team ${i+1} name"></div>`).join("")}
       <div class="row">${S.teams.length<4?'<button id="addT">Add team</button>':''}${S.teams.length>2?'<button id="delT">Remove last</button>':''}</div>
     </div>
-    <div class="card"><span class="label">Drawing time</span>
+    <div class="card"><span class="label">2 · Set the pace</span><span class="tiny muted">Drawing time per turn</span>
       <div class="seg">${[45,60,90].map(v=>`<button data-secs="${v}" aria-pressed="${S.secs===v}">${v}s</button>`).join("")}</div>
       <span class="label">Turns per team</span>
       <div class="seg">${[2,3,5].map(v=>`<button data-rounds="${v}" aria-pressed="${S.rounds===v}">${v}</button>`).join("")}</div>
     </div>
-    <button class="primary" id="start">Start game</button>
+    <button class="primary" id="start">Start game</button><p class="sk-estimate">${S.teams.length*S.rounds} turns · about ${Math.ceil(S.teams.length*S.rounds*S.secs/60)} minutes of drawing</p>
     <p class="muted tiny">Each team gets one word per turn. Guess it before time runs out to score a point. One skip per turn.</p>
     ${S.notice?`<p class="notice" role="status">${esc(S.notice)}</p>`:''}${onlineCardHTML()}`;
   }
@@ -72,15 +74,15 @@ function render(noClear){
   }
   else if(S.screen==="secret"){
     h=`${status()}<div class="stage big"><span class="label">${name} · drawer only</span>
-    <div class="wordbox ${S.reveal?'':'hidden-word'}">${S.reveal
+    <button type="button" id="reveal-word" class="wordbox ${S.reveal?'':'hidden-word'}" aria-label="${S.reveal?'Hide secret word':'Reveal secret word'}">${S.reveal
       ?`<span class="cat">${esc(S.word.c)}</span><span class="word">${esc(S.word.w)}</span>`
-      :`<span class="word">Tap to reveal</span><span class="cat">Hidden from the team</span>`}</div>
+      :`<span class="word">Tap to reveal</span><span class="cat">Drawer only. Keep it secret!</span>`}</button>
     ${S.reveal?`<div class="row"><button id="skip" ${S.skipsLeft?'':'disabled'}>${S.skipsLeft?'Skip word (1 left)':'No skips left'}</button><button id="hide">Hide</button></div>`:''}</div>
     <button class="primary" id="go" ${S.reveal?'':'disabled style="opacity:.5"'}>Start the clock</button>`;
   }
   else if(S.screen==="draw"){
     h=`${status()}<div class="stage"><span class="label big">${name} is drawing</span>
-    <div class="timer" id="tm"></div><div class="bar"><i id="bar"></i></div>
+    <div class="sk-clock-state" role="status">${S.paused?'Clock paused · take your time':'Draw! No letters, numbers or talking.'}</div><div class="timer" id="tm" role="timer" aria-label="Time remaining"></div><div class="bar"><i id="bar"></i></div>
     <div class="wordbox ${S.reveal?'':'hidden-word'}" id="wb"></div>
     <div class="row"><button id="peek">${S.reveal?'Hide word':'Show word'}</button><button id="skip" ${S.skipsLeft?'':'disabled'}>Skip${S.skipsLeft?' (1)':''}</button></div></div>
     <div class="row"><button id="pause">${S.paused?'Resume':'Pause'}</button><button class="good" id="got">Guessed it</button></div>`;
@@ -102,6 +104,7 @@ function render(noClear){
     <div class="row"><button id="again" class="primary">Play again</button><button id="setup">Change teams</button></div>`;
   }
   if(S.screen==="setup"||S.screen==="final")h='<div class="fl"></div>'+h;
+  a.classList.toggle("clock-paused",S.screen==="draw"&&S.paused);
   a.innerHTML=h; bind(); paint();
   try{HubKit.setFloating(S.screen==="setup"||S.screen==="final")}catch(e){}
   if(!noClear){if(S.screen==="setup"||S.screen==="final")clearSave();else save()}
@@ -146,6 +149,8 @@ function paint(){
   const tm=$("tm"); if(!tm)return;
   tm.textContent=`${Math.floor(S.left/60)}:${String(S.left%60).padStart(2,"0")}`;
   tm.classList.toggle("low",S.left<=10);
+  $("app").classList.toggle("clock-paused",S.paused);
+  $("bar").classList.toggle("low",S.left<=10);
   $("bar").style.width=(S.left/S.secs*100)+"%";
   const wb=$("wb");
   wb.className="wordbox "+(S.reveal?"":"hidden-word");
@@ -159,8 +164,7 @@ function bind(){
   document.querySelectorAll("[data-secs]").forEach(b=>b.onclick=()=>{S.secs=+b.dataset.secs;render(true)});
   document.querySelectorAll("[data-rounds]").forEach(b=>b.onclick=()=>{S.rounds=+b.dataset.rounds;render(true)});
   on("start",startGame); on("ready",beginDraw);
-  const wb=document.querySelector(".wordbox.hidden-word");
-  if(wb&&S.screen==="secret")wb.onclick=()=>{S.reveal=true;render()};
+  on("reveal-word",()=>{S.reveal=!S.reveal;render();$("reveal-word").focus({preventScroll:true})});
   on("hide",()=>{S.reveal=false;render()});
   on("go",()=>{if(S.reveal){sfx("tap");S.reveal=false;startTimer()}});
   on("skip",skip);
@@ -518,6 +522,7 @@ function buildStatic(key){
   else if(key.startsWith("play:")){
     h=playHTML();
   }
+  a.dataset.screen=key.startsWith("play:")?"online-play":"online-"+key.split(":")[0];
   a.innerHTML=h;
   a.onclick=onAppClick;
   if(key.startsWith("play:"))setupPlay();
@@ -540,13 +545,13 @@ function playHTML(){
   return `<div class="play ${mine?'is-drawer':'is-guesser'}" id="play">
     <div class="phead"><div class="pwho"><span class="label" id="plab"></span><b id="pname"></b></div><span class="ptimer" id="tm" role="timer" aria-label="Time left">0:00</span>${HubKit.buttonHTML()}</div>
     <div class="bar"><i id="bar"></i></div>
-    ${mine?'<div class="pword" id="pword"></div>':''}
+    ${mine?'<div class="pword" id="pword"></div>':'<div class="pword sk-guess-prompt"><div class="pw"><span class="cat">Watch the sketch</span><span class="word">Any bright ideas?</span><span class="tiny">First correct guess scores 2 points.</span></div></div>'}
     <div class="cbox" id="cbox"><div class="cwrap"><canvas id="cv" aria-label="${mine?'Your drawing':'The drawing'}"></canvas></div></div>
-    ${mine?`<div class="tools">
+    ${mine?`<div class="tools"><span class="label sk-tool-label">Your pencil case</span>
       <div class="trow" role="group" aria-label="Pen colour and eraser">${PEN.map((c,i)=>`<button type="button" class="sw" data-oa="pen" data-v="${i}" style="--c:${c}" aria-label="${PEN_NAMES[i]}" aria-pressed="false"></button>`).join("")}<button type="button" class="sw er" data-oa="pen" data-v="6" aria-label="Eraser" aria-pressed="false">Erase</button></div>
-      <div class="trow"><span class="trow" role="group" aria-label="Pen size" style="flex:3">${[6,12,20].map((d,i)=>`<button type="button" class="tb" data-oa="size" data-v="${i}" aria-label="Size ${i+1}" aria-pressed="false"><i style="width:${d}px;height:${d}px"></i></button>`).join("")}</span>
+      <div class="trow"><span class="trow" role="group" aria-label="Pen size" style="flex:3">${[6,12,20].map((d,i)=>`<button type="button" class="tb" data-oa="size" data-v="${i}" aria-label="${['Fine','Medium','Thick'][i]} pen" title="${['Fine','Medium','Thick'][i]} pen" aria-pressed="false"><i style="width:${d}px;height:${d}px"></i></button>`).join("")}</span>
         <button type="button" class="tb" data-oa="undo">Undo</button><button type="button" class="tb" data-oa="clear">Clear</button></div></div>`:''}
-    <div class="feed" id="feed" aria-live="polite"></div>
+    <div class="sk-feed-wrap"><span class="label sk-tool-label">The guessing gallery</span><div class="feed" id="feed" aria-live="polite"></div></div>
     ${mine?'':`<form class="gform" id="gform" autocomplete="off"><input id="gi" type="text" maxlength="40" enterkeyhint="send" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Type your guess" aria-label="Your guess"><button class="primary" type="submit">Guess</button></form>`}
   </div>`;
 }
@@ -567,7 +572,7 @@ function paintPlay(){
   // the feed: wrong guesses only (a matching guess is hidden at once, on every phone)
   const lines=c.guesses.filter(g=>!g.match).slice(-4).map(g=>`<div class="${g.uid===ON.uid?'me':''}"><b>${esc(D.names[g.uid])}</b> ${esc(g.text)}</div>`);
   if(!mine&&ON.gnote&&ON.gnote.t===c.t)lines.push(`<div class="ok">${esc(ON.gnote.msg)}</div>`);
-  if(mine&&!lines.length)lines.push('<div class="me">Waiting for guesses…</div>');
+  if(!lines.length)lines.push(mine?'<div class="me">Your audience is thinking…</div>':'<div class="me">See something? Make a guess below.</div>');
   const f=lines.join("");
   if(f!==DRW.fsig){DRW.fsig=f;$("feed").innerHTML=f}
 }
@@ -602,8 +607,11 @@ function teardownPlay(){
 }
 function syncVV(){
   const vv=window.visualViewport,r=document.documentElement.style;
-  r.setProperty("--vvh",(vv?vv.height:window.innerHeight)+"px");
+  const height=vv?vv.height:window.innerHeight;
+  r.setProperty("--vvh",height+"px");
   r.setProperty("--vvt",(vv?vv.offsetTop:0)+"px");
+  // A phone keyboard shrinks the visual viewport without changing CSS media queries.
+  document.documentElement.classList.toggle("compact-play",height<600);
 }
 if(window.visualViewport){visualViewport.addEventListener("resize",syncVV);visualViewport.addEventListener("scroll",syncVV)}
 window.addEventListener("resize",syncVV);

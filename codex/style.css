@@ -262,3 +262,87 @@ a.btn.primary{color:var(--accent-fg)}
   .players[data-n="4"] .pchip small{display:none}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* A botanical field desk: the board stays in view while the tools change. */
+#app{min-height:560px}
+.top{background:linear-gradient(110deg,var(--panel),var(--panel-2));box-shadow:0 2px 12px #1520170a;position:relative;z-index:2}
+.brand h1{font-size:1.85rem}
+.boardbar{background:color-mix(in srgb,var(--panel) 75%,transparent)}
+.btn,.segb,.tab{min-height:40px;box-sizing:border-box}
+.zoom .btn{min-width:40px;min-height:36px}
+.pchip{border-radius:12px;transition:background .15s,box-shadow .15s}
+.pchip.turn .dot{box-shadow:0 0 0 3px color-mix(in srgb,var(--pc) 18%,transparent)}
+.turn-guide{display:flex;align-items:flex-start;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--rule);min-height:42px;box-sizing:border-box}
+.turn-step{flex:none;padding:4px 8px;border-radius:7px;background:var(--accent-wash);color:var(--accent);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;font-weight:700;line-height:1.5}
+.prompt{font-size:.95rem;align-self:center;gap:3px 8px}
+.prompt strong{font-size:1.08rem}
+.board-scroll{background-image:radial-gradient(ellipse at 45% 30%,color-mix(in srgb,var(--panel) 45%,transparent),transparent 70%),radial-gradient(var(--table-dot) 1px,transparent 1.3px);background-size:100% 100%,20px 20px;box-shadow:inset 0 4px 16px #15201708}
+.hand-heading{display:flex;align-items:baseline;gap:12px;color:var(--muted)}
+.hand-heading h2{font:1.05rem var(--f-display);font-weight:400;color:var(--ink);margin:0}
+.hand-heading span{font-size:.82rem}
+.hand{padding:8px 5px 5px;gap:22px}
+.hslot{gap:5px}
+.card-caption{font-size:.75rem;color:var(--muted)}
+.flip{min-height:32px;padding:4px 12px;border-radius:16px}
+.side{gap:22px}
+#marketSec{padding:12px;margin:-4px -8px;border:1px solid transparent;border-radius:12px;transition:background .2s,border-color .2s}
+#marketSec.ready-to-draw{background:var(--accent-wash);border-color:var(--accent)}
+#marketSec.ready-to-draw h2::after{content:"Choose one";font:700 .72rem var(--f-body);color:var(--accent)}
+#marketSec.ready-to-draw h2 small{display:none}
+.mk.live:not(:disabled){outline:2px solid var(--accent);outline-offset:3px}
+.mk.live:not(:disabled):hover,.mk.live:not(:disabled):focus-visible{box-shadow:0 5px 14px var(--shadow)}
+.dock-nav{display:none}
+@media (max-width:860px){
+  html,body{height:100%;height:100dvh;overflow:hidden}
+  #app{height:100%;min-height:0;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(155px,1fr) 44px 224px;grid-template-areas:"top" "board" "nav" "dock"}
+  .top{padding:8px 12px;gap:8px}
+  .brand h1{font-size:1.45rem}
+  .brand span{font-size:.7rem}
+  .players{gap:6px}
+  .pchip{min-width:0;min-height:42px;padding:5px 8px;border-radius:8px}
+  .pchip .bar{height:3px}
+  .pchip .pname{font-size:.86rem}
+  .pchip .pscore{font-size:1.15rem}
+  .boardwrap{height:auto;min-height:0}
+  .boardbar{gap:5px 8px;padding:6px 12px}
+  .boardbar h2{font-size:1rem}
+  .boardbar .resstrip{order:3;flex:1 1 100%;gap:4px}
+  .rc{font-size:.8rem;padding:1px 5px 1px 2px}
+  .rc .ic{width:16px;height:16px}
+  .zoom .btn{min-height:32px;min-width:34px;font-size:.8rem}
+  .turn-guide{padding:8px 12px;gap:8px;max-height:100px;overflow:auto;flex-shrink:0}
+  .turn-step{font-size:.63rem;padding:4px 6px}
+  .prompt{font-size:.85rem;line-height:1.3}
+  .prompt strong{font-size:.98rem}
+  .prompt .hint{font-size:.8rem}
+  .prompt .btn{min-height:32px;font-size:.85rem}
+  .dock-nav{grid-area:nav;display:flex;background:var(--panel);border-block:1px solid var(--rule);padding:0 12px;gap:6px}
+  .dock-nav button{flex:1;background:transparent;border:0;border-bottom:3px solid transparent;cursor:pointer;font-weight:700;font-size:.85rem;color:var(--muted);min-height:44px;padding:7px 6px}
+  .dock-nav button[aria-pressed=true]{border-bottom-color:var(--accent);color:var(--accent);background:var(--accent-wash)}
+  .handwrap{grid-area:dock;display:none;overflow:auto;padding:10px 12px max(10px,env(safe-area-inset-bottom));border:0;gap:4px}
+  .hand-heading span{display:none}
+  .hand{gap:15px;min-height:0;overflow:visible;align-items:flex-start}
+  .hcard{font-size:8.7px}
+  .hslot{gap:4px}
+  .flip{min-height:36px}
+  .warn{max-width:104px;font-size:.7rem}
+  .side{display:contents}
+  #marketSec,#objectivesSec{display:none;grid-area:dock;overflow:auto;box-sizing:border-box;padding:10px 14px max(12px,env(safe-area-inset-bottom));margin:0;background:var(--panel);border:0;border-radius:0}
+  #marketSec h2,#objectivesSec h2{font-size:1.05rem;margin:0 0 4px}
+  #marketSec h3{font-size:.64rem;margin:7px 0 5px}
+  #marketSec.ready-to-draw{border:0;background:var(--panel)}
+  .mrow{grid-template-columns:repeat(3,1fr);gap:12px;justify-items:center}
+  .mk{font-size:7.6px}
+  .side .chronicle{display:none}
+  #app[data-dock=hand] .handwrap{display:flex}
+  #app[data-dock=market] #marketSec{display:block}
+  #app[data-dock=objectives] #objectivesSec{display:block}
+  .ohint{font-size:.8rem;margin:4px 0 8px}
+  .modal-back{padding:12px}
+  .modal{padding:18px;border-radius:16px;box-sizing:border-box}
+}
+@media(max-width:370px){.hcard{font-size:7.8px}.hand{gap:10px}.turn-step{display:none}.pchip small{display:none}}
+@media(max-height:650px) and (max-width:860px){
+  html,body{overflow:auto}
+  #app{min-height:650px}
+}

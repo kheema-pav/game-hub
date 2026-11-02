@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="style.css"><link rel="manifest" href="../manifest.webmanifest"><link rel="apple-touch-icon" href="../icons/icon-180.png"></head><body>
+<!doctype html><html lang="en"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="style.css"><link rel="manifest" href="../manifest.webmanifest"><link rel="apple-touch-icon" href="../icons/icon-180.png"></head><body>
 <title>Catan</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,8 +14,8 @@
       <span id="menuSlot"></span>
     </header>
     <main class="board-wrap">
-      <svg id="board" xmlns="http://www.w3.org/2000/svg"><g id="static"></g><g id="dynamic"></g></svg>
-      <div class="dice-box" id="dice"></div>
+      <svg id="board" role="group" aria-label="Catan island. Choose a highlighted corner or edge to build." xmlns="http://www.w3.org/2000/svg"><g id="static"></g><g id="dynamic"></g></svg>
+      <div class="dice-box" id="dice" role="img" aria-label="Dice not rolled yet"></div>
       <div class="ticker" id="ticker"></div>
       <div class="toasts" id="toasts"></div>
       <div class="zoom">
