@@ -62,3 +62,12 @@ test('keyboard activation places a focused corner even on a touch-capable device
  assert.deepEqual(activate(0),[[2,3]]);
  assert.deepEqual(activate(1),['preview']);
 });
+
+test('first-load setup redraws without requiring an existing game',()=>{
+ const render=source.slice(source.indexOf('function render(){'),source.indexOf('// Phone tools share one dock'));
+ const calls=[];
+ const c=vm.createContext({S:null,ON:{active:false},renderModal:()=>calls.push('setup'),renderShell:()=>calls.push('online')});
+ vm.runInContext(render+';render()',c);
+ assert.deepEqual(calls,['setup']);
+ c.ON.active=true;vm.runInContext('render()',c);assert.deepEqual(calls,['setup','online']);
+});

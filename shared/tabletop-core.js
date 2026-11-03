@@ -25,6 +25,18 @@
     for (var i = 0; i < short; i++) if (stable(server[i]) !== stable(mine[i])) throw new Error('This seat changed in another tab. Reopen the room to use its latest moves.');
     return clone(server.length >= mine.length ? server : mine);
   }
+  function activityGroup(state, fallback) {
+    if (Number.isFinite(state.round)) return { number: state.round, unit: 'Round' };
+    if (Number.isFinite(state.turnNo)) return { number: state.turnNo, unit: 'Turn' };
+    if (Number.isFinite(state.turn)) return { number: state.turn, unit: 'Turn' };
+    return { number: (state.moves == null ? fallback : state.moves) + 1, unit: 'Turn' };
+  }
+  function activityEntry(config, state, player, action, fallback) {
+    var g = activityGroup(state, fallback);
+    var description = 'played a move';
+    try { if (config.describe) description = config.describe(action, state); } catch (_) { /* Presentation must never reject a legal move. */ }
+    return { text: player.name + ': ' + description, group: g.number, label: g.unit + ' ' + g.number };
+  }
   function replay(config, room, docs, ownUid, ownMoves) {
     if (!room || room.game !== config.id) throw new Error('This room belongs to a different game. Open its invitation from the hub.');
     if (!Number.isInteger(room.seed)) throw new Error('This room has an invalid game seed.');
@@ -38,7 +50,7 @@
       var moves = docs && docs[id] && docs[id].moves;
       return id === ownUid ? mergeMine(moves, ownMoves) : Array.isArray(moves) ? moves : [];
     });
-    var pointers = ids.map(function () { return 0; }), k = 0, rejected = 0;
+    var pointers = ids.map(function () { return 0; }), k = 0, rejected = 0, log = [];
     for (var guard = 0; guard < 100000 && !state.over; guard++) {
       var player = config.engine.actor(state);
       if (!Number.isInteger(player) || player < 0 || player >= ids.length) throw new Error('The game reported an invalid player turn.');
@@ -48,19 +60,20 @@
         if (candidate && Number.isInteger(candidate.k) && candidate.k === k && candidate.action && typeof candidate.action === 'object') { record = candidate; break; }
         rejected++;
       }
-      if (!record) return { state: state, seats: ids, k: k, rejected: rejected };
+      if (!record) return { state: state, seats: ids, k: k, rejected: rejected, log: log };
       try {
         // Validate against the actual legal-action set before invoking a game engine.
         var options = config.engine.legal(state, player), key = stable(record.action);
         var action = options.find(function (move) { return stable(move) === key; });
         if (!action) { rejected++; continue; }
+        var entry = activityEntry(config, state, people[player], action, k);
         var result = config.engine.apply(state, player, action);
         if (!result || !result.ok || !result.state) { rejected++; continue; }
-        state = result.state; k++;
+        log.push(entry); state = result.state; k++;
       } catch (error) { rejected++; }
     }
     if (!state.over) throw new Error('This game history is too large to replay safely.');
-    return { state: state, seats: ids, k: k, rejected: rejected };
+    return { state: state, seats: ids, k: k, rejected: rejected, log: log };
   }
   function validOptions(options, definitions) {
     if (!options || typeof options !== 'object' || Array.isArray(options)) return false;
@@ -89,5 +102,5 @@
     } catch (error) { return false; }
     return true;
   }
-  return { stable: stable, clone: clone, seats: seats, mergeMine: mergeMine, replay: replay, validOptions: validOptions, validSave: validSave };
+  return { activityGroup: activityGroup, activityEntry: activityEntry, stable: stable, clone: clone, seats: seats, mergeMine: mergeMine, replay: replay, validOptions: validOptions, validSave: validSave };
 });

@@ -329,3 +329,11 @@ for(const input of ['click','keyboard'])test(`${input} choices preserve panel sc
  assert.match(h.root.innerHTML,/Preview ticket-7/);assert.equal(choiceContext.viewer,0);assert.equal(choiceContext.state.steps,0);
  assert.equal(h.storage.get('hub.fixture.save.v1'),save,'draft choices do not mutate the game or save');
 });
+
+test('reconstructed history includes only accepted moves and is deterministic on reconnect',()=>{
+ const r=room(),docs=docsFor(r,[[null,records(0,{type:'illegal'}),records(0),records(2)],[records(1),records(3)]]);
+ const replay=C.replay(config,r,docs);
+ assert.equal(replay.log.length,4);
+ assert.ok(replay.log.every(e=>typeof e.text==='string'&&Number.isFinite(e.group)));
+ assert.deepEqual(C.replay(config,r,docs).log,replay.log);
+});

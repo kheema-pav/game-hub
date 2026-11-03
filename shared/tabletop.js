@@ -43,7 +43,7 @@
           if (!HubGameNight.finish(config.id, state, { players: people.map(function (p, i) { return { name: p.name, bot: p.bot, score: score(i) }; }), winners: winners, mode: setup.mode === 'solo' ? 'solo' : 'local', level: setup.level, summary: config.id === 'ticket' ? (currentOptions.edition === 'europe' ? 'Europe Classic' : 'USA Classic') : '' })) message = 'Game finished. This browser could not save the result to your history.';
         }
       }
-      if (!write(saveKey, { v: 1, game: config.id, gameVersion: config.gameVersion, options: currentOptions, players: people, level: setup.level, state: state, log: log.slice(-20) })) message = 'This browser could not save the game. Keep this tab open to finish.';
+      if (!write(saveKey, { v: 1, game: config.id, gameVersion: config.gameVersion, options: currentOptions, players: people, level: setup.level, state: state, log: log })) message = 'This browser could not save the game. Keep this tab open to finish.';
     }
     function stopBot() { clearTimeout(botTimer); botTimer = null; }
     function stopOnline() {
@@ -98,7 +98,8 @@
       try { board = config.render(state, Math.max(0, viewer), actions, { esc: esc, names: names(), online: !!online, draft: draft }); }
       catch (e) { board = '<p class="tt-error">This board could not be displayed. Reopen the saved game or room.</p>'; try { console.error(e); } catch (_) {} }
       var status = state.over ? results() : online && online.sending ? 'Sending your move…' : canAct ? 'Your turn, ' + people[actor].name : 'Waiting for ' + (people[actor] ? people[actor].name : 'another player');
-      root.innerHTML = title() + errorHTML() + '<div class="tt-scores">' + people.map(function (person, i) { var points = score(i); return '<div class="tt-player' + (!state.over && actor === i ? ' active' : '') + '"><b>' + esc(person.name) + '</b><small>' + (points != null ? esc(points) + ' points' : i === viewer ? 'You' : person.bot ? 'Computer' : 'Player ' + (i + 1)) + '</small></div>'; }).join('') + '</div><div class="tt-status' + (state.over ? ' tt-result' : '') + '" role="status">' + esc(status) + '</div><section class="tt-board">' + board + '</section>' + (state.over ? '<div class="tt-actions"><button data-tt="' + (online ? 'replace' : 'rematch') + '" class="tt-primary">' + (online ? 'Play again' : 'Rematch, same players') + '</button><button data-tt="setup">Game setup</button></div>' : '') + (log.length ? '<details><summary>Recent moves</summary><ol class="tt-log">' + log.slice(-12).map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('') + '</ol></details>' : '') + helpHTML();
+      root.innerHTML = title() + errorHTML() + '<div class="tt-scores">' + people.map(function (person, i) { var points = score(i); return '<div class="tt-player' + (!state.over && actor === i ? ' active' : '') + '"><b>' + esc(person.name) + '</b><small>' + (points != null ? esc(points) + ' points' : i === viewer ? 'You' : person.bot ? 'Computer' : 'Player ' + (i + 1)) + '</small></div>'; }).join('') + '</div><div class="tt-status' + (state.over ? ' tt-result' : '') + '" role="status">' + esc(status) + '</div><section class="tt-board">' + board + '</section>' + (state.over ? '<div class="tt-actions"><button data-tt="' + (online ? 'replace' : 'rematch') + '" class="tt-primary">' + (online ? 'Play again' : 'Rematch, same players') + '</button><button data-tt="setup">Game setup</button></div>' : '') + (window.HubActivity ? HubActivity.html(config.id, log.map(function (line) { return typeof line === 'string' ? { text: line, group: C.activityGroup(state, log.length).number } : line; }), C.activityGroup(state, log.length).number) : '') + helpHTML();
+      if(window.HubActivity) HubActivity.sync();
       if (state.over && !resultSound) { resultSound = true; sound('win'); }
       scheduleBot();
     }
@@ -119,9 +120,9 @@
     }
     function playLocal(action) {
       if (!state || state.over || online || curtain) return;
-      var actor = engine.actor(state), result = engine.apply(state, actor, action);
+      var actor = engine.actor(state), entry = C.activityEntry(config, state, people[actor], action, log.length), result = engine.apply(state, actor, action);
       if (!result || !result.ok || !result.state) { message = result && result.error || 'That move is unavailable.'; render(); return; }
-      log.push(people[actor].name + ': ' + (config.describe ? config.describe(action, state) : 'played a move'));
+      log.push(entry);
       state = result.state; draft = {}; message = ''; sound('place'); save(); render();
     }
     function startLocal(rematch) {
@@ -146,7 +147,7 @@
       var saved = read(saveKey);
       if (!C.validSave(saved, config)) { message = 'This saved game is unavailable or uses a different version. Start a new table.'; screen = 'setup'; render(); return; }
       stopOnline(); people = saved.players; currentOptions = saved.options; state = saved.state; setup.level = ['easy', 'normal', 'hard', 'expert'].includes(saved.level) ? saved.level : 'normal';
-      setup.mode = people.some(function (person) { return person.bot; }) ? 'solo' : 'local'; log = Array.isArray(saved.log) ? saved.log.filter(function (line) { return typeof line === 'string'; }) : [];
+      setup.mode = people.some(function (person) { return person.bot; }) ? 'solo' : 'local'; log = Array.isArray(saved.log) ? saved.log.filter(function (line) { return typeof line === 'string' || line && typeof line.text === 'string' && Number.isFinite(line.group); }) : [];
       viewer = 0; visibleHuman = null; curtain = false; draft = {}; message = ''; screen = 'game'; resultSound = false; clearURL(); render();
     }
     function clearURL() { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
@@ -196,7 +197,7 @@
         session.mine = C.mergeMine(session.docs[HubOnline.uid] && session.docs[HubOnline.uid].moves, session.mine);
         var replay = C.replay(config, session.room, session.docs, HubOnline.uid, session.mine);
         var changed = session.k !== replay.k;
-        state = replay.state; session.seats = replay.seats; session.k = replay.k;
+        state = replay.state; log = replay.log; session.seats = replay.seats; session.k = replay.k;
         people = replay.seats.map(function (id) { var person = session.room.seats[id]; return { name: person.name || 'Player', color: person.color, bot: false }; });
         currentOptions = session.room.opts || {}; viewer = session.seats.indexOf(HubOnline.uid); screen = 'game'; curtain = false; if (changed) draft = {}; render();
       } catch (error) { session.blocked = true; session.reopen = true; message = error.message; render(); }

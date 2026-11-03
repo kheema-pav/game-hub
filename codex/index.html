@@ -34,7 +34,7 @@
     <div class="turn-guide"><span id="turnStep" class="turn-step"></span><div class="prompt" id="prompt" role="status" aria-live="polite" aria-atomic="true"></div></div>
     <div class="board-scroll" id="boardScroll" tabindex="0" aria-label="Codex board. Drag to pan, or use the zoom controls."><div class="board-inner" id="board"></div></div>
   </main>
-  <nav class="dock-nav" aria-label="Game tools"><button data-act="dock" data-panel="hand" aria-pressed="true">Your hand</button><button data-act="dock" data-panel="market" aria-pressed="false">Market</button><button data-act="dock" data-panel="objectives" aria-pressed="false">Objectives</button></nav>
+  <nav class="dock-nav" aria-label="Game tools"><button data-act="dock" data-panel="hand" aria-pressed="true">Your hand</button><button data-act="dock" data-panel="market" aria-pressed="false">Market</button><button data-act="dock" data-panel="objectives" aria-pressed="false">Objectives</button><button data-act="dock" data-panel="log" aria-pressed="false">Log</button></nav>
   <section class="handwrap" aria-label="Hand">
     <div class="hand-heading"><h2>Your hand</h2><span>Choose a card, then a corner on the board</span></div>
     <div class="hand" id="hand"></div>
@@ -42,11 +42,13 @@
   <aside class="side">
     <section id="marketSec"><h2>Market <small id="deckInfo"></small></h2><div id="market"></div></section>
     <section id="objectivesSec"><h2>Objectives</h2><div id="objectives"></div></section>
-    <section class="chronicle"><h2>Chronicle</h2><ol id="log"></ol></section>
+    <section class="chronicle"><div id="log"></div></section>
   </aside>
 </div>
 <div class="modal-back" id="modal" hidden><div class="modal" id="modalBody" role="dialog" aria-modal="true"></div></div>
 
+<link rel="stylesheet" href="../shared/activity.css">
+<script src="../shared/activity.js"></script>
 <script src="../shared/hubkit.js"></script>
 <script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
 <script src="../shared/firebase-config.js"></script>

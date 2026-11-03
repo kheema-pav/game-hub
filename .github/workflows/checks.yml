@@ -39,8 +39,9 @@ jobs:
         with:
           node-version: 22
       - run: npm install --prefix "$RUNNER_TEMP/browser-deps" --no-save playwright@1.56.1
-      - run: $RUNNER_TEMP/browser-deps/node_modules/.bin/playwright install --with-deps chromium
+      - run: $RUNNER_TEMP/browser-deps/node_modules/.bin/playwright install --with-deps chromium webkit
       - run: NODE_PATH="$RUNNER_TEMP/browser-deps/node_modules" node test/browser-smoke.js
+      - run: NODE_PATH="$RUNNER_TEMP/browser-deps/node_modules" node test/mobile-feedback.js
       - uses: actions/upload-artifact@v4
         if: always()
         with:

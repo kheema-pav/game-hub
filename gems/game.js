@@ -95,7 +95,6 @@ function saveGame() {
 
 function addLog(s, pi, text, tags = {}) {
   s.log.push({ pi, text, round: s.round, ...tags });
-  if (s.log.length > 200) s.log.shift();
 }
 
 const gemList = gems => gems.map(c => GEM_NAME[c]).join(', ');
@@ -197,6 +196,10 @@ function captureFx(pi) {
 function withFx(pi, change) {
   const before = reducedMotion() || ui.screen !== 'game' ? null : captureFx(pi);
   change();
+  if (G && ui.screen === 'game') {
+    const receipt = document.querySelector('.move-receipt');
+    if (receipt && !reducedMotion()) receipt.animate([{background:'#f4df9e',transform:'translateY(4px)'},{background:'#fbf8ed',transform:'none'}], {duration:850,easing:'ease-out'});
+  }
   if (before && G) playFx(before);
 }
 
@@ -212,7 +215,7 @@ function playFx(b) {
   // Cards first: bought cards fly to the bonus column, reserved cards to the reserve row.
   for (const id of p.cards.filter(id => !b.cards.includes(id))) {
     const src = findSlot(id) || r.res[b.reserved.indexOf(id)];
-    if (src) fly(src.html, src.rect, `${panelSel(pi)} .gcol.g-${CARDS[id].color} .bon`, delay, 'card');
+    if (src) fly(src.html, src.rect, `${panelSel(pi)} .gcol.g-${CARDS[id].color} .bon`, delay, 'card', pi);
     delay += step * 2;
   }
   if (p.reserved.length > b.reserved.length) {
@@ -222,29 +225,32 @@ function playFx(b) {
     const lv = CARDS[id].level - 1;
     const from = src ? src.rect : r.deck[lv];
     const html = src ? src.html : `<div class="card back d${lv + 1}"><span>${ROMAN[lv]}</span></div>`;
-    if (from) fly(html, from, `${panelSel(pi)} [data-rj="${j}"]`, delay, 'card');
+    if (from) fly(html, from, `${panelSel(pi)} [data-rj="${j}"]`, delay, 'card', pi);
     delay += step * 2;
   }
   for (const c of TOKENS) {
     const d = p.tokens[c] - b.tokens[c];
     for (let k = 0; k < Math.abs(d); k++) {
       const html = `<span class="chip g-${c}"></span>`;
-      if (d > 0 && r.bank[c]) fly(html, r.bank[c], `${panelSel(pi)} .gcol.g-${c} .tk`, delay, 'chip');
-      if (d < 0 && r.panel[c]) fly(html, r.panel[c], `.tok-btn[data-c="${c}"] .chip`, delay, 'chip');
+      if (d > 0 && r.bank[c]) fly(html, r.bank[c], `${panelSel(pi)} .gcol.g-${c} .tk`, delay, 'chip', pi);
+      if (d < 0 && r.panel[c]) fly(html, r.panel[c], `.tok-btn[data-c="${c}"] .chip`, delay, 'chip', pi);
       delay += step;
     }
   }
   for (const nid of p.nobles.filter(n => !b.nobles.includes(n))) {
     const src = r.nobles[nid];
-    if (src) fly(src.html, src.rect, `${panelSel(pi)} .pl-pts`, delay + step, 'card');
+    if (src) fly(src.html, src.rect, `${panelSel(pi)} .pl-pts`, delay + step, 'card', pi);
   }
 }
 
-function fly(html, from, toSel, delay, kind) {
+function fly(html, from, toSel, delay, kind, pi) {
   const layer = document.getElementById('fx');
   const target = document.querySelector(toSel);
   if (!layer || !target) return;
-  const to = target.getBoundingClientRect();
+  let to = target.getBoundingClientRect();
+  const receipt = document.querySelector('.move-receipt[data-actor="'+pi+'"]');
+  if (receipt && (to.bottom < 0 || to.top > innerHeight || !to.width || !to.height)) to = receipt.getBoundingClientRect();
+  if (!from.width || !from.height) return;
   const el = document.createElement('div');
   el.className = 'flyer';
   el.innerHTML = html;
@@ -610,9 +616,16 @@ function playerHTML(p, i, vi) {
   </article>`;
 }
 
+function moveReceiptHTML() {
+  const last=ui.lastMove;
+  if(!last)return '';
+  const entry=G.log.slice().reverse().find(e=>e.pi===last.pi&&last.text.startsWith(e.text));
+  const icons=entry&&entry.gain?entry.gain.map(c=>`<span class="receipt-gem g-${c}" title="${GEM_NAME[c]}">${gemSVG(c)}</span>`).join(''):'';
+  return `<section class="move-receipt" data-actor="${last.pi}" aria-live="polite" aria-atomic="true"><span class="receipt-caption">Latest move</span><div><b>${esc(G.players[last.pi].name)}</b> ${esc(last.text)}.</div>${icons?`<div class="receipt-gems" aria-hidden="true">${icons}</div>`:''}</section>`;
+}
+
 function logHTML() {
-  const items = G.log.slice(-60).reverse().map(e => `<li><span class="r">R${e.round}</span>${logLine(e)}</li>`).join('');
-  return `<section class="log"><h2>Ledger</h2><ol>${items || '<li>No moves yet.</li>'}</ol></section>`;
+  return window.HubActivity ? HubActivity.html('gems', G.log.map(e=>({html:logLine(e),group:e.round,label:'Round '+e.round})), G.round, 'Round') : '';
 }
 
 // Phone-sized noble: just the requirement, since every noble is worth 3.
@@ -642,7 +655,7 @@ function renderGame() {
     : `${summary ? `<section class="bar recap-card">${summary}</section>` : ''}<div class="players">${G.players.map((p, i) => playerHTML(p, i, vi)).join('')}</div>${logHTML()}`;
   return `<header class="top">
       <span class="wordmark">Splendor</span>
-      <span class="round">Round ${G.round}${ON.active ? `<span class="roomcode"> · Room ${fmtCode(ON.code)}</span>` : ''}</span>
+      <span class="round">Round ${G.round}</span>
       ${G.finalRound && !G.over ? '<span class="pill">Final round</span>' : ''}
       ${G.over ? '<span class="pill">Game over</span>' : ''}
       <span class="spacer"></span>
@@ -651,7 +664,7 @@ function renderGame() {
     </header>
     <main class="table">
       ${phone ? actionDock : ''}
-      <section class="board" aria-label="Market"><div class="market-heading"><h2>Development market</h2><span>Gold outline = you can buy</span></div>
+      <section class="board" aria-label="Market">${moveReceiptHTML()}<div class="market-heading"><h2>Development market</h2><span>Gold outline = you can buy</span></div>
         ${nobleRow}
         ${[2, 1, 0].map(lv => marketRow(lv, me)).join('')}
       </section>
@@ -804,6 +817,7 @@ function render() {
   const focused = focusKey(document.activeElement);
   if (!oldDialog && (ui.modal || ui.rules || ui.confirmNew)) returnFocus = focused;
   app.innerHTML = ui.screen === 'setup' ? renderSetup() : ui.screen === 'online' ? renderConnecting() : renderGame();
+  if(window.HubActivity) HubActivity.sync();
   const dialog = app.querySelector('[role="dialog"]');
   if (dialog) {
     // The dialog is a sibling of the game surface, so the rest can be inert.

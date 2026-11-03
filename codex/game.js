@@ -30,7 +30,7 @@ function save(){
   }catch(e){}
   try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
 }
-function slog(s,msg){s.log.unshift(msg);s.log.length=Math.min(s.log.length,80);}
+function slog(s,msg){s.logRounds=s.logRounds||s.log.map(()=>null);s.log.unshift(msg);s.logRounds.unshift(s.round||1);}
 function log(msg){slog(S,msg);}
 function handOwner(){
   if(S&&S.online) return S.me>=0&&S.players[S.me].ready?S.me:null; // online: only ever your own hand
@@ -414,7 +414,7 @@ function objHTML(oid,prog=null){
 }
 
 function render(){
-  if(!S){if(ON.active) renderShell();return;}
+  if(!S){if(ON.active) renderShell();else renderModal();return;}
   if(ui.view>=S.players.length) ui.view=0;
   syncDock();renderTop();renderBoard();renderHand();renderSide();renderModal();
   if(ui.flight){const f=ui.flight;ui.flight=null;launchFlight(f);}
@@ -566,7 +566,7 @@ function renderSide(){
   const sec=secP!=null&&S.players[secP].secret?objBtn(S.players[secP].secret,secP):`<span class="secret-hidden">${S.phase==='setup'?'Chosen during setup.':'Hidden from view.'}</span>`;
   const who=ui.view===owner?'you':esc(vp.name);
   $('#objectives').innerHTML=`<p class="ohint">Progress for ${who}. Tap an objective to light up the cards that count for it.</p><h3>Common</h3><div class="olist">${S.common.map(o=>objBtn(o,ui.view)).join('')}</div><h3>${secP!=null&&secP!==owner?esc(S.players[secP].name)+"'s secret":'Your secret'}</h3><div class="olist">${sec}</div>`;
-  $('#log').innerHTML=S.log.slice(0,40).map(l=>`<li>${l}</li>`).join('');
+  if(window.HubActivity) HubActivity.mount($('#log'), 'codex', S.log.map((html,i)=>({html,group:(S.logRounds||[])[i]??S.round,label:(S.logRounds||[])[i]?'Round '+S.logRounds[i]:''})).reverse(), S.round, 'Round');
 }
 
 // ---------- Modals ----------
@@ -689,7 +689,7 @@ document.addEventListener('click',e=>{
     case 'zout': zoomTo(ui.zoom/1.25); break;
     case 'center': ui.origin=null; renderBoard(); break;
     case 'fit': fitBoard(); break;
-    case 'dock': if(['hand','market','objectives'].includes(d.panel)){ui.dock=d.panel;syncDock();} break;
+    case 'dock': if(['hand','market','objectives','log'].includes(d.panel)){ui.dock=d.panel;syncDock();} break;
     case 'rules': ui.modal='rules'; render(); break;
     case 'new': openNewGame(); break;
     case 'close': ui.modal=null; render(); break;
