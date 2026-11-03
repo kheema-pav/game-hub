@@ -256,7 +256,7 @@ function newGame(opts) {
   return s;
 }
 
-function log(s, text, p) { s.log.push({ t: text, p: p === undefined ? null : p }); if (s.log.length > 250) s.log.shift(); }
+function log(s, text, p) { s.log.push({ t: text, p: p === undefined ? null : p, turn: s.turnNo }); }
 function fx(s, e) { s.fx.push(e); }
 function P(s, i) { return s.players[i]; }
 function nm(s, i) { return s.players[i].name; }

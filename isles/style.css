@@ -277,3 +277,20 @@ button.hk-menu-btn.isl-menu { align-self: flex-start; color: var(--ink); }
   .players { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
   .pchip .meta { display: none; }
 }
+
+/* Activity takes its own space, leaving dice, build targets and zoom controls clear. */
+#game{grid-template-rows:auto minmax(170px,1fr) auto auto;grid-template-areas:"top" "board" "activity" "dock"}
+.activity-area{grid-area:activity;min-width:0;padding:6px 10px;background:var(--deep);display:grid;gap:6px}
+#ticker{position:static;min-width:0}.activity-area .ha-recent{max-height:64px}.activity-area .ha-heading{min-height:36px;font-size:12px!important}.activity-area .ha-preview li{font-size:12px;padding:4px 0}
+.players{grid-auto-flow:row;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-columns:auto;gap:7px}
+.pchip{padding:7px 9px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 7px}
+.pchip .nm{font-size:12px}.pchip .vp{font-size:19px;grid-column:2;grid-row:1/3;align-self:center;flex-direction:column;gap:3px}
+.pchip .vp small{font-size:10px}.pchip .meta{display:flex;flex-wrap:wrap;overflow:visible;font-size:11px;gap:8px;grid-column:1}.pchip .meta b{color:var(--ink)}
+.route-stats{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:11px;line-height:1.4}.route-stats b{color:var(--ink);font-size:12px}.pchip .gain{bottom:-3px;left:auto;right:3px;transform:none;animation:receipt-pop .5s ease both}
+.roll-receipt{background:#184653;border:1px solid #8dc9af60;border-radius:12px;padding:8px 10px;color:#f1f8ed;min-width:0}.receipt-title{display:flex;flex-wrap:wrap;gap:3px 10px;align-items:baseline;font-size:12px}.receipt-title>span{color:#c6dfd8;font-size:11px}.receipt-rows{display:grid;gap:4px;max-height:76px;overflow:auto;overscroll-behavior:contain;margin-top:6px}.receipt-row{display:flex;gap:8px;align-items:baseline;font-size:12px;animation:receipt-pop .55s both;animation-delay:calc(var(--order)*.13s)}.receipt-row>b{border-left:3px solid var(--pc);padding-left:6px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}.receipt-row>span{display:flex;flex-wrap:wrap;gap:3px 7px}.receipt-resource{display:inline-flex;align-items:center;gap:3px;white-space:nowrap;font-size:11px}.receipt-resource i{width:9px;height:11px;border:1px solid #fff7;background:var(--resource);border-radius:2px}
+@keyframes receipt-pop{from{opacity:0;transform:translateY(7px) scale(.96)}to{opacity:1;transform:none}}
+@media(min-width:900px) and (min-aspect-ratio:1/1){#game{grid-template-columns:minmax(0,1fr) 370px;grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"board top" "board dock" "board activity"}.activity-area{padding:10px 18px}.pchip{padding:9px}.pchip .vp{font-size:21px}.activity-area .ha-recent{max-height:110px}}
+/* On portrait phones, scroll the table instead of squeezing the island between panels. */
+@media(max-width:899px) and (orientation:portrait){#game{overflow-y:auto;grid-template-rows:auto minmax(clamp(300px,85vw,460px),1fr) auto auto}.dock{max-height:none;overflow:visible}}
+@media(max-height:600px) and (orientation:landscape){#game{grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"board top" "board dock" "activity activity"}.activity-area{grid-template-columns:1fr 1fr}.activity-area .ha-recent{max-height:42px}.receipt-rows{max-height:42px}.topbar{padding:6px}.pchip{padding:5px 6px;gap:2px 4px}.pchip .meta{display:flex;font-size:10px;gap:5px}.route-stats{font-size:10px;gap:6px}.route-stats b{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.receipt-row,.pchip .gain{animation:none}}

@@ -191,7 +191,7 @@ function startGame() {
   log0();
   enterGame();
 }
-function log0() { ui.undo = []; ui.mode = null; ui.revealed = null; ui.modal = null; ui.modalKey = null; ui.gains = {}; ui.flashHexes = []; }
+function log0() { ui.undo = []; ui.mode = null; ui.revealed = null; ui.modal = null; ui.modalKey = null; ui.gains = {}; ui.flashHexes = []; ui.production = null; clearTimeout(ui.gainTimer); }
 
 function enterGame() {
   $('#home').hidden = true; $('#game').hidden = false;
@@ -522,6 +522,7 @@ function render() {
   renderDynamic();
   renderDice();
   renderTicker();
+  renderProduction();
   renderDock();
   renderBoardGuide();
   renderStatus();
@@ -542,11 +543,12 @@ function renderPlayers() {
     if (G.longest.p === p.id) badges.push('<span class="badge">ROAD</span>');
     if (G.army.p === p.id) badges.push('<span class="badge">ARMY</span>');
     const gain = ui.gains[p.id] ? `<span class="gain">+${ui.gains[p.id]}</span>` : '';
-    return `<div class="pchip ${p.id === cur ? 'turn' : ''}" style="--pc:${colorHex(p.color)}">
+    return `<div data-player="${p.id}" class="pchip ${p.id === cur ? 'turn' : ''}" style="--pc:${colorHex(p.color)}">
       <div class="badges">${badges.join('')}</div>
       <div class="nm"><i></i><span>${esc(p.name)}</span></div>
       <div class="vp">${pub + (showHidden ? hid : 0)}<small>${showHidden && hid ? `incl. ${hid} hidden` : `/ ${G.target}`}</small></div>
-      <div class="meta"><span title="Resource cards">${ICON.card}${E.handCount(p.hand)}</span><span title="Development cards" style="color:#c6a8f0">${ICON.card}${p.dev.length}</span>${p.knights ? `<span title="Knights played">${ICON.sword}${p.knights}</span>` : ''}${((G.longest.lens || [])[p.id] || 0) >= 3 ? `<span title="Longest road">${ICON.roadsm}${G.longest.lens[p.id]}</span>` : ''}</div>
+      <div class="meta"><span>Cards <b>${E.handCount(p.hand)}</b></span><span>Dev <b>${p.dev.length}</b></span></div>
+      <div class="route-stats"><span>Roads <b>${G.eb.filter(e=>e&&e.p===p.id&&e.t==='road').length}</b></span>${G.mode==='seafarers'?`<span>Ships <b>${G.eb.filter(e=>e&&e.p===p.id&&e.t==='ship').length}</b></span>`:''}<span>Longest <b>${G.phase==='setup'?E.roadLength(G,p.id):((G.longest.lens||[])[p.id]??E.roadLength(G,p.id))}</b></span>${p.knights?`<span>Knights <b>${p.knights}</b></span>`:''}</div>
       ${gain}
     </div>`;
   }).join('');
@@ -568,8 +570,21 @@ function renderDice() {
   $('#dice').innerHTML = d ? dieHtml(d[0], false) + dieHtml(d[1], true) + `<span class="dice-sum">${d[0] + d[1]}</span>` : '';
 }
 function renderTicker() {
-  const last = G.log.slice(-2);
-  $('#ticker').innerHTML = last.map(l => `<div>${l.p !== null ? `<i style="background:${pcol(l.p)}"></i>` : ''}${esc(l.t)}</div>`).join('');
+  if(window.HubActivity) HubActivity.mount($('#ticker'), 'isles', G.log.map(l=>({text:l.t,group:l.turn??G.turnNo,label:l.turn?'Turn '+l.turn:'Setup'})), G.turnNo, 'Turn');
+}
+
+function renderProduction() {
+  const box=$('#production'), receipt=ui.production;
+  if(!receipt){box.innerHTML='';box.dataset.key='';return;}
+  const key=JSON.stringify(receipt);
+  if(box.dataset.key===key)return;
+  box.dataset.key=key;
+  const rows=G.players.map(p=>{
+    const gains=(receipt.gains||{})[p.id]||{},gold=(receipt.gold||{})[p.id]||0;
+    const resources=E.RES.filter(r=>gains[r]).map(r=>`<span class="receipt-resource" style="--resource:${FILL[r]}"><i aria-hidden="true"></i>+${gains[r]} ${E.RES_NAME[r]}</span>`).join('')+(gold?`<span class="receipt-resource">+${gold} of choice</span>`:'');
+    return resources?`<div class="receipt-row" style="--pc:${colorHex(p.color)};--order:${p.id}"><b>${esc(p.name)}</b><span>${resources}</span></div>`:'';
+  }).join('');
+  box.innerHTML=`<section class="roll-receipt"><div class="receipt-title"><strong>${esc(G.players[receipt.p].name)} rolled ${receipt.total}</strong><span>${receipt.total===7?'Move the robber':rows?'Resources delivered':'No resources produced'}</span></div>${rows?`<div class="receipt-rows">${rows}</div>`:''}</section>`;
 }
 
 function terrainLabel(hex) {
@@ -746,7 +761,7 @@ function drawModal() {
       <div class="confirm-row"><button class="btn" data-act="offer-no" data-confirm="Decline?">Decline</button><button class="btn primary" data-act="offer-yes" data-confirm="Accept?" ${E.RES.every(r => (o.get[r] || 0) <= G.players[o.to].hand[r]) ? '' : 'disabled'}>Accept</button></div>`);
   } else if (k === 'trade') html = tradeModal();
   else if (k === 'dev') html = devModal();
-  else if (k === 'log') html = sheet('Game log', `<div class="loglist">${G.log.slice().reverse().map(l => `<div>${l.p !== null ? `<i style="background:${pcol(l.p)}"></i>` : ''}${esc(l.t)}</div>`).join('')}</div>`, true);
+  else if (k === 'log' && window.HubActivity) { closeModal(); HubActivity.open('isles'); return; }
   else if (k === 'costs') html = sheet('Building costs', costsHtml(), true);
   else if (k === 'results') html = resultsModal();
   else if (k === 'leave') html = sheet('Leave this game?', `<p>The game goes on without you until you come back. Open it again from the game link or the Online list on the hub.</p><div class="confirm-row"><button class="btn" data-act="close-modal">Stay</button><button class="btn primary" data-act="leave">Leave game</button></div>`, true);
@@ -891,6 +906,7 @@ function processFx() {
       sfx('build', q); if (f.kind === 'city') sfx('score', q);
     }
     if (f.type === 'roll') {
+      ui.production={p:f.p,total:f.dice[0]+f.dice[1],roll:G.rollCounts.reduce((a,b)=>a+b,0)};
       sfx('dice', q);
       const d = $('#dice'); d.classList.remove('rolling'); void d.offsetWidth; d.classList.add('rolling');
       clearTimeout(ui.rollTimer); ui.rollTimer = setTimeout(() => d.classList.remove('rolling'), 600);
@@ -898,6 +914,7 @@ function processFx() {
     }
     if (f.type === 'produce') {
       flash = f.hexes;
+      if(ui.production) {ui.production.gains=f.gains;ui.production.gold=f.gold||{};}
       ui.gains = {};
       const bump = {};
       Object.keys(f.gains).forEach(p => {
@@ -907,7 +924,8 @@ function processFx() {
       Object.keys(f.gold || {}).forEach(p => { ui.gains[p] = (ui.gains[p] || 0) + f.gold[p]; });
       ui.bump = bump;
       if (Object.keys(ui.gains).some(p => ui.gains[p] > 0 && !G.players[p].bot)) { const bq = quiet(E.actor(G)); setTimeout(() => sfx('draw', bq), 380); }
-      setTimeout(() => { ui.gains = {}; ui.bump = {}; if (G) renderPlayers(); }, 1900);
+      clearTimeout(ui.gainTimer);
+      ui.gainTimer=setTimeout(() => { ui.gains = {}; ui.bump = {}; if (G) renderPlayers(); }, 3200);
     }
     if (f.type === 'robber') sfx('thud', q);
     if (f.type === 'discard') sfx('swish', q);
@@ -1451,6 +1469,7 @@ function renderConnecting() {
 }
 function enterOnlineGame() {
   ui.mode = null; ui.pending = null; ui.undo = []; ui.revealed = null; ui.gains = {}; ui.flashHexes = []; ui.diceKey = null;
+  ui.production = null; clearTimeout(ui.gainTimer);
   $('#home').hidden = true; $('#game').hidden = false;
   ui.lastActor = E.actor(G);
   closeModal();

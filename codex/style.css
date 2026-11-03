@@ -333,7 +333,7 @@ a.btn.primary{color:var(--accent-fg)}
   #marketSec.ready-to-draw{border:0;background:var(--panel)}
   .mrow{grid-template-columns:repeat(3,1fr);gap:12px;justify-items:center}
   .mk{font-size:7.6px}
-  .side .chronicle{display:none}
+  .side .chronicle{display:none;grid-area:dock;min-height:0;overflow:auto;padding:10px 12px;margin:0}#app[data-dock=log] .chronicle{display:block}.chronicle .ha-recent{max-height:150px}
   #app[data-dock=hand] .handwrap{display:flex}
   #app[data-dock=market] #marketSec{display:block}
   #app[data-dock=objectives] #objectivesSec{display:block}
@@ -346,3 +346,5 @@ a.btn.primary{color:var(--accent-fg)}
   html,body{overflow:auto}
   #app{min-height:650px}
 }
+
+#log{display:block;color:var(--ink)}

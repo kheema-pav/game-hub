@@ -1,5 +1,5 @@
 /* One complete cached release at a time. Bump VERSION whenever shipped assets change. */
-const VERSION = 'gh-v10';
+const VERSION = 'gh-v11';
 const CACHE = VERSION;
 const FONTS = 'gh-fonts-v1';
 const PRECACHE = [
@@ -8,7 +8,7 @@ const PRECACHE = [
     ['style.css', 'engine.js', 'game.js'].map(file => game + '/' + file)),
   ...['ticket', 'ludo', 'connect4', 'azul', 'reversi', 'yahtzee'].flatMap(game => ['style.css', 'engine.js', 'game.js'].map(file => game + '/' + file)),
   'ticket/data.js', 'ticket/geography.js', 'shared/tabletop-core.js', 'shared/tabletop.js', 'shared/tabletop.css',
-  'isles/bot.js', 'shared/hubkit.js', 'shared/online.js', 'shared/lobby.js',
+  'shared/activity.js', 'shared/activity.css', 'isles/bot.js', 'shared/hubkit.js', 'shared/online.js', 'shared/lobby.js',
   'shared/game-night.js', 'shared/game-night-hub.js', 'shared/session.js', 'shared/versions.js', 'shared/firebase-config.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-180.png',
   'icons/icon-192.png', 'icons/icon-512.png'

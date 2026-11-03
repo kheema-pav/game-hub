@@ -16,7 +16,6 @@
     <main class="board-wrap">
       <svg id="board" role="group" aria-label="Catan island. Choose a highlighted corner or edge to build." xmlns="http://www.w3.org/2000/svg"><g id="static"></g><g id="dynamic"></g></svg>
       <div class="dice-box" id="dice" role="img" aria-label="Dice not rolled yet"></div>
-      <div class="ticker" id="ticker"></div>
       <div class="toasts" id="toasts"></div>
       <div class="zoom">
         <button data-act="zoom-in" aria-label="Zoom in">+</button>
@@ -24,12 +23,15 @@
         <button data-act="zoom-fit" aria-label="Fit board"><svg viewBox="0 0 20 20" width="16" height="16"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
       </div>
     </main>
+    <section class="activity-area" aria-label="Recent activity"><div id="production" aria-live="polite"></div><div id="ticker"></div></section>
     <footer class="dock" id="dock"></footer>
   </section>
   <div id="modal" hidden></div>
   <div id="curtain" class="curtain" hidden></div>
 </div>
 
+<link rel="stylesheet" href="../shared/activity.css">
+<script src="../shared/activity.js"></script>
 <script src="../shared/hubkit.js"></script>
 <script>window.HubKit=window.HubKit||{init(){},buttonHTML:()=>'',open(){},close(){},isOpen:()=>false,sfx(){},buzz(){},refresh(){},setFloating(){},settings:{}};</script>
 <script src="../shared/firebase-config.js"></script>
