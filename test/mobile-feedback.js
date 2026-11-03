@@ -65,6 +65,7 @@ const server = http.createServer((request, response) => {
           for(const [resource,n] of Object.entries(gains)) assert.ok(receipt.includes('+'+n+' '+produced.resources[resource]));
         }
         await fit('Catan game');await shot('catan-production');
+        if(height<600)assert.ok(await page.locator('#dock').evaluate(el=>el.clientHeight>=100),'landscape action dock keeps usable scrolling space');
         if(width<900&&height>width)assert.ok(await page.locator('.board-wrap').evaluate(el=>el.clientHeight>=300),'phone island stays readable with payout and log visible');
         assert.ok(await page.evaluate(()=>{const board=document.querySelector('.board-wrap').getBoundingClientRect(),log=document.querySelector('.activity-area').getBoundingClientRect();return board.bottom<=log.top+1||board.right<=log.left+1;}),'activity never overlays the island');
         // Long recent and full history both scroll, updates preserve reading position.
