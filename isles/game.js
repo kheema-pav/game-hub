@@ -548,7 +548,7 @@ function renderPlayers() {
       <div class="nm"><i></i><span>${esc(p.name)}</span></div>
       <div class="vp">${pub + (showHidden ? hid : 0)}<small>${showHidden && hid ? `incl. ${hid} hidden` : `/ ${G.target}`}</small></div>
       <div class="meta"><span>Cards <b>${E.handCount(p.hand)}</b></span><span>Dev <b>${p.dev.length}</b></span></div>
-      <div class="route-stats"><span>Roads <b>${G.eb.filter(e=>e&&e.p===p.id&&e.t==='road').length}</b></span>${G.mode==='seafarers'?`<span>Ships <b>${G.eb.filter(e=>e&&e.p===p.id&&e.t==='ship').length}</b></span>`:''}<span>Longest <b>${(G.longest.lens||[])[p.id]??E.roadLength(G,p.id)}</b></span>${p.knights?`<span>Knights <b>${p.knights}</b></span>`:''}</div>
+      <div class="route-stats"><span>Roads <b>${G.eb.filter(e=>e&&e.p===p.id&&e.t==='road').length}</b></span>${G.mode==='seafarers'?`<span>Ships <b>${G.eb.filter(e=>e&&e.p===p.id&&e.t==='ship').length}</b></span>`:''}<span>Longest <b>${G.phase==='setup'?E.roadLength(G,p.id):((G.longest.lens||[])[p.id]??E.roadLength(G,p.id))}</b></span>${p.knights?`<span>Knights <b>${p.knights}</b></span>`:''}</div>
       ${gain}
     </div>`;
   }).join('');
