@@ -20,13 +20,13 @@ const server = http.createServer((request, response) => {
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const url='http://127.0.0.1:'+server.address().port;
   try {
-    for(const [kind,width,height] of [['chromium',360,780],['chromium',390,844],['chromium',768,1024],['chromium',1280,900],['webkit',810,1080]]) {
+    for(const [kind,width,height] of [['chromium',360,780],['chromium',390,844],['chromium',768,1024],['chromium',844,390],['chromium',1280,900],['webkit',810,1080]]) {
       const browser=await ({chromium,webkit}[kind]).launch();
       const context=await browser.newContext({viewport:{width,height},hasTouch:width<900,serviceWorkers:'block'});
       await context.route('**/*',r=>r.request().url().startsWith(url)?r.continue():r.abort());
       const page=await context.newPage(),errors=[];
       page.on('pageerror',e=>errors.push(e.message));
-      const shot=async(name)=>page.screenshot({path:path.join(shots,`${name}-${kind}-${width}.png`),fullPage:true});
+      const shot=async(name)=>page.screenshot({path:path.join(shots,`${name}-${kind}-${width}.png`),fullPage:true,animations:'disabled'});
       const fit=async(label)=>assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),label+' fits '+width);
       try {
         // Real setup clicks before there is any game or save, including touch-sized iPad WebKit.
@@ -65,6 +65,7 @@ const server = http.createServer((request, response) => {
           for(const [resource,n] of Object.entries(gains)) assert.ok(receipt.includes('+'+n+' '+produced.resources[resource]));
         }
         await fit('Catan game');await shot('catan-production');
+        if(width<900&&height>width)assert.ok(await page.locator('.board-wrap').evaluate(el=>el.clientHeight>=300),'phone island stays readable with payout and log visible');
         assert.ok(await page.evaluate(()=>{const board=document.querySelector('.board-wrap').getBoundingClientRect(),log=document.querySelector('.activity-area').getBoundingClientRect();return board.bottom<=log.top+1||board.right<=log.left+1;}),'activity never overlays the island');
         // Long recent and full history both scroll, updates preserve reading position.
         await page.evaluate(()=>{G.log=Array.from({length:90},(_,i)=>({t:'Event '+i,p:null,turn:Math.floor(i/30)+1}));G.turnNo=3;renderTicker();});
