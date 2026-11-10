@@ -41,6 +41,8 @@ const SCENES = [
 
 const defaultSetup = () => ({
   count: 2,
+  onBots: 0,
+  onLevel: 'medium',
   shuffle: false,
   pace: 'normal',
   seats: [
@@ -60,13 +62,13 @@ const ui = {
 // Online play (see the "Online play" section below). While ON.active nothing here touches local storage.
 const ON = {
   active: false, code: null, uid: null, me: -1, unsub: null, room: null, players: {}, pending: false, err: null, msg: '',
-  mine: { moves: [] }, built: false, consumed: 0, rec: false, token: 0, deferred: null, flagged: false, badge: false, note: '', shownPending: false, wrote: false, fatal: '',
+  mine: { moves: [] }, botTimer: null, built: false, consumed: 0, rec: false, token: 0, deferred: null, flagged: false, badge: false, note: '', shownPending: false, wrote: false, fatal: '',
 };
 
 const isHuman = p => p.type === 'human';
 const curP = () => G.players[G.cur];
 const humanCount = () => G.players.filter(isHuman).length;
-const kindLabel = p => (ON.active ? (isHuman(p) ? 'You' : 'Online') : isHuman(p) ? 'Human' : `Bot · ${LEVEL_LABEL[p.level]}`);
+const kindLabel = p => (ON.active ? (isHuman(p) ? 'You' : p.bot ? 'Bot' : 'Online') : isHuman(p) ? 'Human' : `Bot · ${LEVEL_LABEL[p.level]}`);
 const canInteract = () => G && !G.over && ui.screen === 'game' && isHuman(curP()) && !ui.handoff && !ui.discard && !ui.nobleChoice;
 
 // Whose face-down reservations can be shown on this screen.
@@ -339,6 +341,7 @@ function finishTurn() {
   if (ON.active) commitTurn(); else saveGame();
   render();
   scheduleBot();
+  scheduleOnlineBot();
 }
 
 function overSound(pi) {
@@ -484,6 +487,12 @@ function renderSetup() {
     ${onlineAvailable() ? `<div class="setup-card online-card">
       <div class="field"><span class="label">Online</span>
         <p class="fineprint">Play with friends, each on their own phone. Create a game and share the six-digit code, or join a friend's game with theirs. Games wait for you, so you can close the page between turns.</p></div>
+      <div class="field"><span class="label">Bots in an online game</span>
+        <div class="seg" role="group" aria-label="Bots in an online game">${[0, 1, 2].map(n => `<button data-act="onbots" data-n="${n}" aria-pressed="${(setup.onBots || 0) === n}">${n ? `${n} bot${n > 1 ? 's' : ''}` : 'No bots'}</button>`).join('')}</div>
+      </div>
+      ${setup.onBots ? `<div class="field"><span class="label">Bot skill</span>
+        <div class="seg" role="group" aria-label="Online bot skill">${['easy', 'medium', 'hard', 'expert'].map(k => `<button data-act="onlevel" data-k="${k}" aria-pressed="${setup.onLevel === k}">${LEVEL_LABEL[k]}</button>`).join('')}</div>
+        <p class="fineprint">Bots play from the host's device, so the person who creates the game keeps this page open. Bots take the empty seats: with 2 bots it's 2 people, with 1 bot up to 3.</p></div>` : ''}
       <div class="row-actions">
         <button class="btn primary" data-act="online-open">Create online game</button>
         <button class="btn" data-act="online-open">Join with a code</button>
@@ -537,6 +546,7 @@ function barHTML(withRecap = true) {
   if (G.over) status = '<b>Game over.</b>';
   else if (ui.handoff) status = `Waiting for <b>${esc(p.name)}</b>.`;
   else if (isHuman(p)) status = `<b>${esc(p.name)}</b>, it’s your turn. Take gems from the bank, or tap a card to buy or reserve it.`;
+  else if (ON.active && p.bot) status = `<b>${esc(p.name)}</b> is thinking<span class="thinking"></span>`;
   else if (ON.active) status = `Waiting for <b>${esc(p.name)}</b>.`;
   else if (ui.preview) status = `<b class="who">${esc(p.name)}</b> ${esc(previewText(ui.preview.m))}.`;
   else status = `<b>${esc(p.name)}</b> is thinking<span class="thinking"></span>`;
@@ -939,14 +949,21 @@ function playRecord(s, pi, rec) {
 
 // Rebuild the game from the room. `movesOf(uid)` gives that player's record list. Seats are the room's uids sorted, the
 // random draws follow the seed (decks I, II, III, nobles, then the turn order), seat 0 starts.
+// Bots (opts.rounds - 1 of them, ids 'bot:0', 'bot:1') take the last seats before the shuffle. Bot choices use random numbers, so
+// they cannot be recomputed on every device: the host's device plays them and saves each as a record tagged {b: bot number} in
+// the host's own list. Only the host's list is read for bots, and tagged records are never read as the host's own moves.
+const botsOf = room => { const r = room && room.opts && room.opts.rounds; return Number.isInteger(r) && r >= 2 && r <= 3 ? r - 1 : 0; };
+const isBotId = u => typeof u === 'string' && u.startsWith('bot:');
 function buildOnline(room, movesOf, myUid) {
   const seats = (room && room.seats) || {};
   const uids = Object.keys(seats).sort();
-  const n = uids.length;
-  if (n < 2 || n > 4 || typeof room.seed !== 'number') return null;
+  const nb = botsOf(room);
+  const ids = [...uids, ...Array.from({ length: nb }, (_, k) => `bot:${k}`)];
+  const n = ids.length;
+  if (uids.length < 2 || n > 4 || typeof room.seed !== 'number') return null;
   const r = rng(room.seed);
-  let s = newGame(uids.map(() => ({ name: '', type: 'remote', level: null })), r);
-  const order = sshuffle(uids, r);
+  let s = newGame(ids.map(() => ({ name: '', type: 'remote', level: null })), r);
+  const order = sshuffle(ids, r);
   const base = uids.map((u, i) => String((seats[u] && seats[u].name) || '').replace(/\s+/g, ' ').trim().slice(0, 16) || `Player ${i + 1}`);
   const nameOf = {};
   uids.forEach((u, i) => {
@@ -955,10 +972,14 @@ function buildOnline(room, movesOf, myUid) {
   });
   s.players.forEach((p, i) => {
     const u = order[i];
+    if (isBotId(u)) { p.uid = u; p.bot = true; p.botIx = +u.slice(4); p.name = BOT_NAMES[p.botIx]; p.color = ''; p.type = 'remote'; p.level = null; return; }
     p.uid = u; p.name = nameOf[u]; p.color = seats[u] && seats[u].color;
     p.type = u === myUid ? 'human' : 'remote'; p.level = null;
   });
-  const moves = order.map(u => { const m = movesOf(u); return Array.isArray(m) ? m : []; });
+  const listOf = u => { const m = movesOf(u); return Array.isArray(m) ? m : []; };
+  const moves = order.map(u => (isBotId(u)
+    ? listOf(room.host).filter(x => x && x.b === +u.slice(4))
+    : listOf(u).filter(x => !(x && x.b != null))));
   const ptr = order.map(() => 0);
   let consumed = 0, lastInfo = null;
   while (!s.over) {
@@ -985,7 +1006,7 @@ function mineMoves() {
   const d = ON.players[ON.uid] || {}, sm = Array.isArray(d.moves) ? d.moves : [];
   return ON.mine.moves.length > sm.length ? ON.mine.moves : sm;
 }
-const turnSummary = () => ({ phase: G.over ? 'over' : 'play', next: G.over ? null : G.players[G.cur].uid });
+const turnSummary = () => ({ phase: G.over ? 'over' : 'play', next: G.over || G.players[G.cur].bot ? null : G.players[G.cur].uid });
 function flush() {
   if(ON.blocked)return;
   const code = ON.code, tok = ON.token;
@@ -1009,6 +1030,35 @@ function commitTurn() {
   ON.pending = true;
   flush();
   recordIfOver();
+}
+
+// ---- bots (the host's device plays them) ----
+const isDriver = () => ON.active && !!ON.room && ON.room.host === ON.uid;
+const botLevelNow = () => (['easy', 'medium', 'hard', 'expert'].includes(setup.onLevel) ? setup.onLevel : 'medium');
+function scheduleOnlineBot(delay) {
+  if (ON.botTimer || !isDriver() || !G || G.over || ON.blocked || !curP().bot) return;
+  ON.botTimer = setTimeout(playOnlineBot, delay == null ? pace().think : delay);
+}
+// Chooses a whole turn for the bot whose turn it is (action, tokens to return, noble), saves it as a record in the host's
+// list, and lets the normal replay show it, so the host sees it exactly as the other players do.
+function playOnlineBot() {
+  ON.botTimer = null;
+  if (!isDriver() || !G || G.over || ON.blocked || !curP().bot) return;
+  if (ON.deferred || drafting()) { scheduleOnlineBot(600); return; } // the screen is behind the room: wait for it to catch up
+  const pi = G.cur, p = G.players[pi];
+  const sim = cloneFull(G);
+  sim.players[pi].level = botLevelNow();
+  const m = matchLegal(G, pi, botChoose(sim, pi));
+  if (!m) { scheduleOnlineBot(1500); return; }
+  applyMove(sim, pi, m);
+  const back = botDiscard(sim, pi), ret = {};
+  back.forEach(c => { ret[c] = (ret[c] || 0) + 1; });
+  const el = eligibleNobles(sim, sim.players[pi]);
+  const rec = { b: p.botIx, a: recordAction(m), ret: back.length ? ret : null, noble: el.length > 1 ? el[0] : null };
+  ON.mine.moves = [...mineMoves(), rec];
+  ON.pending = true;
+  flush();
+  refresh();
 }
 
 // ---- watching the room ----
@@ -1119,6 +1169,7 @@ function refresh(forceRender) {
   if (!changed && (forceRender || ON.pending !== ON.shownPending)) render();
   ON.shownPending = ON.pending;
   signals();
+  scheduleOnlineBot();
 }
 function recordIfOver() {
   if (!ON.active || !G || !G.over || ON.rec || ON.me < 0) return;
@@ -1141,6 +1192,7 @@ function resetOn() {
     consumed: 0, rec: false, deferred: null, flagged: false, note: '', shownPending: false, wrote: false, fatal: '' });
 }
 function stopWatch() {
+  clearTimeout(ON.botTimer); ON.botTimer = null;
   if(ON.session){ON.session.close();ON.session=null;}
   ON.blocked=false;
   ON.token++;
@@ -1148,7 +1200,12 @@ function stopWatch() {
 }
 function openOnlineLobby() {
   ui.notice = '';
-  HubLobby.openCreateJoin({ game: OL.game, gameName: OL.name, seatOptions: [2, 3, 4], accent: OL.accent, onRoom: enterRoom });
+  // Bots are stored in the room as opts.rounds = 1 + bots (an option Splendor does not otherwise use), so the security rules
+  // need no change. Total seats stay at four or fewer.
+  const bots = [0, 1, 2].includes(setup.onBots) ? setup.onBots : 0;
+  HubLobby.openCreateJoin({ game: OL.game, gameName: OL.name, seatOptions: bots === 0 ? [2, 3, 4] : bots === 1 ? [2, 3] : [2], accent: OL.accent, onRoom: enterRoom,
+    opts: bots ? { rounds: 1 + bots } : undefined,
+    seatLabel: n => (bots ? `${n} people + ${bots} bot${bots > 1 ? 's' : ''}` : `${n} players`) });
 }
 // HubLobby looks the room up, joins, shows the waiting room and calls back when the game is on.
 function enterRoom(code) {
@@ -1246,6 +1303,8 @@ app.addEventListener('click', e => {
       store(SETUP_KEY, setup); render(); return;
     }
     case 'start': ui.notice = ''; store(SETUP_KEY, setup); startGame(seatsFromSetup()); return;
+    case 'onbots': setup.onBots = +d.n; store(SETUP_KEY, setup); render(); return;
+    case 'onlevel': setup.onLevel = d.k; store(SETUP_KEY, setup); render(); return;
     case 'online-open': openOnlineLobby(); return;
     case 'leave': leaveOnline(); return;
     case 'retry': beginOnline(ON.code, ON.uid); return;

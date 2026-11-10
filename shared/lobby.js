@@ -245,7 +245,7 @@
         (needName ? '<h3 class="hl-sec">You</h3>' + nameFieldHTML() : '') +
         '<h3 class="hl-sec">Create a game</h3>' +
         '<div class="hl-seg" role="radiogroup" aria-label="Number of players">' + seats.map(function (n) {
-          return '<button type="button" role="radio" data-hl="seats" data-n="' + n + '" aria-checked="' + (n === chosen) + '">' + n + ' players</button>';
+          return '<button type="button" role="radio" data-hl="seats" data-n="' + n + '" aria-checked="' + (n === chosen) + '">' + esc(typeof o.seatLabel === 'function' ? o.seatLabel(n) : n + ' players') + '</button>';
         }).join('') + '</div>' +
         '<button class="hl-btn hl-go hl-wide" type="button" data-hl="create">Create game</button>' +
         '<h3 class="hl-sec">Join with a code</h3>' +
