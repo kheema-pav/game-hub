@@ -65,13 +65,15 @@
   }
 
   /* Room metadata is fixed at creation. Legacy v1 rooms use the unchanged game engines. */
-  function versions() { return window.HubGameVersions || { platform: 2, games: { codex: 1, isles: 1, gems: 1, sketch: 1, connect4: 1, ludo: 1, azul: 1, ticket: 1, reversi: 1, yahtzee: 1 } }; }
+  function versions() { return window.HubGameVersions || { platform: 2, accepts: { gems: [1] }, games: { codex: 1, isles: 1, gems: 2, sketch: 1, connect4: 1, ludo: 1, azul: 1, ticket: 1, reversi: 1, yahtzee: 1 } }; }
   function terminal(room) { return !!room && (room.status === 'cancelled' || room.status === 'ended'); }
+  // A game can list older room versions whose replay rules it still understands (versions.accepts).
+  function accepted(v, game, gv) { return gv === v.games[game] || !!(v.accepts && Array.isArray(v.accepts[game]) && v.accepts[game].indexOf(gv) >= 0); }
   function compatibility(room) {
     var v = versions(), game = room && room.game;
     if (!room || !Object.prototype.hasOwnProperty.call(v.games, game)) return { ok: false, message: 'This game is not supported by this version of Game Hub.' };
-    if (room.v === 1 && (room.gameVersion === undefined || room.gameVersion === v.games[game])) return { ok: true, legacy: true };
-    if (room.v === v.platform && room.gameVersion === v.games[game]) return { ok: true, legacy: false };
+    if (room.v === 1 && (room.gameVersion === undefined || accepted(v, game, room.gameVersion))) return { ok: true, legacy: true };
+    if (room.v === v.platform && accepted(v, game, room.gameVersion)) return { ok: true, legacy: false };
     return { ok: false, message: 'This room uses a different game version. Refresh Game Hub, or ask your friends to create a new room.' };
   }
   function requireCompatible(room) {

@@ -85,7 +85,7 @@ test('missing core asset rejects the next install without deleting the previous 
   worker.stores.set('gh-v4', new Map([['old', 'still available']]));
   await assert.rejects(worker.event('install'), /Unavailable asset/);
   assert.equal(worker.stores.get('gh-v4').get('old'), 'still available');
-  assert.equal(worker.stores.get('gh-v11').size, 0, 'partial install was not populated');
+  assert.equal(worker.stores.get('gh-v12').size, 0, 'partial install was not populated');
 });
 
 test('cached assets stay in their release and query-versioned scripts never alias', async () => {
@@ -100,7 +100,7 @@ test('cached assets stay in their release and query-versioned scripts never alia
 
 test('activation removes only obsolete Game Hub caches', async () => {
   const worker = serviceWorker();
-  for (const name of ['gh-v4', 'gh-v11', 'gh-fonts-v1', 'other-application']) worker.stores.set(name, new Map());
+  for (const name of ['gh-v4', 'gh-v12', 'gh-fonts-v1', 'other-application']) worker.stores.set(name, new Map());
   await worker.event('activate');
-  assert.deepEqual([...worker.stores.keys()].sort(), ['gh-fonts-v1', 'gh-v11', 'other-application']);
+  assert.deepEqual([...worker.stores.keys()].sort(), ['gh-fonts-v1', 'gh-v12', 'other-application']);
 });
